@@ -1,34 +1,99 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Face Attendance System</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-  body { min-height: 100vh; background: #f5f5f7; display: flex; align-items: center; justify-content: center; }
-  .container { text-align: center; padding: 50px; background: #fff; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e5e5e7; }
-  h1 { color: #1d1d1f; margin-bottom: 8px; font-size: 2rem; font-weight: 600; }
-  p { color: #6e6e73; margin-bottom: 30px; font-size: 15px; }
-  .btn-group { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-  button { padding: 12px 32px; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; transition: all 0.2s; }
-  .admin-btn { background: #0071e3; color: #fff; }
-  .admin-btn:hover { background: #0077ed; }
-  .faculty-btn { background: #ff9500; color: #fff; }
-  .faculty-btn:hover { background: #ffa733; }
-  .student-btn { background: #f5f5f7; color: #1d1d1f; border: 1px solid #d2d2d7; }
-  .student-btn:hover { background: #e8e8ed; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CIT Portal Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="container">
-    <h1>🎓 Smart Attendance System</h1>
-    <p>Select your role to continue</p>
-    <div class="btn-group">
-      <button class="admin-btn" onclick="window.location.href='admin.html'">👨‍💼 Admin</button>
-      <button class="faculty-btn" onclick="window.location.href='faculty.html'">👩‍🏫 Faculty</button>
-      <button class="student-btn" onclick="window.location.href='student.html'">👨‍🎓 Student</button>
-    </div>
+  <!-- Background Layer -->
+  <div class="bg-scene">
+    <div class="overlay"></div>
   </div>
+
+  <!-- Floating decorative icons -->
+  <div class="floating-icon cap">🎓</div>
+  <div class="floating-icon globe">🌐</div>
+  <div class="floating-icon cap cap-2">🎓</div>
+
+  <main class="page-wrap">
+    <section class="portal-card">
+      <!-- Header -->
+      <header class="portal-header">
+        <div class="logo-placeholder">
+          <img src="cit logo.png" alt="CIT Logo" class="cit-logo" />
+        </div>
+        <h1>WELCOME TO <span>CIT PORTAL</span></h1>
+      </header>
+
+      <!-- Login Columns -->
+      <section class="login-columns">
+        <!-- Student -->
+        <article class="login-panel student">
+          <div class="panel-head">
+            <div class="panel-icon">👨‍🎓</div>
+            <h2>STUDENT LOGIN</h2>
+          </div>
+
+          <label class="input-wrap">
+            <span class="input-icon">👤</span>
+            <input type="text" placeholder="Student ID / Email" />
+          </label>
+
+          <label class="input-wrap">
+            <span class="input-icon">🔒</span>
+            <input type="password" placeholder="Password" />
+          </label>
+
+          <a href="#" class="forgot">Forgot Password?</a>
+          <button class="btn btn-student">LOGIN AS STUDENT</button>
+        </article>
+
+        <!-- Teacher -->
+        <article class="login-panel teacher">
+          <div class="panel-head">
+            <div class="panel-icon">👩‍🏫</div>
+            <h2>TEACHER LOGIN</h2>
+          </div>
+
+          <label class="input-wrap">
+            <span class="input-icon">📧</span>
+            <input type="text" placeholder="Teacher Email" />
+          </label>
+
+          <label class="input-wrap">
+            <span class="input-icon">🔒</span>
+            <input type="password" placeholder="Password" />
+          </label>
+
+          <a href="#" class="forgot">Forgot Password?</a>
+          <button class="btn btn-teacher">LOGIN AS TEACHER</button>
+        </article>
+      </section>
+
+      <!-- Registration -->
+      <section class="register-section">
+        <h3>First Time Here?</h3>
+        <p>New to <strong>CIT</strong> Portal? Create your account today!</p>
+
+        <div class="register-actions">
+          <button class="btn-register student-reg"><span>＋</span> REGISTER AS NEW STUDENT</button>
+          <button class="btn-register teacher-reg"><span>＋</span> REGISTER AS NEW TEACHER</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="portal-footer">
+    <a href="#">About Us</a>
+    <a href="#">Contact Support</a>
+    <a href="#">Privacy Policy</a>
+    <a href="#">Terms of Service</a>
+  </footer>
 </body>
 </html>
