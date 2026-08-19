@@ -81,17 +81,8 @@
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyDqJZTE8r3S1NUXD77S1NRHBbbvXKDljLo",
-      authDomain: "attendance-demo-demo.firebaseapp.com",
-      projectId: "attendance-demo-demo",
-      storageBucket: "attendance-demo-demo.firebasestorage.app",
-      messagingSenderId: "63825400742",
-      appId: "1:63825400742:web:2f2fd96662f5b2f6b37567",
-      measurementId: "G-B8CWL13PT6"
-    };
-    firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
     const facultyId = localStorage.getItem('facultyId');
@@ -112,11 +103,21 @@
         for (const doc of snapshot.docs) {
           const s = doc.data();
           const sessionSnapshot = await db.collection('attendanceSessions').where('subjectId', '==', doc.id).where('active', '==', true).get();
-          const hasActive = !sessionSnapshot.empty;
+          const activeSession = sessionSnapshot.docs.find(sessionDoc => {
+            const expiresAt = sessionDoc.data().expiresAt;
+            return !expiresAt || expiresAt.toDate() > new Date();
+          });
+          const hasActive = Boolean(activeSession);
+          for (const sessionDoc of sessionSnapshot.docs) {
+            const expiresAt = sessionDoc.data().expiresAt;
+            if (expiresAt && expiresAt.toDate() <= new Date()) {
+              await db.collection('attendanceSessions').doc(sessionDoc.id).update({ active: false });
+            }
+          }
           const btn = hasActive 
-            ? `<button class="btn stop-btn" onclick="stopAttendance('${doc.id}')">Stop Attendance</button>` 
+            ? `<button class="btn stop-btn" onclick="stopAttendance('${doc.id}', this)">Stop Attendance</button>`
             : `<select class="duration-select" id="duration-${doc.id}"><option value="5">5 Min</option><option value="10" selected>10 Min</option><option value="15">15 Min</option></select>
-               <button class="btn start-btn" onclick="startAttendance('${doc.id}', '${s.subjectName}')">Start Attendance</button>`;
+              <button class="btn start-btn" onclick="startAttendance('${doc.id}', '${s.subjectName}', this)">Start Attendance</button>`;
           tbody.innerHTML += `<tr>
             <td>${s.subjectName}</td>
             <td>${s.subjectCode}</td>
@@ -138,12 +139,22 @@
       const container = document.getElementById('activeSessions');
       try {
         const snapshot = await db.collection('attendanceSessions').where('facultyId', '==', facultyId).where('active', '==', true).get();
-        if (snapshot.empty) {
+        const activeDocs = snapshot.docs.filter(sessionDoc => {
+          const expiresAt = sessionDoc.data().expiresAt;
+          return !expiresAt || expiresAt.toDate() > new Date();
+        });
+        for (const sessionDoc of snapshot.docs) {
+          const expiresAt = sessionDoc.data().expiresAt;
+          if (expiresAt && expiresAt.toDate() <= new Date()) {
+            await db.collection('attendanceSessions').doc(sessionDoc.id).update({ active: false });
+          }
+        }
+        if (activeDocs.length === 0) {
           container.innerHTML = '<p style="color:#888;">No active sessions</p>';
           return;
         }
         container.innerHTML = '';
-        for (const doc of snapshot.docs) {
+        for (const doc of activeDocs) {
           const s = doc.data();
           const subjectDoc = await db.collection('subjects').doc(s.subjectId).get();
           const subject = subjectDoc.data();
@@ -170,13 +181,13 @@
       return numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
     }
 
-    async function startAttendance(subjectId, subjectName) {
+     async function startAttendance(subjectId, subjectName, button) {
        const duration = document.getElementById(`duration-${subjectId}`).value;
        const statusMsg = document.createElement('div');
        statusMsg.className = 'msg info';
        statusMsg.textContent = 'Capturing location...';
        statusMsg.style.display = 'block';
-       event.target.closest('td').appendChild(statusMsg);
+       button.closest('td').appendChild(statusMsg);
 
        if (!navigator.geolocation) {
          statusMsg.className = 'msg error';
@@ -185,7 +196,8 @@
        }
 
        navigator.geolocation.getCurrentPosition(async (pos) => {
-         const now = new Date();
+           const now = new Date();
+           const durationMinutes = parseInt(duration, 10);
          const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
          const dateStr = now.toLocaleDateString('en-GB');
          try {
@@ -200,7 +212,8 @@
              startTime: timeStr,
              classNumber,
              date: dateStr,
-             duration: parseInt(duration),
+             duration: durationMinutes,
+             expiresAt: new Date(now.getTime() + durationMinutes * 60 * 1000),
              createdAt: firebase.firestore.FieldValue.serverTimestamp()
            });
            statusMsg.className = 'msg success';
@@ -216,12 +229,12 @@
        }, { enableHighAccuracy: true, timeout: 10000 });
      }
 
-    async function stopAttendance(subjectId) {
+    async function stopAttendance(subjectId, button) {
       const statusMsg = document.createElement('div');
       statusMsg.className = 'msg info';
       statusMsg.textContent = 'Stopping...';
       statusMsg.style.display = 'block';
-      event.target.closest('tr').cells[3].appendChild(statusMsg);
+      button.closest('tr').cells[3].appendChild(statusMsg);
 
       try {
         const snapshot = await db.collection('attendanceSessions').where('subjectId', '==', subjectId).where('active', '==', true).get();

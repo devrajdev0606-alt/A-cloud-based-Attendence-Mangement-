@@ -158,32 +158,14 @@ cd attendance-management-system-demo
 4. Copy your Firebase configuration
 
 ### Step 3: Update Firebase Config
-Update the `firebaseConfig` object in these files with your project credentials:
-- `admin.html` (line 175)
-- `faculty.html` (line 38)
-- `student.html` (line 38)
-- `dashboard.html` (line 114)
-- `faculty_dashboard.html` (line 85)
-- `faculty_report.html` (line 68)
-- `report.html` (line 76)
+Update the shared `firebase-config.js` file once with your project credentials.
 
 ### Step 4: Configure Firestore Security Rules
-In Firebase Console → Firestore → Rules tab, set:
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /students/{studentId} { allow read, write: if true; }
-    match /faculty/{facultyId} { allow read, write: if true; }
-    match /subjects/{subjectId} { allow read, write: if true; }
-    match /departments/{deptId} { allow read, write: if true; }
-    match /attendanceSessions/{sessionId} { allow read, write: if true; }
-    match /attendance/{recordId} { allow read, write: if true; }
-    match /settings/{settingId} { allow read, write: if true; }
-  }
-}
+Deploy the checked-in rules with:
+```bash
+firebase deploy --only firestore:rules
 ```
-Click **"Publish"** to save.
+The current rules support the legacy demo login flow and are permissive. Add Firebase Authentication and role-based rules before using real personal or biometric data.
 
 ### Step 5: Run the Application
 ```bash

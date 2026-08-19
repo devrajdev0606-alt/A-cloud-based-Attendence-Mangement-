@@ -16,39 +16,16 @@
 4. Choose a location close to you (e.g., `asia-south1` for India)
 
 ### 3. Update Firebase Config
-The app uses this Firebase config (already configured):
-```javascript
-const firebaseConfig = {
-  apiKey: "AIzaSyDqJZTE8r8r3S1NUXD77S1NRHBbbvXKDljLo",
-  authDomain: "attendance-demo-demo.firebaseapp.com",
-  projectId: "attendance-demo-demo",
-  storageBucket: "attendance-demo-demo.firebasestorage.app",
-  messagingSenderId: "63825400742",
-  appId: "1:63825400742:web:2f2fd96662f5b2f6b37567",
-  measurementId: "G-B8CWL13PT6"
-};
-```
-
-If you create a NEW Firebase project, update this config in all HTML files with your project's config.
+The app uses the shared `firebase-config.js` file. If you create a new Firebase project, update that file once with the web app configuration.
 
 ### 4. Firestore Security Rules (Important!)
-In Firebase Console → Firestore → Rules tab, set:
+Deploy the checked-in rules from the project directory:
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /students/{studentId} { allow read, write: if true; }
-    match /faculty/{facultyId} { allow read, write: if true; }
-    match /subjects/{subjectId} { allow read, write: if true; }
-    match /attendanceSessions/{sessionId} { allow read, write: if true; }
-    match /attendance/{recordId} { allow read, write: if true; }
-    match /attendanceRecords/{recordId} { allow read, write: if true; }
-  }
-}
+```bash
+firebase deploy --only firestore:rules
 ```
 
-Click "Publish" to save rules.
+The current rules are intentionally permissive for this legacy demo login flow. Do not use them for sensitive production data until Firebase Authentication and role-based rules are added.
 
 ### 5. Run the App
 Open `index.html` in a browser:

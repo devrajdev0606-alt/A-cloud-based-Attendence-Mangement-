@@ -25,7 +25,7 @@
       <!-- Header -->
       <header class="portal-header">
         <div class="logo-placeholder">
-          <img src="cit logo.png" alt="CIT Logo" class="cit-logo" />
+          <img src="cit logo.jpg" alt="CIT Logo" class="cit-logo" />
         </div>
         <h1>WELCOME TO <span>CIT PORTAL</span></h1>
       </header>
@@ -41,16 +41,17 @@
 
           <label class="input-wrap">
             <span class="input-icon">👤</span>
-            <input type="text" placeholder="Student ID / Email" />
+            <input type="text" id="studentEmail" placeholder="Student ID / Email" required />
           </label>
 
           <label class="input-wrap">
             <span class="input-icon">🔒</span>
-            <input type="password" placeholder="Password" />
+            <input type="password" id="studentPassword" placeholder="Password" required />
           </label>
 
           <a href="#" class="forgot">Forgot Password?</a>
-          <button class="btn btn-student">LOGIN AS STUDENT</button>
+          <button type="button" class="btn btn-student" onclick="loginStudent()">LOGIN AS STUDENT</button>
+          <div id="studentLoginMsg" class="login-msg" role="alert"></div>
         </article>
 
         <!-- Teacher -->
@@ -62,16 +63,17 @@
 
           <label class="input-wrap">
             <span class="input-icon">📧</span>
-            <input type="text" placeholder="Teacher Email" />
+            <input type="email" id="facultyEmail" placeholder="Teacher Email" required />
           </label>
 
           <label class="input-wrap">
             <span class="input-icon">🔒</span>
-            <input type="password" placeholder="Password" />
+            <input type="password" id="facultyPassword" placeholder="Password" required />
           </label>
 
           <a href="#" class="forgot">Forgot Password?</a>
-          <button class="btn btn-teacher">LOGIN AS TEACHER</button>
+          <button type="button" class="btn btn-teacher" onclick="loginFaculty()">LOGIN AS TEACHER</button>
+          <div id="facultyLoginMsg" class="login-msg" role="alert"></div>
         </article>
       </section>
 
@@ -81,8 +83,8 @@
         <p>New to <strong>CIT</strong> Portal? Create your account today!</p>
 
         <div class="register-actions">
-          <button class="btn-register student-reg"><span>＋</span> REGISTER AS NEW STUDENT</button>
-          <button class="btn-register teacher-reg"><span>＋</span> REGISTER AS NEW TEACHER</button>
+          <button type="button" class="btn-register student-reg" onclick="document.getElementById('studentEmail').focus()" aria-label="Register as a new student"><span>＋</span> REGISTER AS NEW STUDENT</button>
+          <button type="button" class="btn-register teacher-reg" onclick="document.getElementById('facultyEmail').focus()" aria-label="Register as a new teacher"><span>＋</span> REGISTER AS NEW TEACHER</button>
         </div>
       </section>
     </section>
@@ -94,6 +96,81 @@
     <a href="#">Contact Support</a>
     <a href="#">Privacy Policy</a>
     <a href="#">Terms of Service</a>
+    <a href="admin.html">Admin</a>
   </footer>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script>
+    const db = firebase.firestore();
+
+    if (localStorage.getItem('studentId')) {
+      window.location.replace('dashboard.html');
+    } else if (localStorage.getItem('facultyId')) {
+      window.location.replace('faculty_dashboard.html');
+    }
+
+    function showLoginMessage(elementId, message, isError = true) {
+      const element = document.getElementById(elementId);
+      element.textContent = message;
+      element.className = `login-msg ${isError ? 'error' : 'success'}`;
+    }
+
+    async function loginStudent() {
+      const identifier = document.getElementById('studentEmail').value.trim().toLowerCase();
+      const password = document.getElementById('studentPassword').value.trim();
+      if (!identifier || !password) {
+        showLoginMessage('studentLoginMsg', 'Enter your student ID/email and password.');
+        return;
+      }
+      try {
+        let snapshot = await db.collection('students').where('email', '==', identifier).get();
+        if (snapshot.empty) {
+          const studentDoc = await db.collection('students').doc(identifier).get();
+          snapshot = studentDoc.exists ? { docs: [studentDoc], empty: false } : { docs: [], empty: true };
+        }
+        if (snapshot.empty || snapshot.docs[0].data().password !== password) {
+          showLoginMessage('studentLoginMsg', 'Invalid student ID/email or password.');
+          return;
+        }
+        const studentDoc = snapshot.docs[0];
+        const student = studentDoc.data();
+        localStorage.setItem('studentId', studentDoc.id);
+        localStorage.setItem('studentName', student.name || 'Student');
+        localStorage.setItem('studentDept', student.dept || '');
+        localStorage.setItem('faceRegistered', student.faceRegistered ? 'true' : 'false');
+        window.location.href = 'dashboard.html';
+      } catch (error) {
+        showLoginMessage('studentLoginMsg', 'Unable to sign in. Check your Firebase connection.');
+        console.error(error);
+      }
+    }
+
+    async function loginFaculty() {
+      const email = document.getElementById('facultyEmail').value.trim().toLowerCase();
+      const password = document.getElementById('facultyPassword').value.trim();
+      if (!email || !password) {
+        showLoginMessage('facultyLoginMsg', 'Enter your teacher email and password.');
+        return;
+      }
+      try {
+        const snapshot = await db.collection('faculty').where('email', '==', email).get();
+        if (snapshot.empty || snapshot.docs[0].data().password !== password) {
+          showLoginMessage('facultyLoginMsg', 'Invalid teacher email or password.');
+          return;
+        }
+        const facultyDoc = snapshot.docs[0];
+        const faculty = facultyDoc.data();
+        localStorage.setItem('facultyId', facultyDoc.id);
+        localStorage.setItem('facultyName', faculty.name || 'Faculty');
+        localStorage.setItem('facultyDept', faculty.department || '');
+        window.location.href = 'faculty_dashboard.html';
+      } catch (error) {
+        showLoginMessage('facultyLoginMsg', 'Unable to sign in. Check your Firebase connection.');
+        console.error(error);
+      }
+    }
+  </script>
 </body>
 </html>

@@ -109,18 +109,9 @@
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+     <script src="firebase-config.js"></script>
    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.1/dist/face-api.min.js"></script>
    <script>
-     const firebaseConfig = {
-       apiKey: "AIzaSyDqJZTE8r3S1NUXD77S1NRHBbbvXKDljLo",
-       authDomain: "attendance-demo-demo.firebaseapp.com",
-       projectId: "attendance-demo-demo",
-       storageBucket: "attendance-demo-demo.firebasestorage.app",
-       messagingSenderId: "63825400742",
-       appId: "1:63825400742:web:2f2fd96662f5b2f6b37567",
-       measurementId: "G-B8CWL13PT6"
-     };
-     firebase.initializeApp(firebaseConfig);
      const db = firebase.firestore();
 
       const studentId = localStorage.getItem('studentId');
@@ -128,7 +119,7 @@
       const studentDept = localStorage.getItem('studentDept');
       const faceRegistered = localStorage.getItem('faceRegistered') === 'true';
 
-      if (!studentId) { window.location.href = 'student.html'; }
+      if (!studentId) { window.location.href = 'index.html'; }
 
       document.getElementById('welcome').textContent = `Welcome, ${studentName}`;
       if (studentDept) {
@@ -155,10 +146,10 @@
         try {
           const snap = await db.collection('settings').doc('attendance').get();
           if (snap.exists) {
-            distanceThreshold = snap.data().distanceThreshold || 100;
+            distanceThreshold = snap.data().distanceThreshold || 10;
           }
         } catch (err) {
-          distanceThreshold = 100;
+          distanceThreshold = 10;
         }
       }
 
@@ -170,6 +161,7 @@
         let latest = null;
         snap.forEach(doc => {
           const d = doc.data();
+          if (d.expiresAt && d.expiresAt.toDate() <= new Date()) return;
           if (!latest || (d.classNumber || 0) > (latest.classNumber || 0)) {
             latest = { id: doc.id, ...d };
           }
@@ -414,8 +406,8 @@ async function loadMySubjects() {
            gpsInfo.style.display = 'block';
            gpsInfo.textContent = 'Capturing GPS location...';
            if (!navigator.geolocation) {
-             gpsInfo.textContent = 'Geolocation not supported. Attendance saved without GPS.';
-             saveAttendance('N/A', 'N/A', subjectId, session, null);
+             gpsInfo.textContent = 'Geolocation is required to mark attendance.';
+             showMsg('attMsg', 'error', 'Location access is required for attendance verification.');
              resolve();
              return;
            }
@@ -449,8 +441,8 @@ async function loadMySubjects() {
                resolve();
              },
              async (err) => {
-               gpsInfo.textContent = 'GPS unavailable. Attendance saved without location.';
-               await saveAttendance('N/A', 'N/A', subjectId, session, null);
+               gpsInfo.textContent = 'GPS unavailable. Attendance was not saved.';
+               showMsg('attMsg', 'error', 'Location access is required for attendance verification.');
                resolve();
              },
              { enableHighAccuracy: true, timeout: 10000 }

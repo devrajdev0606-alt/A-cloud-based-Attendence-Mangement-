@@ -64,17 +64,8 @@
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyDqJZTE8r3S1NUXD77S1NRHBbbvXKDljLo",
-      authDomain: "attendance-demo-demo.firebaseapp.com",
-      projectId: "attendance-demo-demo",
-      storageBucket: "attendance-demo-demo.firebasestorage.app",
-      messagingSenderId: "63825400742",
-      appId: "1:63825400742:web:2f2fd96662f5b2f6b37567",
-      measurementId: "G-B8CWL13PT6"
-    };
-    firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
     const facultyId = localStorage.getItem('facultyId');
