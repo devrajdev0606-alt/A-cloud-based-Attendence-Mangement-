@@ -143,6 +143,8 @@
       <div style="display:flex; align-items:center; gap:10px;">
         <label style="font-size:14px;">Distance Threshold (meters):</label>
         <input type="number" id="distanceThreshold" class="settings-input" min="1" max="1000" required />
+        <label style="font-size:14px;">Required GPS Accuracy (meters):</label>
+        <input type="number" id="gpsAccuracyThreshold" class="settings-input" min="5" max="500" required />
         <button type="submit" class="submit-btn">Save</button>
       </div>
     </form>
@@ -529,9 +531,26 @@ async function loadDepartments() {
     async function saveSettings(e) {
       e.preventDefault();
       const msg = document.getElementById('settingsMsg');
-      const threshold = parseInt(document.getElementById('distanceThreshold').value);
+      const threshold = parseInt(document.getElementById('distanceThreshold').value, 10);
+      const gpsAccuracyThreshold = parseInt(document.getElementById('gpsAccuracyThreshold').value, 10);
+      if (!Number.isFinite(threshold) || threshold < 1) {
+        msg.textContent = 'Please enter a valid distance threshold.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+      if (!Number.isFinite(gpsAccuracyThreshold) || gpsAccuracyThreshold < 5) {
+        msg.textContent = 'Please enter a valid GPS accuracy threshold (minimum 5m).';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
       try {
-        await db.collection('settings').doc('attendance').set({ distanceThreshold: threshold, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        await db.collection('settings').doc('attendance').set({
+          distanceThreshold: threshold,
+          gpsAccuracyThreshold,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
         msg.textContent = 'Settings saved!';
         msg.className = 'msg success';
         msg.style.display = 'block';
@@ -548,11 +567,14 @@ async function loadDepartments() {
         const snap = await db.collection('settings').doc('attendance').get();
         if (snap.exists) {
           document.getElementById('distanceThreshold').value = snap.data().distanceThreshold || 10;
+          document.getElementById('gpsAccuracyThreshold').value = snap.data().gpsAccuracyThreshold || 50;
         } else {
-        document.getElementById('distanceThreshold').value = 10;
+          document.getElementById('distanceThreshold').value = 10;
+          document.getElementById('gpsAccuracyThreshold').value = 50;
         }
       } catch (err) {
         document.getElementById('distanceThreshold').value = 10;
+        document.getElementById('gpsAccuracyThreshold').value = 50;
       }
     }
 

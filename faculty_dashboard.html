@@ -87,9 +87,23 @@
 
     const facultyId = localStorage.getItem('facultyId');
     const facultyName = localStorage.getItem('facultyName');
+    let gpsAccuracyThreshold = 50;
     if (!facultyId) { window.location.href = 'faculty.html'; }
 
     document.getElementById('welcome').textContent = `Welcome, ${facultyName}`;
+
+    async function loadSettings() {
+      try {
+        const snap = await db.collection('settings').doc('attendance').get();
+        if (snap.exists) {
+          gpsAccuracyThreshold = snap.data().gpsAccuracyThreshold || 50;
+        } else {
+          gpsAccuracyThreshold = 50;
+        }
+      } catch (err) {
+        gpsAccuracyThreshold = 50;
+      }
+    }
 
     async function loadSubjects() {
       const tbody = document.getElementById('subjectsTable');
@@ -163,7 +177,7 @@
               <span><strong>${subject?.subjectName || 'Unknown'}</strong></span>
               <span>Started: ${s.startTime}</span>
               <span>Duration: ${s.duration} min</span>
-              <span>Location: ${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)}</span>
+              <span>Location: ${Number(s.latitude).toFixed(6)}, ${Number(s.longitude).toFixed(6)}</span>
               <button class="btn view-btn" style="margin-left:20px;" onclick="viewAttendance('${s.subjectId}')">View Attendance</button>
             </div>`;
         }
@@ -182,6 +196,7 @@
     }
 
      async function startAttendance(subjectId, subjectName, button) {
+       await loadSettings();
        const duration = document.getElementById(`duration-${subjectId}`).value;
        const statusMsg = document.createElement('div');
        statusMsg.className = 'msg info';
@@ -198,6 +213,12 @@
        navigator.geolocation.getCurrentPosition(async (pos) => {
            const now = new Date();
            const durationMinutes = parseInt(duration, 10);
+           const accuracyMeters = typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null;
+           if (accuracyMeters !== null && accuracyMeters > gpsAccuracyThreshold) {
+             statusMsg.className = 'msg error';
+             statusMsg.textContent = `GPS accuracy is too low (${accuracyMeters.toFixed(1)}m). Required: ≤ ${gpsAccuracyThreshold}m.`;
+             return;
+           }
          const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
          const dateStr = now.toLocaleDateString('en-GB');
          try {
@@ -217,7 +238,7 @@
              createdAt: firebase.firestore.FieldValue.serverTimestamp()
            });
            statusMsg.className = 'msg success';
-           statusMsg.textContent = `Attendance started! Class ${classNumber}`;
+           statusMsg.textContent = `Attendance started! Class ${classNumber} (GPS accuracy: ${accuracyMeters !== null ? `${accuracyMeters.toFixed(1)}m` : 'N/A'})`;
            setTimeout(() => { loadSubjects(); loadActiveSessions(); }, 1000);
          } catch (err) {
            statusMsg.className = 'msg error';
@@ -226,7 +247,7 @@
        }, (err) => {
          statusMsg.className = 'msg error';
          statusMsg.textContent = 'Location access denied';
-       }, { enableHighAccuracy: true, timeout: 10000 });
+       }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
      }
 
     async function stopAttendance(subjectId, button) {
@@ -328,6 +349,7 @@
 
     loadSubjects();
     loadActiveSessions();
+    loadSettings();
   </script>
 </body>
 </html>

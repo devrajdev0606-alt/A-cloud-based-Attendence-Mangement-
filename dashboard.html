@@ -140,16 +140,21 @@
      let modelsLoaded = false;
      const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.1/weights';
      let studentSubjects = [];
-       let distanceThreshold = 10;
+     let distanceThreshold = 10;
+     let gpsAccuracyThreshold = 50;
+     const faceDistanceThreshold = 0.6;
 
       async function loadSettings() {
         try {
           const snap = await db.collection('settings').doc('attendance').get();
           if (snap.exists) {
-            distanceThreshold = snap.data().distanceThreshold || 10;
+            const data = snap.data();
+            distanceThreshold = data.distanceThreshold || 10;
+            gpsAccuracyThreshold = data.gpsAccuracyThreshold || 50;
           }
         } catch (err) {
           distanceThreshold = 10;
+          gpsAccuracyThreshold = 50;
         }
       }
 
@@ -387,11 +392,12 @@ async function loadMySubjects() {
           const storedDescriptor = new Float32Array(doc.data().faceDescriptor);
           const currentDescriptor = detection.descriptor;
           const distance = faceapi.euclideanDistance(currentDescriptor, storedDescriptor);
-          if (distance > 0.6) {
-            showMsg('attMsg', 'error', `Face Verification Failed (${(1-distance).toFixed(0)}% match)`);
+          const faceMatchPercent = Math.max(0, Math.round((1 - distance) * 100));
+          if (distance > faceDistanceThreshold) {
+            showMsg('attMsg', 'error', `Face Verification Failed (${faceMatchPercent}% match)`);
             return;
           }
-          showMsg('attMsg', 'success', `Face Verified (${(1-distance).toFixed(0)}% match)`);
+          showMsg('attMsg', 'success', `Face Verified (${faceMatchPercent}% match)`);
           document.getElementById('captureAttBtn').disabled = true;
           await captureGPS(selectedSubject, latestSession);
         } catch (err) {
@@ -413,24 +419,33 @@ async function loadMySubjects() {
            }
            navigator.geolocation.getCurrentPosition(
              async (pos) => {
-               const lat = pos.coords.latitude.toFixed(4);
-               const lng = pos.coords.longitude.toFixed(4);
-               const accuracy = pos.coords.accuracy ? pos.coords.accuracy.toFixed(1) : 'N/A';
-               
+               const lat = pos.coords.latitude;
+               const lng = pos.coords.longitude;
+               const accuracyMeters = typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null;
+               const accuracy = accuracyMeters !== null ? accuracyMeters.toFixed(1) : 'N/A';
+                
                const facLat = session?.latitude || 'N/A';
                const facLng = session?.longitude || 'N/A';
-               
+                
                let dist = null;
                if (session && session.latitude && session.longitude) {
-                 dist = calculateDistance(parseFloat(lat), parseFloat(lng), session.latitude, session.longitude);
+                 dist = calculateDistance(lat, lng, session.latitude, session.longitude);
                }
-               
-               let debug = `Faculty: ${facLat}, ${facLng}<br>Student: ${lat}, ${lng}<br>GPS Accuracy: ${accuracy}m`;
+                
+               const facLatDisplay = Number.isFinite(facLat) ? facLat.toFixed(6) : facLat;
+               const facLngDisplay = Number.isFinite(facLng) ? facLng.toFixed(6) : facLng;
+               let debug = `Faculty: ${facLatDisplay}, ${facLngDisplay}<br>Student: ${lat.toFixed(6)}, ${lng.toFixed(6)}<br>GPS Accuracy: ${accuracy}m (required ≤ ${gpsAccuracyThreshold}m)`;
                if (dist !== null) {
                  debug += `<br>Distance: <strong>${dist.toFixed(1)} meters</strong> (threshold: ${distanceThreshold}m)`;
                }
                gpsInfo.innerHTML = debug;
-               
+
+               if (accuracyMeters !== null && accuracyMeters > gpsAccuracyThreshold) {
+                 showMsg('attMsg', 'error', `GPS accuracy is too low (${accuracy.toString()}m). Please stay still and try again.`);
+                 resolve();
+                 return;
+               }
+                
                if (dist !== null && dist > distanceThreshold) {
                  showMsg('attMsg', 'error', `Too far from faculty (${dist.toFixed(1)}m). Must be within ${distanceThreshold} meters.`);
                  resolve();
@@ -445,7 +460,7 @@ async function loadMySubjects() {
                showMsg('attMsg', 'error', 'Location access is required for attendance verification.');
                resolve();
              },
-             { enableHighAccuracy: true, timeout: 10000 }
+             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
            );
          });
        }
