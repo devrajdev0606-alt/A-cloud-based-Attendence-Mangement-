@@ -119,7 +119,24 @@
             <label class="form-label" for="regStudentName" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Full Student Name *</label>
             <div class="input-wrap" style="margin-bottom: 0;">
               <span class="input-icon">👤</span>
-              <input type="text" id="regStudentName" placeholder="e.g. Alex Johnson" required />
+              <input type="text" id="regStudentName" placeholder="e.g. Devraj" required />
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+            <div>
+              <label class="form-label" for="regStudentUsn" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Student USN *</label>
+              <div class="input-wrap" style="margin-bottom: 0;">
+                <span class="input-icon">🆔</span>
+                <input type="text" id="regStudentUsn" placeholder="1CI22CS001" required style="text-transform: uppercase;" />
+              </div>
+            </div>
+            <div>
+              <label class="form-label" for="regStudentPhone" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Phone Number</label>
+              <div class="input-wrap" style="margin-bottom: 0;">
+                <span class="input-icon">📱</span>
+                <input type="tel" id="regStudentPhone" placeholder="9876543210" />
+              </div>
             </div>
           </div>
 
@@ -127,7 +144,7 @@
             <label class="form-label" for="regStudentEmail" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Student Email Address *</label>
             <div class="input-wrap" style="margin-bottom: 0;">
               <span class="input-icon">📧</span>
-              <input type="email" id="regStudentEmail" placeholder="student@cit.edu" required />
+              <input type="email" id="regStudentEmail" placeholder="devraj@gmail.com" required />
             </div>
           </div>
 
@@ -136,6 +153,33 @@
             <select id="regStudentDept" required>
               <option value="">-- Select Department --</option>
             </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+            <div>
+              <label class="form-label" for="regStudentSem" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Semester *</label>
+              <select id="regStudentSem" required>
+                <option value="">-- Sem --</option>
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+                <option value="3">Semester 3</option>
+                <option value="4">Semester 4</option>
+                <option value="5">Semester 5</option>
+                <option value="6">Semester 6</option>
+                <option value="7">Semester 7</option>
+                <option value="8">Semester 8</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label" for="regStudentSec" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Section *</label>
+              <select id="regStudentSec" required>
+                <option value="">-- Sec --</option>
+                <option value="A">Section A</option>
+                <option value="B">Section B</option>
+                <option value="C">Section C</option>
+                <option value="D">Section D</option>
+              </select>
+            </div>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
@@ -330,7 +374,10 @@
           localStorage.setItem('studentId', studentId);
           localStorage.setItem('studentUid', user.uid);
           localStorage.setItem('studentName', student.name || 'Student');
-          localStorage.setItem('studentDept', student.dept || '');
+          localStorage.setItem('studentUsn', student.usn || '');
+          localStorage.setItem('studentDept', student.dept || student.department || '');
+          localStorage.setItem('studentSemester', student.semester ? String(student.semester) : '');
+          localStorage.setItem('studentSection', student.section || '');
           localStorage.setItem('faceRegistered', student.faceRegistered ? 'true' : 'false');
           window.location.href = 'dashboard.html';
           return;
@@ -489,10 +536,35 @@
       const submitBtn = document.getElementById('regStudentSubmitBtn');
 
       const name = document.getElementById('regStudentName').value.trim();
+      const usn = document.getElementById('regStudentUsn').value.trim().toUpperCase();
+      const phone = document.getElementById('regStudentPhone').value.trim();
       const email = document.getElementById('regStudentEmail').value.trim().toLowerCase();
       const dept = document.getElementById('regStudentDept').value;
+      const semester = parseInt(document.getElementById('regStudentSem').value, 10);
+      const section = document.getElementById('regStudentSec').value.trim().toUpperCase();
       const pass = document.getElementById('regStudentPass').value;
       const confirmPass = document.getElementById('regStudentConfirmPass').value;
+
+      if (!usn) {
+        msg.textContent = 'Please enter a valid USN.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (!semester || semester < 1 || semester > 8) {
+        msg.textContent = 'Please select a valid Semester (1-8).';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (!section) {
+        msg.textContent = 'Please select a valid Section.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
 
       if (pass !== confirmPass) {
         msg.textContent = 'Passwords do not match. Please re-enter.';
@@ -526,8 +598,13 @@
           uid: uid,
           role: 'student',
           name: name,
+          usn: usn,
+          phone: phone || '',
           email: email,
           dept: dept,
+          department: dept,
+          semester: semester,
+          section: section,
           status: 'pending',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };

@@ -87,14 +87,38 @@
           <div class="card-header">
             <h2>👨‍🎓 Onboard New Student</h2>
           </div>
-          <form id="addStudentForm">
-            <input type="text" id="name" placeholder="Full Student Name" required />
-            <input type="email" id="email" placeholder="Student Email" required />
-            <input type="password" id="password" placeholder="Initial Password" required />
+          <form id="addStudentForm" style="display: flex; flex-direction: column; gap: 12px;">
+            <input type="text" id="name" placeholder="Full Student Name (e.g. Devraj)" required />
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <input type="text" id="studentUsn" placeholder="USN (e.g. 1CI22CS001)" required style="text-transform: uppercase;" />
+              <input type="tel" id="studentPhone" placeholder="Phone (Optional)" />
+            </div>
+            <input type="email" id="email" placeholder="Student Email (e.g. devraj@gmail.com)" required />
+            <input type="password" id="password" placeholder="Initial Password (min 6 chars)" required minlength="6" />
             <select id="studentDept" required>
               <option value="">Select Department</option>
             </select>
-            <button type="submit" class="btn submit-btn full">Register Student</button>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <select id="studentSem" required>
+                <option value="">-- Semester --</option>
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+                <option value="3">Semester 3</option>
+                <option value="4">Semester 4</option>
+                <option value="5">Semester 5</option>
+                <option value="6">Semester 6</option>
+                <option value="7">Semester 7</option>
+                <option value="8">Semester 8</option>
+              </select>
+              <select id="studentSec" required>
+                <option value="">-- Section --</option>
+                <option value="A">Section A</option>
+                <option value="B">Section B</option>
+                <option value="C">Section C</option>
+                <option value="D">Section D</option>
+              </select>
+            </div>
+            <button type="submit" class="btn submit-btn full" style="margin-top: 4px;">Register Student</button>
           </form>
           <div id="studentMsg" class="msg"></div>
         </div>
@@ -104,14 +128,14 @@
           <div class="card-header">
             <h2>👩‍🏫 Onboard New Faculty</h2>
           </div>
-          <form id="addFacultyForm">
-            <input type="text" id="facultyName" placeholder="Faculty Name & Title" required />
-            <input type="email" id="facultyEmail" placeholder="Faculty Email" required />
-            <input type="password" id="facultyPassword" placeholder="Initial Password" required />
+          <form id="addFacultyForm" style="display: flex; flex-direction: column; gap: 12px;">
+            <input type="text" id="facultyName" placeholder="Faculty Name & Title (e.g. Prof. Anil)" required />
+            <input type="email" id="facultyEmail" placeholder="Faculty Email (e.g. anil@cit.edu)" required />
+            <input type="password" id="facultyPassword" placeholder="Initial Password (min 6 chars)" required minlength="6" />
             <select id="facultyDept" required>
               <option value="">Select Department</option>
             </select>
-            <button type="submit" class="btn submit-btn full">Register Faculty</button>
+            <button type="submit" class="btn submit-btn full" style="margin-top: 4px;">Register Faculty</button>
           </form>
           <div id="facultyMsg" class="msg"></div>
         </div>
@@ -119,40 +143,59 @@
 
       <!-- Right Column -->
       <div style="display: flex; flex-direction: column; gap: 24px;">
-        <!-- Create Subject Card -->
+        <!-- Create Course Offering Card -->
         <div class="card" style="margin-bottom: 0;">
           <div class="card-header">
-            <h2>📚 Course & Subject Creation</h2>
+            <h2>📚 Create Course Offering</h2>
           </div>
-          <form id="addSubjectForm">
-            <input type="text" id="subjectName" placeholder="Subject Name" required />
-            <input type="text" id="subjectCode" placeholder="Subject Code (e.g. CS501)" required />
-            <select id="subjectFaculty" required>
-              <option value="">Select Faculty</option>
-            </select>
+          <p class="card-desc" style="margin-bottom: 12px;">Provision a course offering for a specific Department, Semester, and Section. Students are enrolled automatically.</p>
+          <form id="addSubjectForm" style="display: flex; flex-direction: column; gap: 12px;">
+            <input type="text" id="subjectName" placeholder="Subject Name (e.g. Cloud Computing)" required />
+            <input type="text" id="subjectCode" placeholder="Subject Code (e.g. CS045)" required />
             <select id="subjectDept" required>
               <option value="">Select Department</option>
             </select>
-            <button type="submit" class="btn submit-btn full">Create Course Subject</button>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <select id="subjectSem" required>
+                <option value="">-- Semester --</option>
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+                <option value="3">Semester 3</option>
+                <option value="4">Semester 4</option>
+                <option value="5">Semester 5</option>
+                <option value="6">Semester 6</option>
+                <option value="7">Semester 7</option>
+                <option value="8">Semester 8</option>
+              </select>
+              <select id="subjectSec" required>
+                <option value="">-- Section --</option>
+                <option value="A">Section A</option>
+                <option value="B">Section B</option>
+                <option value="C">Section C</option>
+                <option value="D">Section D</option>
+              </select>
+            </div>
+            <select id="subjectFaculty" required>
+              <option value="">Select Assigned Faculty</option>
+            </select>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div>
+                <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">Total Subject Hours *</label>
+                <input type="number" id="subjectTotalHours" placeholder="e.g. 45" min="1" step="1" required style="width:100%;" />
+              </div>
+              <div>
+                <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">Attendance Requirement</label>
+                <div style="padding: 10px 12px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); border-radius: var(--radius-md, 8px); font-size: 0.88rem; font-weight: 600; color: var(--emerald-dark);">
+                  ✓ 75% Required
+                </div>
+              </div>
+            </div>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin:0;">
+              💡 <em>All approved students matching this Department + Semester + Section are automatically enrolled upon creation.</em>
+            </p>
+            <button type="submit" class="btn submit-btn full" style="margin-top: 4px;">Create Course Offering</button>
           </form>
           <div id="subjectMsg" class="msg"></div>
-        </div>
-
-        <!-- Assign Students to Subject Card -->
-        <div class="card" style="margin-bottom: 0;">
-          <div class="card-header">
-            <h2>👥 Assign Students to Subject</h2>
-          </div>
-          <form id="assignStudentsForm" style="display: flex; flex-direction: column; gap: 14px;">
-            <select id="assignSubject" onchange="loadAvailableStudents()" required>
-              <option value="">Select Course Subject</option>
-            </select>
-            <div class="checkbox-group" id="studentCheckboxes">
-              <p class="empty">Select a subject above to load student roster</p>
-            </div>
-            <button type="submit" class="btn submit-btn" style="width: 100%;">Save Subject Enrollment</button>
-          </form>
-          <div id="assignMsg" class="msg"></div>
         </div>
 
         <!-- Geofence & System Settings Card -->
@@ -208,15 +251,17 @@
           <thead>
             <tr>
               <th>Applicant Name</th>
-              <th>Applicant ID / Email</th>
+              <th>USN / Role</th>
+              <th>Applicant Email</th>
               <th>Department</th>
+              <th>Sem / Sec</th>
               <th>Registration Date</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody id="requestsTableBody">
-            <tr><td colspan="6" class="empty">Loading registration requests...</td></tr>
+            <tr><td colspan="8" class="empty">Loading registration requests...</td></tr>
           </tbody>
         </table>
       </div>
@@ -292,6 +337,38 @@
           <button type="button" id="confirmModalSubmitBtn" class="btn btn-approve" onclick="executePendingAction()">✓ Confirm</button>
         </div>
       </div>
+  </div>
+
+  <!-- Enrolled Roster Modal -->
+  <div id="rosterModal" class="modal-overlay" style="display:none;" onclick="closeRosterModalOnBackdrop(event)">
+    <div class="modal-card" style="max-width: 520px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span id="rosterModalBadge" class="badge green">Enrolled Roster</span>
+          <h2 id="rosterModalTitle" style="margin-top:4px;">Enrolled Students</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeRosterModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="rosterModalSubTitle" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;"></p>
+        <div class="table-responsive" style="max-height: 360px; overflow-y: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40px;">#</th>
+                <th>Student Name</th>
+                <th>USN</th>
+              </tr>
+            </thead>
+            <tbody id="rosterModalTbody">
+              <tr><td colspan="3" class="empty">Loading roster...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="btn-row" style="justify-content: flex-end; width: 100%; margin-top: 14px;">
+          <button type="button" class="btn back-btn" onclick="closeRosterModal()">Close</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -363,6 +440,99 @@
       return 'Unknown Department';
     }
 
+    // =========================================================================
+    // ACADEMIC ENROLLMENT MATCHING HELPERS
+    // =========================================================================
+    function isDepartmentMatching(dept1, dept2, mapping = deptMap) {
+      if (!dept1 || !dept2) return true;
+      if (dept1 === dept2) return true;
+      const d1 = String(dept1).trim().toLowerCase();
+      const d2 = String(dept2).trim().toLowerCase();
+      if (d1 === d2) return true;
+
+      const name1 = (mapping[dept1] || dept1).trim().toLowerCase();
+      const name2 = (mapping[dept2] || dept2).trim().toLowerCase();
+      return name1 === name2 || name1 === d2 || name2 === d1;
+    }
+
+    function isSemesterMatching(sem1, sem2) {
+      if (!sem1 || !sem2) return true;
+      return parseInt(sem1, 10) === parseInt(sem2, 10);
+    }
+
+    function isSectionMatching(sec1, sec2) {
+      if (!sec1 || !sec2) return true;
+      return String(sec1).trim().toUpperCase() === String(sec2).trim().toUpperCase();
+    }
+
+    function isAcademicMatch(student, subject, mapping = deptMap) {
+      const stuDept = student.dept || student.department || '';
+      const subDept = subject.departmentId || subject.department || '';
+      const stuSem = student.semester;
+      const subSem = subject.semester;
+      const stuSec = student.section || 'A';
+      const subSec = subject.section || 'A';
+
+      return isDepartmentMatching(stuDept, subDept, mapping) &&
+             isSemesterMatching(stuSem, subSem) &&
+             isSectionMatching(stuSec, subSec);
+    }
+
+    // Modal Drawer for Viewing Enrolled Roster (Read-only)
+    async function viewSubjectRoster(subjectId) {
+      const modal = document.getElementById('rosterModal');
+      const tbody = document.getElementById('rosterModalTbody');
+      const title = document.getElementById('rosterModalTitle');
+      const subTitle = document.getElementById('rosterModalSubTitle');
+      const badge = document.getElementById('rosterModalBadge');
+      
+      try {
+        const subDoc = await db.collection('subjects').doc(subjectId).get();
+        if (!subDoc.exists) return;
+        const s = subDoc.data();
+        const roster = s.enrolledRoster || [];
+        const studentIds = s.studentIds || [];
+        const deptName = deptMap[s.departmentId || s.department] || s.departmentId || 'Department';
+        const sem = s.semester || 1;
+        const sec = s.section || 'A';
+        
+        title.textContent = `${s.subjectName} (${s.subjectCode || ''})`;
+        subTitle.textContent = `${deptName} • Semester ${sem} • Section ${sec} • Faculty: ${s.facultyName || 'Faculty'}`;
+        badge.textContent = `${studentIds.length} Automatically Enrolled`;
+        
+        if (roster.length === 0 && studentIds.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="empty">No students enrolled in this offering yet.</td></tr>';
+        } else if (roster.length > 0) {
+          tbody.innerHTML = roster.map((r, idx) => `
+            <tr>
+              <td>${idx + 1}</td>
+              <td><strong>${r.name || 'Student'}</strong></td>
+              <td>${r.usn || '-'}</td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = studentIds.map((id, idx) => `
+            <tr>
+              <td>${idx + 1}</td>
+              <td><strong>Enrolled Student</strong></td>
+              <td><code>${id}</code></td>
+            </tr>
+          `).join('');
+        }
+        modal.style.display = 'flex';
+      } catch (err) {
+        console.error('Error opening roster modal:', err);
+      }
+    }
+
+    function closeRosterModal() {
+      document.getElementById('rosterModal').style.display = 'none';
+    }
+
+    function closeRosterModalOnBackdrop(e) {
+      if (e.target.id === 'rosterModal') closeRosterModal();
+    }
+
     // Registration Requests State
     let currentRequestTab = 'student';
     let allRequests = [];
@@ -417,14 +587,17 @@
         deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
         let rows = [];
         if (currentTab === 'students') {
-          thead.innerHTML = '<tr><th>Student Name</th><th>Email</th><th>Department</th><th>Biometric Face Status</th></tr>';
+          thead.innerHTML = '<tr><th>Student Name</th><th>USN</th><th>Email</th><th>Department</th><th>Sem / Sec</th><th>Biometric Face Status</th></tr>';
           stuSnap.forEach(doc => {
             const s = doc.data();
             const deptName = deptMap[s.dept] || s.dept || '-';
             const faceBadge = s.faceRegistered 
               ? '<span class="badge green">● Registered</span>' 
               : '<span class="badge">Pending</span>';
-            rows.push(`<tr><td><strong>${s.name}</strong></td><td>${s.email}</td><td><span class="badge">${deptName}</span></td><td>${faceBadge}</td></tr>`);
+            const semSecBadge = s.semester 
+              ? `<span class="badge blue">Sem ${s.semester} • Sec ${s.section || 'A'}</span>` 
+              : '<span class="badge">-</span>';
+            rows.push(`<tr><td><strong>${s.name}</strong></td><td><strong>${s.usn || '-'}</strong></td><td>${s.email}</td><td><span class="badge">${deptName}</span></td><td>${semSecBadge}</td><td>${faceBadge}</td></tr>`);
           });
         } else if (currentTab === 'faculty') {
           thead.innerHTML = '<tr><th>Faculty Name</th><th>Email</th><th>Department</th></tr>';
@@ -434,38 +607,38 @@
             rows.push(`<tr><td><strong>${f.name}</strong></td><td>${f.email}</td><td><span class="badge blue">${deptName}</span></td></tr>`);
           });
         } else {
-          thead.innerHTML = '<tr><th>Subject Name</th><th>Code</th><th>Assigned Faculty</th><th>Department</th><th>Enrolled Students</th></tr>';
+          thead.innerHTML = '<tr><th>Subject Name</th><th>Code</th><th>Department</th><th>Sem / Sec</th><th>Total Hours</th><th>Assigned Faculty</th><th>Enrolled Students</th></tr>';
           const facMap = {};
           facSnap.forEach(doc => { facMap[doc.id] = doc.data().name; });
           subSnap.forEach(doc => {
             const s = doc.data();
-            const facName = facMap[s.facultyId] || '-';
+            const facName = facMap[s.facultyId] || s.facultyName || '-';
             const deptName = deptMap[s.departmentId] || s.departmentId || '-';
-            rows.push(`<tr><td><strong>${s.subjectName}</strong></td><td><span class="badge">${s.subjectCode}</span></td><td>${facName}</td><td>${deptName}</td><td><span class="badge blue">${(s.studentIds || []).length} students</span></td></tr>`);
+            const semSecBadge = s.semester 
+              ? `<span class="badge blue">Sem ${s.semester} • Sec ${s.section || 'A'}</span>` 
+              : '<span class="badge">-</span>';
+            const hoursBadge = s.totalHours
+              ? `<span class="badge" style="font-weight:600;">${s.totalHours} hrs <span style="font-size:10px; color:var(--emerald-dark);">(75% req)</span></span>`
+              : '<span class="badge" style="opacity:0.6;">Not configured</span>';
+            const enrolledCount = (s.studentIds || []).length;
+            rows.push(`<tr><td><strong>${s.subjectName}</strong></td><td><span class="badge">${s.subjectCode}</span></td><td>${deptName}</td><td>${semSecBadge}</td><td>${hoursBadge}</td><td>${facName}</td><td><button type="button" class="badge green" style="cursor:pointer; border:none; font-weight:600;" onclick="viewSubjectRoster('${doc.id}')" title="Click to view enrolled roster">👥 ${enrolledCount} students</button></td></tr>`);
           });
         }
-        tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="5" class="empty">No records found.</td></tr>' : rows.join('');
+        tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="7" class="empty">No records found.</td></tr>' : rows.join('');
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty" style="color:var(--crimson-dark);">Error loading records</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="empty" style="color:var(--crimson-dark);">Error loading records</td></tr>`;
       }
     }
 
     async function loadFacultyOptions() {
       const subjectFaculty = document.getElementById('subjectFaculty');
       const subjectDept = document.getElementById('subjectDept');
-      const assignSubject = document.getElementById('assignSubject');
       try {
         const facultySnap = await db.collection('faculty').orderBy('name').get();
         subjectFaculty.innerHTML = '<option value="">Select Faculty</option>';
         facultySnap.forEach(doc => {
           const f = doc.data();
           subjectFaculty.innerHTML += `<option value="${doc.id}">${f.name}</option>`;
-        });
-        const subjectSnap = await db.collection('subjects').orderBy('subjectName').get();
-        assignSubject.innerHTML = '<option value="">Select Course Subject</option>';
-        subjectSnap.forEach(doc => {
-          const s = doc.data();
-          assignSubject.innerHTML += `<option value="${doc.id}">${s.subjectName} (${s.subjectCode})</option>`;
         });
         const deptSnap = await db.collection('departments').orderBy('name').get();
         subjectDept.innerHTML = '<option value="">Select Department</option>';
@@ -476,38 +649,6 @@
         });
       } catch (err) {
         console.error(err);
-      }
-    }
-
-    async function loadAvailableStudents() {
-      const subjectId = document.getElementById('assignSubject').value;
-      const container = document.getElementById('studentCheckboxes');
-      if (!subjectId) {
-        container.innerHTML = '<p class="empty">Select a subject above to load students.</p>';
-        return;
-      }
-      try {
-        const [studentsSnap, subjectSnap, deptSnap] = await Promise.all([
-          db.collection('students').orderBy('name').get(),
-          db.collection('subjects').doc(subjectId).get(),
-          db.collection('departments').get()
-        ]);
-        deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
-        const assigned = new Set((subjectSnap.data()?.studentIds || []));
-        container.innerHTML = '';
-        if (studentsSnap.empty) {
-          container.innerHTML = '<p class="empty">No students found in the database.</p>';
-          return;
-        }
-        studentsSnap.forEach(doc => {
-          const s = doc.data();
-          const checked = assigned.has(doc.id) ? 'checked' : '';
-          const deptName = getDepartmentDisplayName(s.dept);
-          const studentName = s.name || 'Student';
-          container.innerHTML += `<div class="checkbox-item"><input type="checkbox" id="stu-${doc.id}" value="${doc.id}" data-name="${studentName}" ${checked}><label for="stu-${doc.id}"><strong>${studentName}</strong> (${deptName})</label></div>`;
-        });
-      } catch (err) {
-        container.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Error loading students</p>';
       }
     }
 
@@ -545,7 +686,16 @@
           const d = doc.data();
           const k = d.dept || '';
           deptDataCache.studentsByDept[k] = (deptDataCache.studentsByDept[k] || []);
-          deptDataCache.studentsByDept[k].push({ id: doc.id, name: d.name, email: d.email, faceRegistered: !!d.faceRegistered, deptName: deptMap[k] || k });
+          deptDataCache.studentsByDept[k].push({
+            id: doc.id,
+            name: d.name,
+            usn: d.usn || '',
+            email: d.email,
+            semester: d.semester || 1,
+            section: d.section || 'A',
+            faceRegistered: !!d.faceRegistered,
+            deptName: deptMap[k] || k
+          });
         });
 
         const facMap = {};
@@ -565,8 +715,10 @@
             id: doc.id,
             subjectName: d.subjectName,
             subjectCode: d.subjectCode,
+            semester: d.semester || 1,
+            section: d.section || 'A',
             facultyId: d.facultyId,
-            facultyName: facMap[d.facultyId] || '-',
+            facultyName: facMap[d.facultyId] || d.facultyName || '-',
             studentIds: d.studentIds || [],
             departmentId: k
           });
@@ -709,14 +861,16 @@
       const pagedRecords = filteredRecords.slice(startIndex, endIndex);
 
       if (type === 'students') {
-        thead.innerHTML = '<tr><th>Student Name</th><th>Email</th><th>Biometric Face Status</th></tr>';
+        thead.innerHTML = '<tr><th>Student Name</th><th>USN</th><th>Email</th><th>Sem / Sec</th><th>Face Status</th></tr>';
         if (pagedRecords.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="3" class="empty">No students found matching query.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">No students found matching query.</td></tr>';
         } else {
           tbody.innerHTML = pagedRecords.map(s => `
             <tr>
               <td><strong>${s.name || 'Unknown'}</strong></td>
+              <td><strong>${s.usn || '-'}</strong></td>
               <td>${s.email || '-'}</td>
+              <td><span class="badge blue">Sem ${s.semester || 1} • Sec ${s.section || 'A'}</span></td>
               <td>${s.faceRegistered ? '<span class="badge green">● Registered</span>' : '<span class="badge">Pending</span>'}</td>
             </tr>
           `).join('');
@@ -734,18 +888,25 @@
           `).join('');
         }
       } else {
-        thead.innerHTML = '<tr><th>Subject Name</th><th>Course Code</th><th>Assigned Faculty</th><th>Enrolled Students</th></tr>';
+        thead.innerHTML = '<tr><th>Subject Name</th><th>Course Code</th><th>Sem / Sec</th><th>Total Hours</th><th>Assigned Faculty</th><th>Enrolled Students</th></tr>';
         if (pagedRecords.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="4" class="empty">No subjects found matching query.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" class="empty">No subjects found matching query.</td></tr>';
         } else {
-          tbody.innerHTML = pagedRecords.map(sub => `
-            <tr>
-              <td><strong>${sub.subjectName}</strong></td>
-              <td><span class="badge">${sub.subjectCode}</span></td>
-              <td>${sub.facultyName || '-'}</td>
-              <td><span class="badge blue">${(sub.studentIds || []).length} students</span></td>
-            </tr>
-          `).join('');
+          tbody.innerHTML = pagedRecords.map(sub => {
+            const hoursBadge = sub.totalHours
+              ? `<span class="badge" style="font-weight:600;">${sub.totalHours} hrs <span style="font-size:10px; color:var(--emerald-dark);">(75% req)</span></span>`
+              : '<span class="badge" style="opacity:0.6;">Not configured</span>';
+            return `
+              <tr>
+                <td><strong>${sub.subjectName}</strong></td>
+                <td><span class="badge">${sub.subjectCode}</span></td>
+                <td><span class="badge blue">Sem ${sub.semester || 1} • Sec ${sub.section || 'A'}</span></td>
+                <td>${hoursBadge}</td>
+                <td>${sub.facultyName || '-'}</td>
+                <td><button type="button" class="badge green" style="cursor:pointer; border:none; font-weight:600;" onclick="viewSubjectRoster('${sub.id}')" title="Click to view enrolled roster">👥 ${(sub.studentIds || []).length} students</button></td>
+              </tr>
+            `;
+          }).join('');
         }
       }
 
@@ -869,16 +1030,17 @@
       if (query) {
         filtered = filtered.filter(r => {
           const nameMatch = (r.name || '').toLowerCase().includes(query);
+          const usnMatch = (r.usn || '').toLowerCase().includes(query);
           const emailMatch = (r.email || '').toLowerCase().includes(query);
           const deptVal = r.dept || r.department || '';
           const deptName = getDepartmentDisplayName(deptVal).toLowerCase();
-          return nameMatch || emailMatch || deptName.includes(query);
+          return nameMatch || usnMatch || emailMatch || deptName.includes(query);
         });
       }
 
       if (filtered.length === 0) {
         const filterName = statusFilter === 'all' ? '' : statusFilter + ' ';
-        tbody.innerHTML = `<tr><td colspan="6" class="empty">No ${filterName}${currentRequestTab} registration requests found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="empty">No ${filterName}${currentRequestTab} registration requests found.</td></tr>`;
         return;
       }
 
@@ -907,11 +1069,17 @@
           actionHtml = `<span style="font-size:0.8rem; color:var(--crimson-dark); font-weight:700;">● Rejected</span>`;
         }
 
+        const isStudent = (r.role || 'student') === 'student';
+        const roleOrUsn = isStudent ? `<strong>${r.usn || '-'}</strong>` : `<span class="badge purple">Faculty</span>`;
+        const semSecDisplay = isStudent && r.semester ? `<span class="badge blue">Sem ${r.semester} • Sec ${r.section || 'A'}</span>` : '<span class="badge">-</span>';
+
         return `
           <tr>
             <td><strong>${r.name || 'Unknown'}</strong></td>
+            <td>${roleOrUsn}</td>
             <td>${r.email || '-'}</td>
-            <td><span class="badge blue">${deptDisplay}</span></td>
+            <td><span class="badge">${deptDisplay}</span></td>
+            <td>${semSecDisplay}</td>
             <td>${dateDisplay}</td>
             <td>${statusBadge}</td>
             <td>${actionHtml}</td>
@@ -933,9 +1101,19 @@
       const details = document.getElementById('confirmApplicantDetails');
       const submitBtn = document.getElementById('confirmModalSubmitBtn');
 
-      const roleLabel = requestData.role === 'faculty' ? 'Faculty Member' : 'Student';
+      const isStudent = requestData.role === 'student' || !requestData.role;
+      const roleLabel = isStudent ? 'Student' : 'Faculty Member';
       const deptVal = requestData.dept || requestData.department || '';
       const deptName = getDepartmentDisplayName(deptVal);
+
+      let extraDetails = '';
+      if (isStudent) {
+        extraDetails = `
+          <div><strong>USN:</strong> ${requestData.usn || '-'}</div>
+          <div><strong>Academic:</strong> Sem ${requestData.semester || 1} • Sec ${requestData.section || 'A'}</div>
+          <div><strong>Phone:</strong> ${requestData.phone || 'Not provided'}</div>
+        `;
+      }
 
       details.innerHTML = `
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size:0.85rem;">
@@ -943,6 +1121,7 @@
           <div><strong>Role:</strong> ${roleLabel}</div>
           <div><strong>Email:</strong> ${requestData.email || '-'}</div>
           <div><strong>Department:</strong> ${deptName}</div>
+          ${extraDetails}
         </div>
       `;
 
@@ -950,7 +1129,9 @@
         badge.className = 'badge green';
         badge.textContent = 'Approve Account';
         title.textContent = `Approve ${roleLabel} Registration`;
-        text.textContent = `Firebase Authentication account already exists for this registration request. Approving will activate the official institutional profile for ${requestData.name}, enabling immediate login.`;
+        text.textContent = isStudent
+          ? `Approving will activate ${requestData.name}'s profile and automatically enroll them into all active subjects for ${deptName} - Semester ${requestData.semester || 1} Section ${requestData.section || 'A'}.`
+          : `Approving will activate ${requestData.name}'s faculty profile, enabling immediate login.`;
         submitBtn.className = 'btn btn-approve';
         submitBtn.textContent = '✓ Confirm & Activate Profile';
       } else {
@@ -1016,16 +1197,65 @@
             };
             await db.collection('faculty').doc(uid).set(newFaculty, { merge: true });
           } else {
+            const studentName = currentReq.name || '';
+            const studentUsn = (currentReq.usn || '').toUpperCase();
+            const studentDept = currentReq.dept || currentReq.department || '';
+            const studentSem = parseInt(currentReq.semester, 10) || 1;
+            const studentSec = (currentReq.section || 'A').toUpperCase();
+            const studentPhone = currentReq.phone || '';
+
             const newStudent = {
               uid: uid,
-              name: currentReq.name || '',
+              name: studentName,
+              usn: studentUsn,
               email: currentReq.email,
-              dept: currentReq.dept || currentReq.department || '',
+              dept: studentDept,
+              department: studentDept,
+              semester: studentSem,
+              section: studentSec,
+              phone: studentPhone,
               faceRegistered: false,
               createdAt: currentReq.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
               approvedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             await db.collection('students').doc(uid).set(newStudent, { merge: true });
+
+            // Direction A: Auto-Enroll Student into all existing subjects matching Dept + Semester + Section
+            try {
+              const subSnap = await db.collection('subjects').get();
+              const batch = db.batch();
+              let matchedCount = 0;
+
+              subSnap.forEach(subDoc => {
+                const sub = subDoc.data();
+                const studentObj = {
+                  dept: studentDept,
+                  semester: studentSem,
+                  section: studentSec
+                };
+
+                if (isAcademicMatch(studentObj, sub, deptMap)) {
+                  const subRef = db.collection('subjects').doc(subDoc.id);
+                  const currentRoster = sub.enrolledRoster || [];
+                  const alreadyInRoster = currentRoster.some(r => r && (r.id === uid || r.id === currentReq.id));
+                  const updatedRoster = alreadyInRoster 
+                    ? currentRoster 
+                    : [...currentRoster, { id: uid, name: studentName, usn: studentUsn }];
+
+                  batch.update(subRef, {
+                    studentIds: firebase.firestore.FieldValue.arrayUnion(uid),
+                    enrolledRoster: updatedRoster
+                  });
+                  matchedCount++;
+                }
+              });
+
+              if (matchedCount > 0) {
+                await batch.commit();
+              }
+            } catch (enrollErr) {
+              console.warn('Auto-enrollment error during approval:', enrollErr);
+            }
           }
 
           // Mark request as approved
@@ -1036,7 +1266,7 @@
           });
 
           if (actionMsg) {
-            actionMsg.textContent = `✓ Successfully approved registration for ${currentReq.name}. Active profile activated!`;
+            actionMsg.textContent = `✓ Successfully approved registration for ${currentReq.name}. Active profile activated and subjects auto-assigned!`;
             actionMsg.className = 'msg success';
             actionMsg.style.display = 'block';
             setTimeout(() => { actionMsg.style.display = 'none'; }, 4000);
@@ -1116,9 +1346,13 @@
       const msg = document.getElementById('studentMsg');
       const submitBtn = e.target.querySelector('button[type="submit"]');
       const name = document.getElementById('name').value.trim();
+      const usn = (document.getElementById('studentUsn')?.value || '').trim().toUpperCase();
+      const phone = (document.getElementById('studentPhone')?.value || '').trim();
       const email = document.getElementById('email').value.trim().toLowerCase();
       const password = document.getElementById('password').value.trim();
       const dept = document.getElementById('studentDept').value;
+      const semester = parseInt(document.getElementById('studentSem').value, 10) || 1;
+      const section = (document.getElementById('studentSec').value || 'A').trim().toUpperCase();
 
       submitBtn.disabled = true;
       submitBtn.textContent = 'Registering Student...';
@@ -1142,15 +1376,54 @@
         const student = {
           uid: createdUid,
           name: name,
+          usn: usn,
+          phone: phone,
           email: email,
           dept: dept,
+          department: dept,
+          semester: semester,
+          section: section,
           faceRegistered: false,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          approvedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
         await db.collection('students').doc(createdUid).set(student);
 
-        msg.textContent = 'Student onboarded successfully! Firebase Auth credentials provisioned.';
+        // Direction A: Auto-enroll in matching existing subjects for Dept + Semester + Section
+        try {
+          const subSnap = await db.collection('subjects').get();
+          const batch = db.batch();
+          let matchedCount = 0;
+          subSnap.forEach(subDoc => {
+            const sub = subDoc.data();
+            const studentObj = {
+              dept: dept,
+              semester: semester,
+              section: section
+            };
+            if (isAcademicMatch(studentObj, sub, deptMap)) {
+              const subRef = db.collection('subjects').doc(subDoc.id);
+              const currentRoster = sub.enrolledRoster || [];
+              const alreadyInRoster = currentRoster.some(r => r && r.id === createdUid);
+              const updatedRoster = alreadyInRoster
+                ? currentRoster
+                : [...currentRoster, { id: createdUid, name: name, usn: usn }];
+              batch.update(subRef, {
+                studentIds: firebase.firestore.FieldValue.arrayUnion(createdUid),
+                enrolledRoster: updatedRoster
+              });
+              matchedCount++;
+            }
+          });
+          if (matchedCount > 0) {
+            await batch.commit();
+          }
+        } catch (enrollErr) {
+          console.warn('Auto-enroll error on manual student onboarding:', enrollErr);
+        }
+
+        msg.textContent = `Student "${name}" onboarded successfully! Auto-enrolled in matching Sem ${semester} - Sec ${section} subjects.`;
         msg.className = 'msg success';
         msg.style.display = 'block';
         document.getElementById('addStudentForm').reset();
@@ -1234,64 +1507,108 @@
     document.getElementById('addSubjectForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const msg = document.getElementById('subjectMsg');
-      const subject = {
-        subjectName: document.getElementById('subjectName').value.trim(),
-        subjectCode: document.getElementById('subjectCode').value.trim(),
-        facultyId: document.getElementById('subjectFaculty').value,
-        departmentId: document.getElementById('subjectDept').value,
-        studentIds: [],
-        enrolledRoster: []
-      };
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+
+      const subjectName = document.getElementById('subjectName').value.trim();
+      const subjectCode = document.getElementById('subjectCode').value.trim().toUpperCase();
+      const departmentId = document.getElementById('subjectDept').value;
+      const semester = parseInt(document.getElementById('subjectSem').value, 10) || 1;
+      const section = (document.getElementById('subjectSec').value || 'A').trim().toUpperCase();
+      const facultyId = document.getElementById('subjectFaculty').value;
+      const totalHoursInput = document.getElementById('subjectTotalHours').value;
+      const totalHours = parseInt(totalHoursInput, 10);
+
+      if (!Number.isFinite(totalHours) || totalHours <= 0) {
+        msg.textContent = 'Please enter a valid positive number for Total Subject Hours (e.g. 45).';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Creating Course Offering...';
+
       try {
+        const deptName = deptMap[departmentId] || departmentId || 'Department';
+
+        // Retrieve faculty name
+        let facultyName = 'Faculty';
+        if (facultyId) {
+          const facDoc = await db.collection('faculty').doc(facultyId).get().catch(() => null);
+          if (facDoc && facDoc.exists) {
+            facultyName = facDoc.data().name || 'Faculty';
+          }
+        }
+
+        // Direction B: Automatically find all existing approved students matching Dept + Semester + Section
+        const stuSnap = await db.collection('students').get();
+        const matchingStudentIds = [];
+        const matchingRoster = [];
+
+        stuSnap.forEach(sDoc => {
+          const s = sDoc.data();
+          const studentObj = {
+            dept: s.dept || s.department || '',
+            semester: s.semester || 1,
+            section: s.section || 'A'
+          };
+          const subjectObj = {
+            departmentId: departmentId,
+            semester: semester,
+            section: section
+          };
+
+          if (isAcademicMatch(studentObj, subjectObj, deptMap)) {
+            const sid = s.uid || sDoc.id;
+            if (!matchingStudentIds.includes(sid)) {
+              matchingStudentIds.push(sid);
+              matchingRoster.push({
+                id: sid,
+                name: s.name || 'Student',
+                usn: s.usn || ''
+              });
+            }
+          }
+        });
+
+        const subject = {
+          subjectName,
+          subjectCode,
+          departmentId,
+          department: departmentId,
+          departmentName: deptName,
+          semester,
+          section,
+          facultyId,
+          facultyName,
+          totalHours: totalHours,
+          attendanceRequiredPercentage: 75,
+          studentIds: matchingStudentIds,
+          enrolledRoster: matchingRoster,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
         await db.collection('subjects').add(subject);
-        msg.textContent = 'Course subject created successfully!';
+
+        msg.innerHTML = `
+          <div style="font-weight:700; font-size:0.95rem; margin-bottom:4px;">✓ Course created successfully.</div>
+          <div style="font-size:0.88rem; color:var(--text-muted);">${deptName} • Semester ${semester} • Section ${section} • Total Hours: ${totalHours} (75% Req)</div>
+          <div style="font-size:0.88rem; font-weight:600; margin-top:2px;">Automatically enrolled: <strong>${matchingStudentIds.length} student${matchingStudentIds.length === 1 ? '' : 's'}</strong></div>
+        `;
         msg.className = 'msg success';
         msg.style.display = 'block';
         document.getElementById('addSubjectForm').reset();
-        loadDepartments();
-        loadFacultyOptions();
-        updateStats();
+        await loadDepartments();
+        await loadFacultyOptions();
+        await updateStats();
         renderListing();
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';
         msg.style.display = 'block';
-      }
-    });
-
-    document.getElementById('assignStudentsForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const msg = document.getElementById('assignMsg');
-      const subjectId = document.getElementById('assignSubject').value;
-      const checkboxes = document.querySelectorAll('#studentCheckboxes input:checked');
-      
-      // Authoritative enrollment relationship
-      const studentIds = Array.from(checkboxes).map(cb => cb.value);
-      
-      // Non-sensitive display cache containing ONLY id and name
-      const enrolledRoster = Array.from(checkboxes).map(cb => {
-        const studentName = cb.getAttribute('data-name') || cb.closest('.checkbox-item')?.querySelector('label strong')?.textContent?.trim() || 'Student';
-        return {
-          id: cb.value,
-          name: studentName
-        };
-      });
-
-      try {
-        await db.collection('subjects').doc(subjectId).update({
-          studentIds: studentIds,
-          enrolledRoster: enrolledRoster
-        });
-        msg.textContent = 'Student enrollment saved successfully!';
-        msg.className = 'msg success';
-        msg.style.display = 'block';
-        loadDepartments();
-        updateStats();
-        renderListing();
-      } catch (err) {
-        msg.textContent = 'Error: ' + err.message;
-        msg.className = 'msg error';
-        msg.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Course Offering';
       }
     });
 

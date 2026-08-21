@@ -34,7 +34,24 @@
             <label class="form-label" for="name">Full Student Name *</label>
             <div class="input-wrap" style="margin-bottom: 0;">
               <span class="input-icon">👤</span>
-              <input type="text" id="name" placeholder="Alex Johnson" required />
+              <input type="text" id="name" placeholder="Devraj" required />
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+              <label class="form-label" for="usn">Student USN *</label>
+              <div class="input-wrap" style="margin-bottom: 0;">
+                <span class="input-icon">🆔</span>
+                <input type="text" id="usn" placeholder="1CI22CS001" required style="text-transform: uppercase;" />
+              </div>
+            </div>
+            <div>
+              <label class="form-label" for="phone">Phone Number</label>
+              <div class="input-wrap" style="margin-bottom: 0;">
+                <span class="input-icon">📱</span>
+                <input type="tel" id="phone" placeholder="9876543210" />
+              </div>
             </div>
           </div>
 
@@ -42,7 +59,7 @@
             <label class="form-label" for="email">Institutional Email *</label>
             <div class="input-wrap" style="margin-bottom: 0;">
               <span class="input-icon">📧</span>
-              <input type="email" id="email" placeholder="student@cit.edu" required autocomplete="username" />
+              <input type="email" id="email" placeholder="devraj@gmail.com" required autocomplete="username" />
             </div>
           </div>
 
@@ -51,6 +68,33 @@
             <select id="dept" required>
               <option value="">-- Select Department --</option>
             </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+              <label class="form-label" for="semester">Semester *</label>
+              <select id="semester" required>
+                <option value="">-- Sem --</option>
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+                <option value="3">Semester 3</option>
+                <option value="4">Semester 4</option>
+                <option value="5">Semester 5</option>
+                <option value="6">Semester 6</option>
+                <option value="7">Semester 7</option>
+                <option value="8">Semester 8</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label" for="section">Section *</label>
+              <select id="section" required>
+                <option value="">-- Sec --</option>
+                <option value="A">Section A</option>
+                <option value="B">Section B</option>
+                <option value="C">Section C</option>
+                <option value="D">Section D</option>
+              </select>
+            </div>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -115,10 +159,35 @@
       const submitBtn = document.getElementById('submitBtn');
 
       const name = document.getElementById('name').value.trim();
+      const usn = document.getElementById('usn').value.trim().toUpperCase();
+      const phone = document.getElementById('phone').value.trim();
       const email = document.getElementById('email').value.trim().toLowerCase();
       const dept = document.getElementById('dept').value;
+      const semester = parseInt(document.getElementById('semester').value, 10);
+      const section = document.getElementById('section').value.trim().toUpperCase();
       const pass = document.getElementById('password').value;
       const confirmPass = document.getElementById('confirmPassword').value;
+
+      if (!usn) {
+        msg.textContent = 'Please enter a valid USN.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (!semester || semester < 1 || semester > 8) {
+        msg.textContent = 'Please select a valid Semester (1-8).';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (!section) {
+        msg.textContent = 'Please select a valid Section.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
 
       if (pass !== confirmPass) {
         msg.textContent = 'Passwords do not match.';
@@ -142,8 +211,13 @@
           uid: uid,
           role: 'student',
           name: name,
+          usn: usn,
+          phone: phone || '',
           email: email,
           dept: dept,
+          department: dept,
+          semester: semester,
+          section: section,
           status: 'pending',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };

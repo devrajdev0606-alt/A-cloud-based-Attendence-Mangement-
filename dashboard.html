@@ -45,8 +45,10 @@
     <!-- Student Hero Welcome Section -->
     <section class="student-hero">
       <div class="hero-left">
-        <h1 id="heroGreeting">Welcome back!</h1>
-        <p id="heroContext">Verify your attendance seamlessly using AI facial recognition and GPS geolocation proximity.</p>
+        <h1 id="heroGreeting">Good morning, Student 👋</h1>
+        <p id="heroContext" style="font-size:0.96rem; font-weight:600; color:#93c5fd; margin-bottom:6px;">
+          <span id="heroUsnDisplay">USN: -</span> • <span id="heroAcademicDisplay">Department • Semester • Section</span>
+        </p>
         <div class="hero-badges">
           <div class="hero-badge-item">
             <span>📅</span> <span id="currentDateDisplay">Loading date...</span>
@@ -71,10 +73,10 @@
     <div class="stats">
       <div class="stat">
         <div class="stat-header">
-          <span class="stat-label">Total Verified Attendance</span>
-          <div class="stat-icon-wrap">✓</div>
+          <span class="stat-label">Overall Attendance</span>
+          <div class="stat-icon-wrap" style="background:var(--accent-blue-subtle); color:var(--accent-blue);">📊</div>
         </div>
-        <div class="stat-num" id="totalCount">0</div>
+        <div class="stat-num" id="overallAttendancePct">--%</div>
         <div class="stat-progress-bar">
           <div class="stat-progress-fill" id="totalProgressFill" style="width: 0%;"></div>
         </div>
@@ -82,68 +84,59 @@
 
       <div class="stat">
         <div class="stat-header">
-          <span class="stat-label">Today's Attended Classes</span>
-          <div class="stat-icon-wrap" style="background:var(--emerald-subtle); color:var(--emerald-dark);">📅</div>
+          <span class="stat-label">Classes Attended</span>
+          <div class="stat-icon-wrap" style="background:var(--emerald-subtle); color:var(--emerald-dark);">✓</div>
         </div>
-        <div class="stat-num" id="todayCount" style="color:var(--emerald-dark);">0</div>
-        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:8px;" id="todayStatusText">No classes attended today</div>
+        <div class="stat-num" id="totalCount" style="color:var(--emerald-dark);">0</div>
+        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:8px;" id="totalClassesText">Present in verified sessions</div>
       </div>
 
       <div class="stat">
         <div class="stat-header">
-          <span class="stat-label">Biometric Verification</span>
+          <span class="stat-label">Today's Attendance</span>
+          <div class="stat-icon-wrap" style="background:var(--amber-subtle); color:var(--amber-dark);">📅</div>
+        </div>
+        <div class="stat-num" id="todayCount" style="color:var(--amber-dark);">0</div>
+        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:8px;" id="todayStatusText">No classes marked today</div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-header">
+          <span class="stat-label">Face Biometrics</span>
           <div class="stat-icon-wrap" style="background:var(--info-subtle); color:var(--info-blue);">👤</div>
         </div>
         <div style="margin-top: 6px;">
           <span id="regStatus" class="badge" style="font-size:0.85rem; padding:6px 12px;">Checking...</span>
         </div>
-        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:12px;">Required for dual-factor check</div>
+        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:12px;">Required for attendance check</div>
       </div>
     </div>
 
     <!-- Main Content Layout -->
     <div class="dashboard-grid">
-      <!-- Left Column: Enrolled Subjects & Live Sessions -->
+      <!-- Left Column: My Course Subjects -->
       <div style="display: flex; flex-direction: column; gap: 24px;">
-        <!-- Active Attendance Sessions Card -->
+        <!-- My Subjects Section Card -->
         <div class="card" style="margin-bottom: 0;">
           <div class="card-header">
-            <h2>🟢 Active Attendance Sessions</h2>
-            <span class="live-beacon"><span class="beacon-dot"></span> Live</span>
+            <h2>📚 My Academic Subjects</h2>
+            <span class="badge blue" id="academicBadge">Department • Sem • Sec</span>
           </div>
-          <p class="card-desc">When your faculty initiates attendance, the active session will appear below for verification.</p>
+          <p class="card-desc">Your assigned section course offerings and faculty instructors for the current academic term.</p>
           
-          <div id="sessionsContainer">
-            <div id="sessionsLoading" class="info-box">Scanning for active course sessions...</div>
-            <div id="sessionsList" style="display:none;"></div>
-          </div>
-
-          <div style="margin-top: 16px;">
-            <label class="form-label" for="subjectSelect" style="font-size:0.84rem;">Select Subject for Attendance Verification:</label>
-            <select id="subjectSelect" style="display:none;">
-              <option value="">-- Select Active Subject --</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Enrolled Subjects Card -->
-        <div class="card" style="margin-bottom: 0;">
-          <div class="card-header">
-            <h2>📚 My Enrolled Subjects</h2>
-          </div>
-          <p class="card-desc">Courses and subjects assigned to you for the current academic term.</p>
           <div id="subjectsContainer">
-            <div id="subjectsLoading" class="info-box">Loading enrolled subjects...</div>
-            <div id="subjectsList" style="display:none;"></div>
+            <div id="subjectsLoading" class="info-box">Loading your course subjects...</div>
+            <div id="subjectsList" style="display: flex; flex-direction: column; gap: 14px;"></div>
           </div>
         </div>
 
-        <!-- Biometric Face Enrollment Card -->
-        <div class="card" style="margin-bottom: 0;">
+        <!-- Biometric Face Enrollment Card (Collapsible if already enrolled) -->
+        <div class="card" id="faceEnrollmentCard" style="margin-bottom: 0;">
           <div class="card-header">
             <h2>👤 Face Biometrics Enrollment</h2>
+            <span id="enrollBadge" class="badge">Registration Required</span>
           </div>
-          <p class="card-desc">Enroll your facial biometric template once to enable rapid camera-based attendance verification.</p>
+          <p class="card-desc">Enroll your facial biometric template once to enable camera-based attendance verification.</p>
           
           <div style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
             <!-- Biometric Scanner HUD Frame -->
@@ -181,16 +174,23 @@
         </div>
       </div>
 
-      <!-- Right Column: Mark Attendance & Verification HUD + History -->
+      <!-- Right Column: Verification HUD & Attendance History -->
       <div style="display: flex; flex-direction: column; gap: 24px;">
         <!-- Mark Attendance Card -->
         <div class="card" id="markAttendanceCard" style="margin-bottom: 0;">
           <div class="card-header">
             <h2>📍 Mark Class Attendance (Face + GPS)</h2>
-            <span class="badge green">Verification Open</span>
+            <span id="activeVerificationBadge" class="badge green">● Session Active</span>
           </div>
-          <p class="card-desc">Select an active class above, look straight into the camera, and keep geolocation enabled.</p>
+          <div id="selectedSubjectInfo" class="info-box" style="margin-bottom: 14px; display:none;"></div>
           
+          <div style="margin-bottom: 14px;">
+            <label class="form-label" for="subjectSelect" style="font-size:0.84rem; font-weight:600;">Active Class to Verify:</label>
+            <select id="subjectSelect" onchange="onSubjectSelectChange()">
+              <option value="">-- Select Active Subject --</option>
+            </select>
+          </div>
+
           <div style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
             <!-- Biometric Scanner HUD Frame -->
             <div class="biometric-scanner-wrap" id="attScannerWrap">
@@ -228,7 +228,7 @@
             </div>
           </div>
           <div id="attMsg" class="msg"></div>
-          <div id="gpsInfo" class="info-box" style="display:none;"></div>
+          <div id="gpsInfo" class="info-box" style="display:none; margin-top:12px;"></div>
         </div>
 
         <!-- Attendance History Table Card -->
@@ -236,22 +236,21 @@
           <div class="card-header">
             <h2>📋 My Attendance History Log</h2>
           </div>
-          <p class="card-desc">Chronological record of your verified class attendances with GPS proximity and timestamps.</p>
+          <p class="card-desc">Verified attendance records with GPS proximity and timestamps.</p>
           
-          <div class="table-responsive">
+          <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
             <table>
               <thead>
                 <tr>
                   <th>Date</th>
                   <th>Subject</th>
-                  <th>Department</th>
+                  <th>Faculty</th>
                   <th>Time</th>
                   <th>GPS Distance</th>
-                  <th>Coordinates</th>
                 </tr>
               </thead>
               <tbody id="recordsTable">
-                <tr><td colspan="6" class="empty">Loading your attendance records...</td></tr>
+                <tr><td colspan="5" class="empty">Loading your attendance records...</td></tr>
               </tbody>
             </table>
           </div>
@@ -272,9 +271,74 @@
     let studentId = localStorage.getItem('studentId');
     let studentUid = localStorage.getItem('studentUid');
     let studentName = localStorage.getItem('studentName') || 'Student';
+    let studentUsn = localStorage.getItem('studentUsn') || '';
     let studentDept = localStorage.getItem('studentDept') || '';
+    let studentSemester = localStorage.getItem('studentSemester') || '';
+    let studentSection = localStorage.getItem('studentSection') || '';
     let faceRegistered = localStorage.getItem('faceRegistered') === 'true';
     let isDashboardInitialized = false;
+    let deptMap = {};
+
+    let activeSessions = {};
+    let studentSubjectDocs = [];
+    let studentSubjectsMap = {};
+    let studentSubjectsAttendance = {}; // { subjectId: { present: 0, total: 0 } }
+    let distanceThreshold = 10;
+    let gpsAccuracyThreshold = 50;
+    const faceDistanceThreshold = 0.6;
+    let modelsLoaded = false;
+    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.1/weights';
+
+    // =========================================================================
+    // ACADEMIC ENROLLMENT MATCHING HELPERS
+    // =========================================================================
+    function isDepartmentMatching(dept1, dept2, mapping = deptMap) {
+      if (!dept1 || !dept2) return true;
+      if (dept1 === dept2) return true;
+      const d1 = String(dept1).trim().toLowerCase();
+      const d2 = String(dept2).trim().toLowerCase();
+      if (d1 === d2) return true;
+
+      const name1 = (mapping[dept1] || dept1).trim().toLowerCase();
+      const name2 = (mapping[dept2] || dept2).trim().toLowerCase();
+      return name1 === name2 || name1 === d2 || name2 === d1;
+    }
+
+    function isSemesterMatching(sem1, sem2) {
+      if (!sem1 || !sem2) return true;
+      return parseInt(sem1, 10) === parseInt(sem2, 10);
+    }
+
+    function isSectionMatching(sec1, sec2) {
+      if (!sec1 || !sec2) return true;
+      return String(sec1).trim().toUpperCase() === String(sec2).trim().toUpperCase();
+    }
+
+    function isAcademicMatch(student, subject, mapping = deptMap) {
+      const stuDept = student.dept || student.department || '';
+      const subDept = subject.departmentId || subject.department || '';
+      const stuSem = student.semester;
+      const subSem = subject.semester;
+      const stuSec = student.section || 'A';
+      const subSec = subject.section || 'A';
+
+      return isDepartmentMatching(stuDept, subDept, mapping) &&
+             isSemesterMatching(stuSem, subSem) &&
+             isSectionMatching(stuSec, subSec);
+    }
+
+    async function loadDepartmentMap() {
+      try {
+        const snap = await db.collection('departments').get().catch(() => null);
+        if (snap) {
+          snap.forEach(doc => {
+            deptMap[doc.id] = doc.data().name;
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load department map:', err);
+      }
+    }
 
     // Display formatted date in hero
     const nowOptions = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
@@ -282,8 +346,16 @@
     const dateEl = document.getElementById('currentDateDisplay');
     if (dateEl) dateEl.textContent = todayFormatted;
 
+    // Helper: Dynamic time of day greeting
+    function getTimeGreeting() {
+      const hour = new Date().getHours();
+      if (hour < 12) return 'Good morning';
+      if (hour < 17) return 'Good afternoon';
+      return 'Good evening';
+    }
+
     // =========================================================================
-    // STUDENT AUTHENTICATION & LEGACY PROFILE GUARD
+    // STUDENT AUTHENTICATION & PROFILE RETRIEVAL
     // =========================================================================
     auth.onAuthStateChanged(async (user) => {
       if (!user) {
@@ -293,13 +365,14 @@
       }
 
       studentUid = user.uid;
+      await loadDepartmentMap();
 
-      // 1. Check profile by UID (new architecture)
+      // 1. Check profile by UID
       let studentDoc = await db.collection('students').doc(user.uid).get().catch(() => null);
       let studentData = studentDoc && studentDoc.exists ? studentDoc.data() : null;
       let effectiveId = user.uid;
 
-      // 2. Fallback check by email (legacy document support)
+      // 2. Fallback check by email (for legacy profiles)
       if (!studentData && user.email) {
         const emailSnap = await db.collection('students').where('email', '==', user.email.toLowerCase()).get().catch(() => null);
         if (emailSnap && !emailSnap.empty) {
@@ -319,46 +392,63 @@
 
       studentId = effectiveId;
       studentName = studentData.name || 'Student';
-      studentDept = studentData.dept || '';
+      studentUsn = (studentData.usn || '').toUpperCase();
+      studentDept = studentData.dept || studentData.department || '';
+      studentSemester = studentData.semester ? String(studentData.semester) : '';
+      studentSection = (studentData.section || '').toUpperCase();
       faceRegistered = Boolean(studentData.faceRegistered);
 
       localStorage.setItem('studentId', studentId);
       localStorage.setItem('studentUid', studentUid);
       localStorage.setItem('studentName', studentName);
+      localStorage.setItem('studentUsn', studentUsn);
       localStorage.setItem('studentDept', studentDept);
+      localStorage.setItem('studentSemester', studentSemester);
+      localStorage.setItem('studentSection', studentSection);
       localStorage.setItem('faceRegistered', faceRegistered ? 'true' : 'false');
 
       // Update UI Header Elements
       document.getElementById('welcome').textContent = studentName;
       const heroGreeting = document.getElementById('heroGreeting');
-      if (heroGreeting) heroGreeting.textContent = `Welcome back, ${studentName}!`;
+      if (heroGreeting) heroGreeting.textContent = `${getTimeGreeting()}, ${studentName} 👋`;
 
-      if (studentDept) {
-        db.collection('departments').doc(studentDept).get().then(snap => {
-          const deptName = snap.exists ? snap.data().name : studentDept;
-          document.getElementById('classInfo').textContent = deptName;
-          const heroDept = document.getElementById('heroDeptDisplay');
-          if (heroDept) heroDept.textContent = deptName;
-        }).catch(() => {
-          document.getElementById('classInfo').textContent = studentDept || '-';
-          const heroDept = document.getElementById('heroDeptDisplay');
-          if (heroDept) heroDept.textContent = studentDept || 'Student';
-        });
-      } else {
-        document.getElementById('classInfo').textContent = '-';
-        const heroDept = document.getElementById('heroDeptDisplay');
-        if (heroDept) heroDept.textContent = 'Student';
+      const heroUsnDisplay = document.getElementById('heroUsnDisplay');
+      if (heroUsnDisplay) heroUsnDisplay.textContent = `USN: ${studentUsn || 'N/A'}`;
+
+      const deptDisplayName = deptMap[studentDept] || studentDept || 'Department';
+
+      document.getElementById('classInfo').textContent = deptDisplayName || 'Student';
+      const heroDept = document.getElementById('heroDeptDisplay');
+      if (heroDept) heroDept.textContent = deptDisplayName || 'Department';
+
+      const semSecText = (studentSemester && studentSection)
+        ? `Semester ${studentSemester} • Section ${studentSection}`
+        : (studentSemester ? `Semester ${studentSemester}` : '');
+
+      const heroAcademicDisplay = document.getElementById('heroAcademicDisplay');
+      if (heroAcademicDisplay) {
+        heroAcademicDisplay.textContent = `${deptDisplayName || 'General'}${semSecText ? ' • ' + semSecText : ''}`;
+      }
+
+      const academicBadge = document.getElementById('academicBadge');
+      if (academicBadge) {
+        academicBadge.textContent = `${deptDisplayName || 'Dept'} • Sem ${studentSemester || '1'} - Sec ${studentSection || 'A'}`;
       }
 
       // Update Biometric Status Pills
       const regStatusEl = document.getElementById('regStatus');
       const heroBioStatus = document.getElementById('heroBioStatus');
+      const enrollBadge = document.getElementById('enrollBadge');
       if (regStatusEl) {
         regStatusEl.textContent = faceRegistered ? '● Face Registered' : 'Pending Enrollment';
-        regStatusEl.className = faceRegistered ? 'badge green' : 'badge';
+        regStatusEl.className = faceRegistered ? 'badge green' : 'badge amber';
       }
       if (heroBioStatus) {
         heroBioStatus.textContent = faceRegistered ? 'Biometrics Active' : 'Biometrics Not Registered';
+      }
+      if (enrollBadge) {
+        enrollBadge.textContent = faceRegistered ? '✓ Biometrics Active' : 'Registration Required';
+        enrollBadge.className = faceRegistered ? 'badge green' : 'badge amber';
       }
 
       if (faceRegistered) {
@@ -370,21 +460,12 @@
 
       if (!isDashboardInitialized) {
         isDashboardInitialized = true;
-        loadSettings();
-        loadMySubjects().then(() => {
-          loadActiveSessions();
-          loadMyAttendance();
-        });
+        await loadSettings();
+        await loadMySubjects();
+        await loadActiveSessions();
+        await loadMyAttendance();
       }
     });
-
-    let modelsLoaded = false;
-    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.1/weights';
-    let studentSubjects = [];
-    let studentSubjectsMap = {};
-    let distanceThreshold = 10;
-    let gpsAccuracyThreshold = 50;
-    const faceDistanceThreshold = 0.6;
 
     async function loadSettings() {
       try {
@@ -397,6 +478,354 @@
       } catch (err) {
         distanceThreshold = 10;
         gpsAccuracyThreshold = 50;
+      }
+    }
+
+    async function loadModels() {
+      if (modelsLoaded) return true;
+      showMsg('regMsg', 'info', 'Loading biometric AI neural network models, please wait...');
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        modelsLoaded = true;
+        const modelDot = document.getElementById('regModelDot');
+        if (modelDot) modelDot.className = 'status-chip-dot active';
+        const modelText = document.getElementById('regModelText');
+        if (modelText) modelText.textContent = 'AI Model: Ready';
+        return true;
+      } catch (err) {
+        const detail = err?.message || 'Network or CORS issue loading models.';
+        showMsg('regMsg', 'error', 'Failed to load AI models: ' + detail);
+        console.error('Model load error:', err);
+        return false;
+      }
+    }
+
+    // =========================================================================
+    // SUBJECT ENROLLMENT LOADER (Authoritative Student Membership Query)
+    // =========================================================================
+    async function loadMySubjects() {
+      const loadingEl = document.getElementById('subjectsLoading');
+      const listEl = document.getElementById('subjectsList');
+      try {
+        const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        if (!authUid) {
+          throw new Error('User is not authenticated.');
+        }
+
+        // Authoritative query: Query subjects where studentIds array contains the student's Auth UID
+        // This strictly satisfies firestore.rules: request.auth.uid in resource.data.studentIds
+        const querySnap = await db.collection('subjects').where('studentIds', 'array-contains', authUid).get();
+
+        const seenSubjectIds = new Set();
+        studentSubjectDocs = [];
+        studentSubjectsMap = {};
+
+        const studentAcademicProfile = {
+          dept: studentDept,
+          semester: studentSemester,
+          section: studentSection
+        };
+
+        querySnap.forEach(doc => {
+          if (!seenSubjectIds.has(doc.id)) {
+            const data = doc.data();
+            
+            // Client-side academic filtering: match student's Department, Semester, and Section
+            if (isAcademicMatch(studentAcademicProfile, data, deptMap)) {
+              seenSubjectIds.add(doc.id);
+              studentSubjectDocs.push({ id: doc.id, ...data });
+              studentSubjectsMap[doc.id] = data.subjectName || 'Course';
+            }
+          }
+        });
+
+        loadingEl.style.display = 'none';
+
+        if (studentSubjectDocs.length === 0) {
+          const semSecDisplay = (studentSemester ? `Semester ${studentSemester}` : '') + (studentSection ? ` Section ${studentSection}` : '');
+          const deptName = deptMap[studentDept] || studentDept || 'your Department';
+          listEl.innerHTML = `
+            <div class="empty" style="padding: 24px 16px; background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: 12px; text-align:center;">
+              <div style="font-size: 1.8rem; margin-bottom: 8px;">📚</div>
+              <strong style="color: var(--text-color); font-size: 0.95rem;">No Academic Subjects Assigned Yet</strong>
+              <p style="font-size: 0.84rem; color: var(--text-muted); margin-top: 4px; max-width: 380px; margin-left: auto; margin-right: auto;">
+                No course offerings currently found for <strong>${deptName} ${semSecDisplay}</strong>. As soon as your administrator creates offerings for your section, they will appear here automatically.
+              </p>
+            </div>
+          `;
+          return;
+        }
+
+        renderSubjectsUI();
+      } catch (err) {
+        console.error('loadMySubjects error:', err);
+        loadingEl.textContent = 'Error loading enrolled subjects: ' + err.message;
+        loadingEl.className = 'info-box error';
+        loadingEl.style.display = 'block';
+      }
+    }
+
+    // =========================================================================
+    // ACTIVE SESSIONS CHECKER
+    // =========================================================================
+    async function loadActiveSessions() {
+      const selectEl = document.getElementById('subjectSelect');
+      const beaconText = document.getElementById('beaconText');
+      const beaconEl = document.getElementById('sessionStatusBeacon');
+      const verificationBadge = document.getElementById('activeVerificationBadge');
+
+      try {
+        if (!studentSubjectDocs || studentSubjectDocs.length === 0) {
+          if (beaconText) beaconText.textContent = 'No Active Classes';
+          if (verificationBadge) {
+            verificationBadge.textContent = 'No Live Class';
+            verificationBadge.className = 'badge';
+          }
+          return;
+        }
+
+        const sessionQueries = studentSubjectDocs.map(s =>
+          db.collection('attendanceSessions')
+            .where('subjectId', '==', s.id)
+            .where('active', '==', true)
+            .get()
+            .catch(err => {
+              console.warn('Session query failed for subject', s.id, err);
+              return null;
+            })
+        );
+        const sessionSnapshots = await Promise.all(sessionQueries);
+
+        activeSessions = {};
+        const now = new Date();
+
+        sessionSnapshots.forEach(snap => {
+          if (!snap) return;
+          snap.forEach(doc => {
+            const data = doc.data();
+            const sid = data.subjectId;
+            const expiresAt = data.expiresAt;
+            if (expiresAt && expiresAt.toDate && expiresAt.toDate() <= now) {
+              return;
+            }
+            if (!activeSessions[sid] || (data.classNumber || 0) > (activeSessions[sid].classNumber || 0)) {
+              activeSessions[sid] = { id: doc.id, ...data };
+            }
+          });
+        });
+
+        const activeSubjectIds = Object.keys(activeSessions);
+
+        if (activeSubjectIds.length > 0) {
+          if (beaconText) beaconText.textContent = `${activeSubjectIds.length} Session${activeSubjectIds.length > 1 ? 's' : ''} Open Now`;
+          if (beaconEl) beaconEl.classList.add('live-active');
+          if (verificationBadge) {
+            verificationBadge.textContent = '● Live Session Active';
+            verificationBadge.className = 'badge green';
+          }
+        } else {
+          if (beaconText) beaconText.textContent = 'No Active Classes';
+          if (beaconEl) beaconEl.classList.remove('live-active');
+          if (verificationBadge) {
+            verificationBadge.textContent = 'No Active Session';
+            verificationBadge.className = 'badge';
+          }
+        }
+
+        // Populate dropdown options
+        selectEl.innerHTML = '<option value="">-- Select Active Subject to Verify --</option>';
+        studentSubjectDocs.forEach(s => {
+          const hasLive = Boolean(activeSessions[s.id]);
+          const optPrefix = hasLive ? '🟢 [LIVE] ' : '⚪ ';
+          selectEl.innerHTML += `<option value="${s.id}" ${hasLive ? 'data-live="true"' : ''}>${optPrefix}${s.subjectName} (${s.subjectCode || 'Course'})</option>`;
+        });
+
+        // Re-render subject cards with live session tags and buttons
+        renderSubjectsUI();
+      } catch (err) {
+        console.error('Active sessions check error:', err);
+      }
+    }
+
+    // =========================================================================
+    // RENDER MY ACADEMIC SUBJECTS CARDS
+    // =========================================================================
+    function renderSubjectsUI() {
+      const listEl = document.getElementById('subjectsList');
+      if (!listEl) return;
+
+      if (studentSubjectDocs.length === 0) {
+        listEl.innerHTML = '<p class="empty">No course subjects assigned for your section yet.</p>';
+        return;
+      }
+
+      listEl.innerHTML = studentSubjectDocs.map(s => {
+        const liveSession = activeSessions[s.id];
+        const hasLive = Boolean(liveSession);
+        const facultyName = s.facultyName || 'Faculty';
+        const sem = s.semester || studentSemester || '1';
+        const sec = s.section || studentSection || 'A';
+        const attendedHours = studentSubjectsAttendance[s.id]?.present || 0;
+        const hasTotalHours = Boolean(s.totalHours && Number(s.totalHours) > 0);
+
+        let attendanceSectionHtml = '';
+
+        if (hasTotalHours) {
+          const totalHours = parseInt(s.totalHours, 10);
+          const rawPct = (attendedHours / totalHours) * 100;
+          const pctDisplay = Number.isInteger(rawPct) ? rawPct + '%' : rawPct.toFixed(1) + '%';
+          const minRequired = Math.ceil(totalHours * 0.75);
+          const maximumBunkable = totalHours - minRequired;
+          const alreadyMissed = Math.max(0, totalHours - attendedHours);
+          const remainingBunkable = maximumBunkable - alreadyMissed;
+          const isEligible = (attendedHours >= minRequired);
+
+          let eligibilityBadge = '';
+          let bunkMessage = '';
+
+          if (isEligible) {
+            const safeBunk = Math.max(0, remainingBunkable);
+            eligibilityBadge = '<span class="badge green" style="font-weight:700;">✓ Eligible</span>';
+            bunkMessage = safeBunk > 0 
+              ? `You can bunk ${safeBunk} more hour${safeBunk === 1 ? '' : 's'}.`
+              : `You are at the minimum 75% threshold (0 bunkable hours remaining).`;
+          } else {
+            const shortage = minRequired - attendedHours;
+            eligibilityBadge = '<span class="badge" style="background:rgba(239, 68, 68, 0.15); color:#ef4444; border:1px solid rgba(239, 68, 68, 0.3); font-weight:700;">⚠ Attendance Shortage</span>';
+            bunkMessage = `Attend ${shortage} more hour${shortage === 1 ? '' : 's'} to reach 75%.`;
+          }
+
+          const progressWidth = Math.min(100, Math.max(0, rawPct));
+          const progressColor = isEligible ? 'var(--emerald, #10b981)' : '#ef4444';
+
+          attendanceSectionHtml = `
+            <div style="margin-top: 12px; padding: 12px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Attendance</span>
+                <span style="font-size:1.15rem; font-weight:800; color:${isEligible ? 'var(--emerald-dark)' : '#ef4444'};">${pctDisplay}</span>
+              </div>
+
+              <div style="width:100%; height:7px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; margin-bottom:8px;">
+                <div style="width:${progressWidth}%; height:100%; border-radius:999px; background:${progressColor}; transition:width 0.5s ease;"></div>
+              </div>
+
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                <span style="font-size:0.86rem; font-weight:700; color:var(--text-color);">${attendedHours} / ${totalHours} Hours</span>
+                ${eligibilityBadge}
+              </div>
+
+              <div style="font-size:0.82rem; color:${isEligible ? 'var(--text-muted)' : '#ef4444'}; font-weight:600; margin-top:5px;">
+                ${bunkMessage}
+              </div>
+            </div>
+          `;
+        } else {
+          attendanceSectionHtml = `
+            <div style="margin-top: 12px; padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Attendance</span>
+                <span class="badge" style="font-size:0.72rem;">Total hours not configured</span>
+              </div>
+              <div style="font-size:0.84rem; color:var(--text-color); margin-top:4px; font-weight:600;">
+                Attended: <strong>${attendedHours} session${attendedHours === 1 ? '' : 's'}</strong>
+              </div>
+            </div>
+          `;
+        }
+
+        let actionHtml = '';
+        if (hasLive) {
+          actionHtml = `
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid rgba(16, 185, 129, 0.2);">
+              <div>
+                <span class="badge green">🟢 Attendance Open</span>
+                <span style="font-size:0.75rem; color:var(--text-muted); margin-left:6px;">Class ${liveSession.classNumber || 1} • ${liveSession.duration || 10}m</span>
+              </div>
+              <button type="button" class="btn btn-approve" style="padding:6px 14px; font-size:0.82rem;" onclick="selectSubjectForAttendance('${s.id}')">⚡ Mark Attendance</button>
+            </div>
+          `;
+        } else {
+          actionHtml = `
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid var(--border-color);">
+              <div>
+                <span class="badge">⚪ No Active Session</span>
+              </div>
+              <button type="button" class="btn" style="padding:6px 12px; font-size:0.8rem; opacity:0.55; cursor:not-allowed;" disabled>Not Available</button>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="card" style="margin-bottom:0; background: ${hasLive ? 'rgba(16, 185, 129, 0.04)' : 'var(--card-bg)'}; border: 1px solid ${hasLive ? 'var(--emerald-border)' : 'var(--border-color)'};">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <h3 style="font-size:1.02rem; font-weight:700; color:var(--text-color); margin:0;">${s.subjectName}</h3>
+                  <span class="badge blue">${s.subjectCode || 'Course'}</span>
+                </div>
+                <div style="font-size:0.83rem; color:var(--text-muted); margin-top:4px;">
+                  👨‍🏫 Faculty: <strong>${facultyName}</strong> • <span class="badge" style="font-size:0.72rem; padding:2px 6px;">Sem ${sem} - Sec ${sec}</span>
+                </div>
+              </div>
+            </div>
+            ${attendanceSectionHtml}
+            ${actionHtml}
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Helper: Selects active subject and scrolls to the verification scanner
+    function selectSubjectForAttendance(subjectId) {
+      const selectEl = document.getElementById('subjectSelect');
+      if (selectEl) {
+        selectEl.value = subjectId;
+        onSubjectSelectChange();
+      }
+
+      const card = document.getElementById('markAttendanceCard');
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      const startAttBtn = document.getElementById('startAttBtn');
+      if (startAttBtn && !startAttBtn.disabled) {
+        startAttendance();
+      }
+    }
+
+    function onSubjectSelectChange() {
+      const selectEl = document.getElementById('subjectSelect');
+      const infoBox = document.getElementById('selectedSubjectInfo');
+      const subjectId = selectEl.value;
+
+      if (!subjectId) {
+        if (infoBox) infoBox.style.display = 'none';
+        return;
+      }
+
+      const liveSession = activeSessions[subjectId];
+      const subjectObj = studentSubjectDocs.find(s => s.id === subjectId);
+      const subjectName = subjectObj?.subjectName || studentSubjectsMap[subjectId] || 'Selected Subject';
+
+      if (infoBox) {
+        infoBox.style.display = 'block';
+        if (liveSession) {
+          infoBox.className = 'info-box success';
+          infoBox.innerHTML = `
+            <strong>🟢 Active Class:</strong> ${subjectName} (${subjectObj?.subjectCode || ''})<br>
+            <strong>Instructor:</strong> ${liveSession.facultyName || subjectObj?.facultyName || 'Faculty'}<br>
+            <strong>Session:</strong> Class #${liveSession.classNumber || 1} • Duration: ${liveSession.duration || 10} minutes
+          `;
+        } else {
+          infoBox.className = 'info-box';
+          infoBox.innerHTML = `
+            <strong>⚪ ${subjectName}</strong><br>
+            <em>Faculty has not initiated an active attendance session for this subject right now.</em>
+          `;
+        }
       }
     }
 
@@ -416,113 +845,6 @@
       return latest;
     }
 
-    async function loadModels() {
-      if (modelsLoaded) return true;
-      showMsg('regMsg', 'info', 'Loading biometric AI neural network models, please wait...');
-      try {
-        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-        modelsLoaded = true;
-        const modelDot = document.getElementById('regModelDot');
-        if (modelDot) modelDot.className = 'status-chip-dot active';
-        const modelText = document.getElementById('regModelText');
-        if (modelText) modelText.textContent = 'AI Model: Active';
-        return true;
-      } catch (err) {
-        const detail = err?.message || 'Network or CORS issue loading models.';
-        showMsg('regMsg', 'error', 'Failed to load AI models: ' + detail);
-        console.error('Model load error:', err);
-        return false;
-      }
-    }
-
-    async function loadActiveSessions() {
-      const loadingEl = document.getElementById('sessionsLoading');
-      const listEl = document.getElementById('sessionsList');
-      const selectEl = document.getElementById('subjectSelect');
-      const beaconText = document.getElementById('beaconText');
-      
-      try {
-        if (!studentSubjects || studentSubjects.length === 0) {
-          if (loadingEl) loadingEl.textContent = 'No active attendance sessions right now.';
-          if (loadingEl) loadingEl.style.display = 'block';
-          const markCard = document.getElementById('markAttendanceCard');
-          if (markCard) markCard.style.display = 'none';
-          if (beaconText) beaconText.textContent = 'No Active Classes';
-          return;
-        }
-
-        // Query active sessions scoped strictly to the student's enrolled subjects
-        const sessionQueries = studentSubjects.map(sid =>
-          db.collection('attendanceSessions')
-            .where('subjectId', '==', sid)
-            .where('active', '==', true)
-            .get()
-        );
-        const sessionSnapshots = await Promise.all(sessionQueries);
-        
-        const sessionsBySubject = {};
-        sessionSnapshots.forEach(snap => {
-          snap.forEach(doc => {
-            const data = doc.data();
-            const sid = data.subjectId;
-            const expiresAt = data.expiresAt;
-            if (expiresAt && expiresAt.toDate && expiresAt.toDate() <= new Date()) {
-              return;
-            }
-            if (!sessionsBySubject[sid] || (data.classNumber || 0) > (sessionsBySubject[sid].classNumber || 0)) {
-              sessionsBySubject[sid] = { id: doc.id, ...data };
-            }
-          });
-        });
-        
-        activeSessions = sessionsBySubject;
-        
-        const subjectIds = Object.keys(sessionsBySubject);
-        
-        if (subjectIds.length === 0) {
-          if (loadingEl) loadingEl.textContent = 'No active attendance sessions right now.';
-          if (loadingEl) loadingEl.style.display = 'block';
-          const markCard = document.getElementById('markAttendanceCard');
-          if (markCard) markCard.style.display = 'none';
-          if (beaconText) beaconText.textContent = 'No Active Classes';
-          return;
-        }
-        
-        if (beaconText) beaconText.textContent = `${subjectIds.length} Session Available`;
-
-        const markCard = document.getElementById('markAttendanceCard');
-        if (markCard) markCard.style.display = 'block';
-        
-        const subjects = subjectIds.map(sid => ({
-          id: sid,
-          name: studentSubjectsMap[sid] || sid
-        }));
-        
-        if (loadingEl) loadingEl.style.display = 'none';
-        if (listEl) listEl.style.display = 'block';
-        if (listEl) listEl.innerHTML = subjects.map(s => {
-          const session = activeSessions[s.id];
-          return `
-            <div class="session-badge-item">
-              <div>
-                <strong style="color:var(--primary-navy); font-size:0.92rem;">● ${s.name}</strong>
-                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Class ${session?.classNumber || 1} • Duration: ${session?.duration} mins</div>
-              </div>
-              <span class="badge green">Open Now</span>
-            </div>`;
-        }).join('');
-        
-        selectEl.innerHTML = '<option value="">-- Select Subject to Mark Attendance --</option>' + 
-          subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-        if (selectEl) selectEl.style.display = 'block';
-      } catch (err) {
-        if (loadingEl) loadingEl.textContent = 'Error checking active sessions';
-        console.error(err);
-      }
-    }
-
     function calculateDistance(lat1, lng1, lat2, lng2) {
       if (lat1 === 'N/A' || lng1 === 'N/A' || lat2 === 'N/A' || lng2 === 'N/A') return null;
       const R = 6371e3;
@@ -537,8 +859,9 @@
     }
 
     async function checkDuplicate(subjectId, sessionId) {
+      const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
       const snapshot = await db.collection('attendance')
-        .where('studentId', '==', studentId)
+        .where('studentUid', '==', authUid)
         .where('subjectId', '==', subjectId)
         .where('sessionId', '==', sessionId)
         .get();
@@ -555,7 +878,6 @@
         document.getElementById('startRegBtn').disabled = true;
         document.getElementById('captureRegBtn').disabled = false;
         
-        // HUD Animation & status
         const wrap = document.getElementById('regScannerWrap');
         if (wrap) wrap.classList.add('is-scanning');
         const camDot = document.getElementById('regCamDot');
@@ -574,11 +896,11 @@
       canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      showMsg('regMsg', 'info', 'Detecting face biometrics...');
+      showMsg('regMsg', 'info', 'Detecting facial biometric landmarks...');
       try {
         const detection = await faceapi.detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
         if (!detection) {
-          showMsg('regMsg', 'error', 'No face detected. Please position your face directly inside the scanner reticle.');
+          showMsg('regMsg', 'error', 'No face detected. Please look straight into the camera frame.');
           const reticle = document.getElementById('regReticle');
           if (reticle) reticle.className = 'hud-reticle error';
           return;
@@ -589,7 +911,7 @@
           faceRegistered: true
         });
         localStorage.setItem('faceRegistered', 'true');
-        showMsg('regMsg', 'success', '✓ Biometric Face Registered Successfully!');
+        showMsg('regMsg', 'success', '✓ Face Biometrics Registered Successfully!');
         document.getElementById('captureRegBtn').disabled = true;
         
         const reticle = document.getElementById('regReticle');
@@ -602,6 +924,11 @@
         }
         const heroBio = document.getElementById('heroBioStatus');
         if (heroBio) heroBio.textContent = 'Biometrics Active';
+        const enrollBadge = document.getElementById('enrollBadge');
+        if (enrollBadge) {
+          enrollBadge.textContent = '✓ Biometrics Active';
+          enrollBadge.className = 'badge green';
+        }
       } catch (err) {
         showMsg('regMsg', 'error', 'Error: ' + err.message);
         console.error(err);
@@ -618,7 +945,6 @@
         document.getElementById('startAttBtn').disabled = true;
         document.getElementById('captureAttBtn').disabled = false;
         
-        // HUD Scanner animation
         const wrap = document.getElementById('attScannerWrap');
         if (wrap) wrap.classList.add('is-scanning');
         const camDot = document.getElementById('attCamDot');
@@ -633,19 +959,19 @@
     async function markAttendance() {
       const selectedSubject = document.getElementById('subjectSelect').value;
       if (!selectedSubject) {
-        showMsg('attMsg', 'error', 'Please select a subject from the dropdown list first.');
+        showMsg('attMsg', 'error', 'Please select a subject from the active class list first.');
         return;
       }
       
       await loadSettings();
       const latestSession = await getLatestSession(selectedSubject);
       if (!latestSession) {
-        showMsg('attMsg', 'error', 'No active session found for this subject. Please try again.');
+        showMsg('attMsg', 'error', 'No active session found for this subject right now. Ask faculty to start the session.');
         return;
       }
       
       if (await checkDuplicate(selectedSubject, latestSession.id)) {
-        showMsg('attMsg', 'error', 'Attendance has already been marked for this class session.');
+        showMsg('attMsg', 'error', 'Attendance has already been verified and marked for this class session.');
         return;
       }
       
@@ -681,7 +1007,7 @@
         const faceMatchPercent = Math.max(0, Math.round((1 - distance) * 100));
         
         if (distance > faceDistanceThreshold) {
-          showMsg('attMsg', 'error', `Face Verification Failed (${faceMatchPercent}% confidence match). Please try again.`);
+          showMsg('attMsg', 'error', `Face Verification Failed (${faceMatchPercent}% confidence match). Please look directly at the camera.`);
           const reticle = document.getElementById('attReticle');
           if (reticle) reticle.className = 'hud-reticle error';
           return;
@@ -757,7 +1083,7 @@
                   await new Promise(r => setTimeout(r, retryDelayMs));
                   continue;
                 }
-                showMsg('attMsg', 'error', `GPS accuracy too low (${accuracy}m). Please stand near an open window or ask admin to adjust tolerance.`);
+                showMsg('attMsg', 'error', `GPS accuracy too low (${accuracy}m). Ask admin to adjust GPS accuracy threshold.`);
                 if (gpsDot) gpsDot.className = 'status-chip-dot error';
                 if (gpsText) gpsText.textContent = 'GPS: Low Accuracy';
                 resolve();
@@ -805,55 +1131,6 @@
       });
     }
 
-    async function loadMySubjects() {
-      const loadingEl = document.getElementById('subjectsLoading');
-      const listEl = document.getElementById('subjectsList');
-      try {
-        const queries = [db.collection('subjects').where('studentIds', 'array-contains', studentId).get()];
-        if (studentUid && studentUid !== studentId) {
-          queries.push(db.collection('subjects').where('studentIds', 'array-contains', studentUid).get());
-        }
-        const snapshots = await Promise.all(queries);
-        const seenSubjectIds = new Set();
-        const subjectDocs = [];
-        snapshots.forEach(snap => {
-          snap.forEach(doc => {
-            if (!seenSubjectIds.has(doc.id)) {
-              seenSubjectIds.add(doc.id);
-              subjectDocs.push(doc);
-            }
-          });
-        });
-        
-        if (subjectDocs.length === 0) {
-          loadingEl.textContent = 'No subjects currently enrolled. Please ask your department administrator to assign subjects.';
-          loadingEl.style.display = 'block';
-          return;
-        }
-        
-        loadingEl.style.display = 'none';
-        listEl.style.display = 'block';
-        listEl.innerHTML = '';
-        studentSubjects = [];
-        studentSubjectsMap = {};
-        subjectDocs.forEach(doc => {
-          const s = doc.data();
-          studentSubjects.push(doc.id);
-          studentSubjectsMap[doc.id] = s.subjectName || 'Course';
-          listEl.innerHTML += `
-            <div class="subject-card-item">
-              <div class="subject-card-top">
-                <span class="subject-card-name">📖 ${s.subjectName}</span>
-                <span class="badge blue">${s.subjectCode || 'Course'}</span>
-              </div>
-            </div>`;
-        });
-      } catch (err) {
-        loadingEl.textContent = 'Error loading enrolled subjects';
-        console.error(err);
-      }
-    }
-
     async function saveAttendance(lat, lng, subjectId, session, distance) {
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB');
@@ -865,7 +1142,10 @@
           studentId: studentId || currentAuthUid,
           studentUid: currentAuthUid,
           studentName,
+          studentUsn,
           studentDept,
+          studentSemester: parseInt(studentSemester, 10) || 1,
+          studentSection: studentSection || 'A',
           subjectId,
           sessionId: session?.id,
           classNumber: session?.classNumber,
@@ -879,32 +1159,45 @@
           distance: distance,
           timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
-        showMsg('attMsg', 'success', '🎉 Attendance Marked Successfully! Verified with Face Biometrics & GPS.');
-        loadMyAttendance();
+        showMsg('attMsg', 'success', '🎉 Attendance Marked Successfully! Verified with Face Biometrics & GPS proximity.');
+        await loadMyAttendance();
+        await loadActiveSessions();
       } catch (err) {
         showMsg('attMsg', 'error', 'Error: ' + err.message);
       }
     }
 
+    // =========================================================================
+    // ATTENDANCE HISTORY & ANALYTICS LOADER
+    // =========================================================================
     async function loadMyAttendance() {
       const tbody = document.getElementById('recordsTable');
       try {
-        const queries = [db.collection('attendance').where('studentId', '==', studentId).get()];
-        if (studentUid && studentUid !== studentId) {
-          queries.push(db.collection('attendance').where('studentUid', '==', studentUid).get());
+        const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        if (!authUid) return;
+
+        const queries = [
+          db.collection('attendance').where('studentUid', '==', authUid).get().catch(() => null)
+        ];
+        if (studentId && studentId === authUid) {
+          // covered by studentUid == authUid
         }
+
         const [deptSnap, ...attSnapshots] = await Promise.all([
-          db.collection('departments').get(),
+          db.collection('departments').get().catch(() => null),
           ...queries
         ]);
-        const deptMap = {};
-        deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
+        if (deptSnap) {
+          deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
+        }
         
         let total = 0, today = 0;
         const todayDate = new Date().toLocaleDateString('en-GB');
         tbody.innerHTML = '';
         const seenAttIds = new Set();
         const records = [];
+        studentSubjectsAttendance = {};
+
         attSnapshots.forEach(snap => {
           snap.forEach((doc) => {
             if (!seenAttIds.has(doc.id)) {
@@ -913,6 +1206,14 @@
               records.push(r);
               total++;
               if (r.date === todayDate) today++;
+
+              // Track counts per subject
+              if (r.subjectId) {
+                if (!studentSubjectsAttendance[r.subjectId]) {
+                  studentSubjectsAttendance[r.subjectId] = { present: 0, total: 0 };
+                }
+                studentSubjectsAttendance[r.subjectId].present += 1;
+              }
             }
           });
         });
@@ -922,41 +1223,70 @@
         records.forEach(r => {
           const distDisplay = r.distance ? `${r.distance.toFixed(1)} m` : 'N/A';
           const subjectName = studentSubjectsMap[r.subjectId] || r.subjectName || r.subjectId;
-          const deptName = deptMap[r.studentDept] || r.studentDept || '-';
-          const coordsDisplay = (r.latitude && r.longitude) ? `${Number(r.latitude).toFixed(4)}, ${Number(r.longitude).toFixed(4)}` : '-';
+          const facName = r.facultyName || '-';
           tbody.innerHTML += `<tr>
             <td><strong>${r.date}</strong></td>
             <td><span style="font-weight:600; color:var(--primary-navy);">${subjectName}</span></td>
-            <td><span class="badge">${deptName}</span></td>
+            <td>${facName}</td>
             <td>${r.time}</td>
             <td><span class="badge green">● ${distDisplay}</span></td>
-            <td style="font-size:0.8rem; color:var(--text-muted);">${coordsDisplay}</td>
           </tr>`;
         });
 
         document.getElementById('totalCount').textContent = total;
         document.getElementById('todayCount').textContent = today;
         
-        // Progress bar indicator
+        // Progress & percentage calculation across enrolled course offerings
+        let sumPlannedHours = 0;
+        let sumAttendedHours = 0;
+        studentSubjectDocs.forEach(s => {
+          if (s.totalHours && Number(s.totalHours) > 0) {
+            sumPlannedHours += parseInt(s.totalHours, 10);
+            sumAttendedHours += (studentSubjectsAttendance[s.id]?.present || 0);
+          }
+        });
+
+        let pctVal = '--%';
+        let pctWidth = 0;
+        if (sumPlannedHours > 0) {
+          const rawOverall = (sumAttendedHours / sumPlannedHours) * 100;
+          pctVal = (Number.isInteger(rawOverall) ? rawOverall : rawOverall.toFixed(1)) + '%';
+          pctWidth = Math.min(100, Math.max(0, rawOverall));
+        } else if (total > 0) {
+          pctVal = total + ' Attended';
+          pctWidth = Math.min(100, total * 10);
+        } else {
+          pctVal = '0%';
+          pctWidth = 0;
+        }
+
+        const overallEl = document.getElementById('overallAttendancePct');
+        if (overallEl) overallEl.textContent = pctVal;
+
         const progressFill = document.getElementById('totalProgressFill');
         if (progressFill) {
-          const pctWidth = Math.min(100, Math.max(10, total * 5));
           progressFill.style.width = `${pctWidth}%`;
         }
 
         const todayStatus = document.getElementById('todayStatusText');
         if (todayStatus) {
-          todayStatus.textContent = today > 0 ? `${today} verified class session(s) today` : 'No classes marked today yet';
+          todayStatus.textContent = today > 0 ? `${today} class session(s) marked today` : 'No classes marked today yet';
         }
 
-        if (total === 0) tbody.innerHTML = '<tr><td colspan="6" class="empty">No attendance records found yet. Mark attendance when a session is active.</td></tr>';
+        if (total === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">No attendance records found yet. Mark attendance when a session is active.</td></tr>';
+        }
+
+        // Re-render subject cards with updated attendance count
+        renderSubjectsUI();
       } catch (err) {
-        console.error(err);
+        console.error('Attendance history error:', err);
       }
     }
 
     function showMsg(id, type, text) {
       const el = document.getElementById(id);
+      if (!el) return;
       el.textContent = text;
       el.className = 'msg ' + type;
       el.style.display = 'block';

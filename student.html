@@ -110,7 +110,10 @@
           localStorage.setItem('studentId', studentId);
           localStorage.setItem('studentUid', user.uid);
           localStorage.setItem('studentName', student.name || 'Student');
-          localStorage.setItem('studentDept', student.dept || '');
+          localStorage.setItem('studentUsn', student.usn || '');
+          localStorage.setItem('studentDept', student.dept || student.department || '');
+          localStorage.setItem('studentSemester', student.semester ? String(student.semester) : '');
+          localStorage.setItem('studentSection', student.section || '');
           localStorage.setItem('faceRegistered', student.faceRegistered ? 'true' : 'false');
           window.location.href = 'dashboard.html';
           return;

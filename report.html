@@ -98,11 +98,11 @@
           <thead>
             <tr>
               <th>Student Name</th>
+              <th>USN</th>
               <th>Department</th>
               <th>Date</th>
               <th>Time</th>
-              <th>Latitude</th>
-              <th>Longitude</th>
+              <th>GPS Distance</th>
               <th>Verification Status</th>
             </tr>
           </thead>
@@ -227,13 +227,14 @@
           ? '<span class="badge green">● GPS & Face Verified</span>' 
           : '<span class="badge">No GPS</span>';
         const deptName = deptMap[r.studentDept] || r.studentDept || '-';
+        const distDisplay = r.distance ? `${Number(r.distance).toFixed(1)} m` : 'Verified';
         tbody.innerHTML += `<tr>
           <td><strong>${r.studentName || 'Unknown'}</strong></td>
+          <td><strong>${r.studentUsn || '-'}</strong></td>
           <td><span class="badge">${deptName}</span></td>
           <td>${r.date}</td>
           <td>${r.time}</td>
-          <td>${r.latitude}</td>
-          <td>${r.longitude}</td>
+          <td><span class="badge green">${distDisplay}</span></td>
           <td>${verified}</td>
         </tr>`;
       });
@@ -271,8 +272,8 @@
       }
       if (subjectVal) filtered = filtered.filter(r => r.subjectId === subjectVal);
       if (facultyVal) filtered = filtered.filter(r => r.facultyId === facultyVal);
-      let csv = 'Student,Department,Date,Time,Latitude,Longitude,Faculty\n';
-      filtered.forEach(r => csv += `${r.studentName},${deptMap[r.studentDept] || r.studentDept || '-'},${r.date},${r.time},${r.latitude},${r.longitude},${r.facultyName || '-'}\n`);
+      let csv = 'Student,USN,Department,Date,Time,Distance(m),Latitude,Longitude,Faculty\n';
+      filtered.forEach(r => csv += `"${r.studentName || ''}","${r.studentUsn || ''}","${deptMap[r.studentDept] || r.studentDept || '-'}","${r.date}","${r.time}","${r.distance || ''}","${r.latitude || ''}","${r.longitude || ''}","${r.facultyName || '-'}"\n`);
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

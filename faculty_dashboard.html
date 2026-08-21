@@ -55,12 +55,14 @@
             <tr>
               <th>Subject</th>
               <th>Code</th>
+              <th>Sem / Sec</th>
+              <th>Total Hours</th>
               <th>Enrolled Students</th>
               <th>Session Actions</th>
             </tr>
           </thead>
           <tbody id="subjectsTable">
-            <tr><td colspan="4" class="empty">Loading your assigned subjects...</td></tr>
+            <tr><td colspan="5" class="empty">Loading your assigned subjects...</td></tr>
           </tbody>
         </table>
       </div>
@@ -199,24 +201,51 @@
         });
 
         if (subjectDocs.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="4" class="empty">No subjects assigned yet. Please contact admin.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">No subjects assigned yet. Please contact admin.</td></tr>';
           return;
         }
         tbody.innerHTML = '';
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+
         for (const doc of subjectDocs) {
           const s = doc.data();
-          const sessionSnapshot = await db.collection('attendanceSessions').where('subjectId', '==', doc.id).where('active', '==', true).get();
-          const activeSession = sessionSnapshot.docs.find(sessionDoc => {
-            const expiresAt = sessionDoc.data().expiresAt;
-            return !expiresAt || expiresAt.toDate() > new Date();
-          });
-          const hasActive = Boolean(activeSession);
-          for (const sessionDoc of sessionSnapshot.docs) {
-            const expiresAt = sessionDoc.data().expiresAt;
-            if (expiresAt && expiresAt.toDate() <= new Date()) {
-              await db.collection('attendanceSessions').doc(sessionDoc.id).update({ active: false });
-            }
+          const sQueries = [
+            db.collection('attendanceSessions')
+              .where('facultyUid', '==', currentAuthUid)
+              .where('subjectId', '==', doc.id)
+              .where('active', '==', true)
+              .get()
+              .catch(() => null)
+          ];
+          if (facultyId && facultyId !== currentAuthUid) {
+            sQueries.push(
+              db.collection('attendanceSessions')
+                .where('facultyId', '==', facultyId)
+                .where('subjectId', '==', doc.id)
+                .where('active', '==', true)
+                .get()
+                .catch(() => null)
+            );
           }
+          const sSnapshots = await Promise.all(sQueries);
+          let activeSession = null;
+          sSnapshots.forEach(sessionSnapshot => {
+            if (!sessionSnapshot) return;
+            const live = sessionSnapshot.docs.find(sessionDoc => {
+              const expiresAt = sessionDoc.data().expiresAt;
+              return !expiresAt || expiresAt.toDate() > new Date();
+            });
+            if (live && !activeSession) activeSession = live;
+            for (const sessionDoc of sessionSnapshot.docs) {
+              const expiresAt = sessionDoc.data().expiresAt;
+              if (expiresAt && expiresAt.toDate() <= new Date()) {
+                db.collection('attendanceSessions').doc(sessionDoc.id).update({ active: false }).catch(() => {});
+              }
+            }
+          });
+
+          const hasActive = Boolean(activeSession);
+          const semSecBadge = s.semester ? `<span class="badge blue">Sem ${s.semester} • Sec ${s.section || 'A'}</span>` : '<span class="badge">-</span>';
           const btn = hasActive 
             ? `<button class="btn stop-btn" onclick="stopAttendance('${doc.id}', this)">⏹ Stop Attendance</button>`
             : `<div style="display:inline-flex; align-items:center; gap:8px;">
@@ -228,19 +257,27 @@
                 </select>
                 <button class="btn start-btn" onclick="startAttendance('${doc.id}', '${s.subjectName}', this)">▶ Start Attendance</button>
               </div>`;
+          const hoursBadge = s.totalHours
+            ? `<span class="badge" style="font-weight:600;">${s.totalHours} hrs <span style="font-size:10px; color:var(--emerald-dark);">(75% req)</span></span>`
+            : '<span class="badge" style="opacity:0.6;">Not configured</span>';
           tbody.innerHTML += `<tr>
             <td><strong>${s.subjectName}</strong></td>
             <td><span class="badge">${s.subjectCode}</span></td>
-            <td><span class="badge blue">${s.studentIds?.length || 0} students</span></td>
+            <td>${semSecBadge}</td>
+            <td>${hoursBadge}</td>
+            <td><span class="badge green">${s.studentIds?.length || 0} students</span></td>
             <td>${btn}</td>
           </tr>`;
         }
         document.getElementById('analyticsSubject').innerHTML = '<option value="">-- Select Subject --</option>';
         for (const doc of subjectDocs) {
-          document.getElementById('analyticsSubject').innerHTML += `<option value="${doc.id}">${doc.data().subjectName} (${doc.data().subjectCode})</option>`;
+          const s = doc.data();
+          const semText = s.semester ? ` - Sem ${s.semester} Sec ${s.section || 'A'}` : '';
+          const hrsText = s.totalHours ? ` [${s.totalHours} hrs]` : '';
+          document.getElementById('analyticsSubject').innerHTML += `<option value="${doc.id}">${s.subjectName} (${s.subjectCode}${semText}${hrsText})</option>`;
         }
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="4" class="empty" style="color:var(--crimson-dark);">Error loading subjects</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="empty" style="color:var(--crimson-dark);">Error loading subjects</td></tr>';
         console.error(err);
       }
     }
@@ -307,11 +344,30 @@
     }
 
     async function getNextClassNumber(subjectId) {
-      const snap = await db.collection('attendanceSessions')
-        .where('subjectId', '==', subjectId)
-        .get();
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+      const queries = [
+        db.collection('attendanceSessions')
+          .where('facultyUid', '==', currentAuthUid)
+          .where('subjectId', '==', subjectId)
+          .get()
+          .catch(() => null)
+      ];
+      if (facultyId && facultyId !== currentAuthUid) {
+        queries.push(
+          db.collection('attendanceSessions')
+            .where('facultyId', '==', facultyId)
+            .where('subjectId', '==', subjectId)
+            .get()
+            .catch(() => null)
+        );
+      }
+      const snapshots = await Promise.all(queries);
       const numbers = [];
-      snap.forEach(d => { const n = d.data().classNumber; if (n) numbers.push(n); });
+      snapshots.forEach(snap => {
+        if (snap) {
+          snap.forEach(d => { const n = d.data().classNumber; if (n) numbers.push(n); });
+        }
+      });
       return numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
     }
 
@@ -420,12 +476,36 @@
       statusMsg.className = 'msg info';
       statusMsg.textContent = 'Stopping session...';
       statusMsg.style.display = 'block';
-      button.closest('tr').cells[3].appendChild(statusMsg);
+      const cell = button.closest('tr')?.cells?.[4] || button.closest('td') || button.parentElement;
+      if (cell) cell.appendChild(statusMsg);
 
       try {
-        const snapshot = await db.collection('attendanceSessions').where('subjectId', '==', subjectId).where('active', '==', true).get();
-        for (const doc of snapshot.docs) {
-          await db.collection('attendanceSessions').doc(doc.id).update({ active: false });
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+        const queries = [
+          db.collection('attendanceSessions')
+            .where('facultyUid', '==', currentAuthUid)
+            .where('subjectId', '==', subjectId)
+            .where('active', '==', true)
+            .get()
+            .catch(() => null)
+        ];
+        if (facultyId && facultyId !== currentAuthUid) {
+          queries.push(
+            db.collection('attendanceSessions')
+              .where('facultyId', '==', facultyId)
+              .where('subjectId', '==', subjectId)
+              .where('active', '==', true)
+              .get()
+              .catch(() => null)
+          );
+        }
+        const snapshots = await Promise.all(queries);
+        for (const snapshot of snapshots) {
+          if (snapshot) {
+            for (const doc of snapshot.docs) {
+              await db.collection('attendanceSessions').doc(doc.id).update({ active: false });
+            }
+          }
         }
         statusMsg.className = 'msg success';
         statusMsg.textContent = 'Session stopped successfully!';
@@ -446,48 +526,153 @@
         return;
       }
       try {
-        const [subjectSnap, sessionsSnap, attendanceSnap] = await Promise.all([
-          db.collection('subjects').doc(subjectId).get(),
-          db.collection('attendanceSessions').where('subjectId', '==', subjectId).where('active', '==', false).get(),
-          db.collection('attendance').where('subjectId', '==', subjectId).get()
-        ]);
-        const subject = subjectSnap.data();
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+        if (!currentAuthUid) {
+          throw new Error('Faculty authentication session not found.');
+        }
+
+        // 1. Fetch Subject Document (authorized for assigned faculty)
+        const subjectDoc = await db.collection('subjects').doc(subjectId).get();
+        if (!subjectDoc.exists) {
+          container.innerHTML = '<p class="empty">Subject record not found.</p>';
+          return;
+        }
+        const subject = subjectDoc.data();
         const studentIds = subject?.studentIds || [];
         const enrolledRoster = subject?.enrolledRoster || [];
 
-        // Build roster from non-sensitive enrolledRoster cache, with graceful fallback for legacy subjects
+        // 2. Fetch Sessions for this subject using authorized queries
+        const sessionQueries = [
+          db.collection('attendanceSessions')
+            .where('facultyUid', '==', currentAuthUid)
+            .where('subjectId', '==', subjectId)
+            .get()
+            .catch(() => null)
+        ];
+        if (facultyId && facultyId !== currentAuthUid) {
+          sessionQueries.push(
+            db.collection('attendanceSessions')
+              .where('facultyId', '==', facultyId)
+              .where('subjectId', '==', subjectId)
+              .get()
+              .catch(() => null)
+          );
+        }
+        if (subject.facultyId && subject.facultyId !== currentAuthUid && subject.facultyId !== facultyId) {
+          sessionQueries.push(
+            db.collection('attendanceSessions')
+              .where('facultyId', '==', subject.facultyId)
+              .where('subjectId', '==', subjectId)
+              .get()
+              .catch(() => null)
+          );
+        }
+
+        // 3. Fetch Attendance records for this subject using authorized queries
+        const attendanceQueries = [
+          db.collection('attendance')
+            .where('facultyUid', '==', currentAuthUid)
+            .where('subjectId', '==', subjectId)
+            .get()
+            .catch(() => null)
+        ];
+        if (facultyId && facultyId !== currentAuthUid) {
+          attendanceQueries.push(
+            db.collection('attendance')
+              .where('facultyId', '==', facultyId)
+              .where('subjectId', '==', subjectId)
+              .get()
+              .catch(() => null)
+          );
+        }
+        if (subject.facultyId && subject.facultyId !== currentAuthUid && subject.facultyId !== facultyId) {
+          attendanceQueries.push(
+            db.collection('attendance')
+              .where('facultyId', '==', subject.facultyId)
+              .where('subjectId', '==', subjectId)
+              .get()
+              .catch(() => null)
+          );
+        }
+
+        const [sessionSnapshots, attendanceSnapshots] = await Promise.all([
+          Promise.all(sessionQueries),
+          Promise.all(attendanceQueries)
+        ]);
+
+        // Deduplicate and sort sessions
+        const seenSessionIds = new Set();
+        const sessions = [];
+        sessionSnapshots.forEach(snap => {
+          if (!snap) return;
+          snap.forEach(doc => {
+            if (!seenSessionIds.has(doc.id)) {
+              seenSessionIds.add(doc.id);
+              sessions.push({ id: doc.id, ...doc.data() });
+            }
+          });
+        });
+        sessions.sort((a, b) => (a.classNumber || 0) - (b.classNumber || 0));
+
+        if (sessions.length === 0) {
+          container.innerHTML = '<p class="empty">No attendance sessions found for this subject yet. Start a session above to begin tracking attendance.</p>';
+          return;
+        }
+
+        // Deduplicate attendance records
+        const seenAttDocIds = new Set();
+        const attendanceBySession = {};
+        attendanceSnapshots.forEach(snap => {
+          if (!snap) return;
+          snap.forEach(doc => {
+            if (!seenAttDocIds.has(doc.id)) {
+              seenAttDocIds.add(doc.id);
+              const a = doc.data();
+              const sid = a.sessionId;
+              if (sid) {
+                if (!attendanceBySession[sid]) attendanceBySession[sid] = {};
+                if (a.studentId) attendanceBySession[sid][a.studentId] = true;
+                if (a.studentUid) attendanceBySession[sid][a.studentUid] = true;
+              }
+            }
+          });
+        });
+
+        // Build roster from non-sensitive enrolledRoster cache, with graceful fallback
         const rosterMap = {};
         enrolledRoster.forEach(r => { if (r && r.id) rosterMap[r.id] = r.name || 'Student'; });
 
-        const students = studentIds.map(id => ({
-          id: id,
-          name: rosterMap[id] || `Student (${id.substring(0, 6)}...)`
-        }));
+        let students = [];
+        if (enrolledRoster.length > 0) {
+          students = enrolledRoster.map(r => ({
+            id: r.id,
+            name: r.name || 'Student',
+            usn: r.usn || ''
+          }));
+        } else {
+          students = studentIds.map(id => ({
+            id: id,
+            name: rosterMap[id] || `Student (${id.substring(0, 6)}...)`,
+            usn: ''
+          }));
+        }
 
-        const sessions = [];
-        sessionsSnap.forEach(doc => {
-          sessions.push({ id: doc.id, ...doc.data() });
-        });
-        sessions.sort((a, b) => (a.classNumber || 0) - (b.classNumber || 0));
-        if (sessions.length === 0) {
-          container.innerHTML = '<p class="empty">No completed attendance sessions found for this subject yet.</p>';
+        if (students.length === 0) {
+          container.innerHTML = '<p class="empty">No students are currently enrolled in this course offering.</p>';
           return;
         }
-        const attendanceBySession = {};
-        attendanceSnap.forEach(doc => {
-          const a = doc.data();
-          const sid = a.sessionId;
-          if (!attendanceBySession[sid]) attendanceBySession[sid] = {};
-          attendanceBySession[sid][a.studentId] = true;
-          if (a.studentUid) attendanceBySession[sid][a.studentUid] = true;
-        });
+
+        // Generate the attendance matrix table
         let html = '<div class="att-matrix"><table><thead><tr><th>Enrolled Student</th>';
         sessions.forEach(s => {
-          html += `<th>Class ${s.classNumber}<br><span style="font-size:11px;color:var(--text-muted);font-weight:400;">${s.date || ''}</span></th>`;
+          const dateStr = s.date || '';
+          html += `<th>Class ${s.classNumber || 1}<br><span style="font-size:11px;color:var(--text-muted);font-weight:400;">${dateStr}</span></th>`;
         });
         html += '<th>Overall %</th></tr></thead><tbody>';
+
         students.forEach(stu => {
-          html += `<tr><td>${stu.name}</td>`;
+          const usnDisplay = stu.usn ? ` <span style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;">(${stu.usn})</span>` : '';
+          html += `<tr><td><strong>${stu.name}</strong>${usnDisplay}</td>`;
           let presentCount = 0;
           sessions.forEach(s => {
             const isPresent = attendanceBySession[s.id]?.[stu.id];
@@ -500,11 +685,11 @@
           html += `<td class="percent ${pctClass}">${pct}%</td></tr>`;
         });
         html += '</tbody></table></div>';
-        html += `<p style="margin-top:12px; font-size:0.82rem; color:var(--text-muted); font-weight:500;">Summary: ${sessions.length} total sessions conducted | ${students.length} enrolled students</p>`;
+        html += `<p style="margin-top:12px; font-size:0.82rem; color:var(--text-muted); font-weight:500;">Summary: ${sessions.length} total session(s) conducted | ${students.length} enrolled student(s)</p>`;
         container.innerHTML = html;
       } catch (err) {
         container.innerHTML = `<p class="empty" style="color:var(--crimson-dark);">Error loading analytics: ${err.message}</p>`;
-        console.error(err);
+        console.error('loadAnalytics error:', err);
       }
     }
 

@@ -139,14 +139,17 @@
     async function loadAttendance() {
       const tbody = document.getElementById('recordsTable');
       try {
-        let q1 = db.collection('attendance').where('facultyId', '==', facultyId);
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+        if (!currentAuthUid) return;
+
+        let q1 = db.collection('attendance').where('facultyUid', '==', currentAuthUid);
         if (reportSubjectId) q1 = q1.where('subjectId', '==', reportSubjectId);
 
-        const queries = [q1.get()];
-        if (facultyUid && facultyUid !== facultyId) {
-          let q2 = db.collection('attendance').where('facultyUid', '==', facultyUid);
+        const queries = [q1.get().catch(() => null)];
+        if (facultyId && facultyId !== currentAuthUid) {
+          let q2 = db.collection('attendance').where('facultyId', '==', facultyId);
           if (reportSubjectId) q2 = q2.where('subjectId', '==', reportSubjectId);
-          queries.push(q2.get());
+          queries.push(q2.get().catch(() => null));
         }
 
         const snapshots = await Promise.all(queries);
