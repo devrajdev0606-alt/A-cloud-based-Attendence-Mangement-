@@ -126,7 +126,7 @@
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Creating Faculty Account...';
+      submitBtn.textContent = 'Submitting Request...';
 
       try {
         const snap = await db.collection('faculty').where('email', '==', email).get();
@@ -139,27 +139,43 @@
           return;
         }
 
-        const newFaculty = {
+        const reqSnap = await db.collection('registrationRequests')
+          .where('email', '==', email)
+          .where('role', '==', 'faculty')
+          .where('status', '==', 'pending')
+          .get();
+
+        if (!reqSnap.empty) {
+          msg.textContent = 'A registration request for this email is already awaiting administrator approval.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Create Faculty Account';
+          return;
+        }
+
+        const newRequest = {
+          role: 'faculty',
           name,
           email,
           password: pass,
           department: dept,
+          status: 'pending',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        const docRef = await db.collection('faculty').add(newFaculty);
+        await db.collection('registrationRequests').add(newRequest);
 
-        msg.textContent = '🎉 Faculty account created successfully! Redirecting to login...';
+        msg.textContent = 'Registration submitted successfully. Your account is waiting for administrator approval.';
         msg.className = 'msg success';
         msg.style.display = 'block';
 
-        setTimeout(() => {
-          window.location.href = 'faculty.html';
-        }, 1500);
+        document.getElementById('facultyRegisterForm').reset();
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';
         msg.style.display = 'block';
+      } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Create Faculty Account';
       }

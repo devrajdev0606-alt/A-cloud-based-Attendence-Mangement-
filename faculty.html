@@ -75,24 +75,46 @@
       const password = document.getElementById('password').value.trim();
       try {
         const snapshot = await db.collection('faculty').where('email', '==', email).get();
-        if (snapshot.empty) {
-          msg.textContent = 'Invalid email or password';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
+        if (!snapshot.empty) {
+          const faculty = snapshot.docs[0].data();
+          const facultyId = snapshot.docs[0].id;
+          if (faculty.password !== password) {
+            msg.textContent = 'Invalid email or password';
+            msg.className = 'msg error';
+            msg.style.display = 'block';
+            return;
+          }
+          localStorage.setItem('facultyId', facultyId);
+          localStorage.setItem('facultyName', faculty.name);
+          localStorage.setItem('facultyDept', faculty.department);
+          window.location.href = 'faculty_dashboard.html';
           return;
         }
-        const faculty = snapshot.docs[0].data();
-        const facultyId = snapshot.docs[0].id;
-        if (faculty.password !== password) {
-          msg.textContent = 'Invalid email or password';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          return;
+
+        // Check if teacher registration request is pending or rejected
+        const reqSnap = await db.collection('registrationRequests')
+          .where('email', '==', email)
+          .where('role', '==', 'faculty')
+          .get();
+
+        if (!reqSnap.empty) {
+          const reqData = reqSnap.docs[0].data();
+          if (reqData.status === 'pending') {
+            msg.textContent = 'Your registration is still awaiting administrator approval.';
+            msg.className = 'msg info';
+            msg.style.display = 'block';
+            return;
+          } else if (reqData.status === 'rejected') {
+            msg.textContent = 'Your registration was rejected. Please contact the administration.';
+            msg.className = 'msg error';
+            msg.style.display = 'block';
+            return;
+          }
         }
-        localStorage.setItem('facultyId', facultyId);
-        localStorage.setItem('facultyName', faculty.name);
-        localStorage.setItem('facultyDept', faculty.department);
-        window.location.href = 'faculty_dashboard.html';
+
+        msg.textContent = 'Invalid email or password';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';

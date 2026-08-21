@@ -126,7 +126,7 @@
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Creating Account...';
+      submitBtn.textContent = 'Submitting Request...';
 
       try {
         const snap = await db.collection('students').where('email', '==', email).get();
@@ -139,28 +139,43 @@
           return;
         }
 
-        const newStudent = {
+        const reqSnap = await db.collection('registrationRequests')
+          .where('email', '==', email)
+          .where('role', '==', 'student')
+          .where('status', '==', 'pending')
+          .get();
+
+        if (!reqSnap.empty) {
+          msg.textContent = 'A registration request for this email is already awaiting administrator approval.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Create Student Account';
+          return;
+        }
+
+        const newRequest = {
+          role: 'student',
           name,
           email,
           password: pass,
           dept,
-          faceRegistered: false,
+          status: 'pending',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        const docRef = await db.collection('students').add(newStudent);
+        await db.collection('registrationRequests').add(newRequest);
 
-        msg.textContent = '🎉 Account registered successfully! Redirecting to login...';
+        msg.textContent = 'Registration submitted successfully. Your account is waiting for administrator approval.';
         msg.className = 'msg success';
         msg.style.display = 'block';
 
-        setTimeout(() => {
-          window.location.href = 'student.html';
-        }, 1500);
+        document.getElementById('studentRegisterForm').reset();
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';
         msg.style.display = 'block';
+      } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Create Student Account';
       }

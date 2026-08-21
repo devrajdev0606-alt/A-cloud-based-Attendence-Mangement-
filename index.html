@@ -264,17 +264,39 @@
           const studentDoc = await db.collection('students').doc(identifier).get();
           snapshot = studentDoc.exists ? { docs: [studentDoc], empty: false } : { docs: [], empty: true };
         }
-        if (snapshot.empty || snapshot.docs[0].data().password !== password) {
-          showLoginMessage('studentLoginMsg', 'Invalid student ID/email or password.');
+        if (!snapshot.empty) {
+          const studentDoc = snapshot.docs[0];
+          const student = studentDoc.data();
+          if (student.password !== password) {
+            showLoginMessage('studentLoginMsg', 'Invalid student ID/email or password.');
+            return;
+          }
+          localStorage.setItem('studentId', studentDoc.id);
+          localStorage.setItem('studentName', student.name || 'Student');
+          localStorage.setItem('studentDept', student.dept || '');
+          localStorage.setItem('faceRegistered', student.faceRegistered ? 'true' : 'false');
+          window.location.href = 'dashboard.html';
           return;
         }
-        const studentDoc = snapshot.docs[0];
-        const student = studentDoc.data();
-        localStorage.setItem('studentId', studentDoc.id);
-        localStorage.setItem('studentName', student.name || 'Student');
-        localStorage.setItem('studentDept', student.dept || '');
-        localStorage.setItem('faceRegistered', student.faceRegistered ? 'true' : 'false');
-        window.location.href = 'dashboard.html';
+
+        // Check if student registration request is pending or rejected
+        const reqSnap = await db.collection('registrationRequests')
+          .where('email', '==', identifier)
+          .where('role', '==', 'student')
+          .get();
+
+        if (!reqSnap.empty) {
+          const reqData = reqSnap.docs[0].data();
+          if (reqData.status === 'pending') {
+            showLoginMessage('studentLoginMsg', 'Your registration is still awaiting administrator approval.');
+            return;
+          } else if (reqData.status === 'rejected') {
+            showLoginMessage('studentLoginMsg', 'Your registration was rejected. Please contact the administration.');
+            return;
+          }
+        }
+
+        showLoginMessage('studentLoginMsg', 'Invalid student ID/email or password.');
       } catch (error) {
         showLoginMessage('studentLoginMsg', 'Unable to sign in. Check your Firebase connection.');
         console.error(error);
@@ -290,16 +312,38 @@
       }
       try {
         const snapshot = await db.collection('faculty').where('email', '==', email).get();
-        if (snapshot.empty || snapshot.docs[0].data().password !== password) {
-          showLoginMessage('facultyLoginMsg', 'Invalid teacher email or password.');
+        if (!snapshot.empty) {
+          const facultyDoc = snapshot.docs[0];
+          const faculty = facultyDoc.data();
+          if (faculty.password !== password) {
+            showLoginMessage('facultyLoginMsg', 'Invalid teacher email or password.');
+            return;
+          }
+          localStorage.setItem('facultyId', facultyDoc.id);
+          localStorage.setItem('facultyName', faculty.name || 'Faculty');
+          localStorage.setItem('facultyDept', faculty.department || '');
+          window.location.href = 'faculty_dashboard.html';
           return;
         }
-        const facultyDoc = snapshot.docs[0];
-        const faculty = facultyDoc.data();
-        localStorage.setItem('facultyId', facultyDoc.id);
-        localStorage.setItem('facultyName', faculty.name || 'Faculty');
-        localStorage.setItem('facultyDept', faculty.department || '');
-        window.location.href = 'faculty_dashboard.html';
+
+        // Check if teacher registration request is pending or rejected
+        const reqSnap = await db.collection('registrationRequests')
+          .where('email', '==', email)
+          .where('role', '==', 'faculty')
+          .get();
+
+        if (!reqSnap.empty) {
+          const reqData = reqSnap.docs[0].data();
+          if (reqData.status === 'pending') {
+            showLoginMessage('facultyLoginMsg', 'Your registration is still awaiting administrator approval.');
+            return;
+          } else if (reqData.status === 'rejected') {
+            showLoginMessage('facultyLoginMsg', 'Your registration was rejected. Please contact the administration.');
+            return;
+          }
+        }
+
+        showLoginMessage('facultyLoginMsg', 'Invalid teacher email or password.');
       } catch (error) {
         showLoginMessage('facultyLoginMsg', 'Unable to sign in. Check your Firebase connection.');
         console.error(error);
@@ -351,7 +395,7 @@
       }
     }
 
-    // Student Self-Registration Handler (Direct to 'students' collection)
+    // Student Self-Registration Handler (Creates pending request in 'registrationRequests')
     async function handleStudentRegister(e) {
       e.preventDefault();
       const msg = document.getElementById('studentRegMsg');
@@ -378,12 +422,13 @@
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Registering Student...';
-      msg.textContent = 'Checking email uniqueness...';
+      submitBtn.textContent = 'Submitting Request...';
+      msg.textContent = 'Verifying registration details...';
       msg.className = 'msg info';
       msg.style.display = 'block';
 
       try {
+        // 1. Check if an active student account already exists
         const snap = await db.collection('students').where('email', '==', email).get();
         if (!snap.empty) {
           msg.textContent = 'A student account with this email already exists.';
@@ -394,30 +439,44 @@
           return;
         }
 
-        const newStudent = {
+        // 2. Check if a pending registration request already exists
+        const reqSnap = await db.collection('registrationRequests')
+          .where('email', '==', email)
+          .where('role', '==', 'student')
+          .where('status', '==', 'pending')
+          .get();
+
+        if (!reqSnap.empty) {
+          msg.textContent = 'A registration request for this email is already awaiting administrator approval.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Register Student Account';
+          return;
+        }
+
+        const newRequest = {
+          role: 'student',
           name: name,
           email: email,
           password: pass,
           dept: dept,
-          faceRegistered: false,
+          status: 'pending',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        const docRef = await db.collection('students').add(newStudent);
+        await db.collection('registrationRequests').add(newRequest);
 
-        msg.textContent = '🎉 Student registration successful! You can now login.';
+        msg.textContent = 'Registration submitted successfully. Your account is waiting for administrator approval.';
         msg.className = 'msg success';
         msg.style.display = 'block';
 
-        // Pre-fill login input on index.html
-        document.getElementById('studentEmail').value = email;
-        document.getElementById('studentPassword').value = '';
         document.getElementById('studentSelfRegForm').reset();
 
         setTimeout(() => {
           closeStudentRegisterModal();
-          showLoginMessage('studentLoginMsg', 'Account registered! Enter your password to login.', false);
-        }, 1800);
+          showLoginMessage('studentLoginMsg', 'Registration submitted. Awaiting administrator approval.', false);
+        }, 2500);
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';
@@ -428,7 +487,7 @@
       }
     }
 
-    // Teacher Self-Registration Handler (Direct to 'faculty' collection)
+    // Teacher Self-Registration Handler (Creates pending request in 'registrationRequests')
     async function handleTeacherRegister(e) {
       e.preventDefault();
       const msg = document.getElementById('teacherRegMsg');
@@ -455,12 +514,13 @@
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Registering Faculty...';
-      msg.textContent = 'Checking email uniqueness...';
+      submitBtn.textContent = 'Submitting Request...';
+      msg.textContent = 'Verifying registration details...';
       msg.className = 'msg info';
       msg.style.display = 'block';
 
       try {
+        // 1. Check if an active faculty account already exists
         const snap = await db.collection('faculty').where('email', '==', email).get();
         if (!snap.empty) {
           msg.textContent = 'A faculty account with this email already exists.';
@@ -471,29 +531,44 @@
           return;
         }
 
-        const newFaculty = {
+        // 2. Check if a pending registration request already exists
+        const reqSnap = await db.collection('registrationRequests')
+          .where('email', '==', email)
+          .where('role', '==', 'faculty')
+          .where('status', '==', 'pending')
+          .get();
+
+        if (!reqSnap.empty) {
+          msg.textContent = 'A registration request for this email is already awaiting administrator approval.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Register Faculty Account';
+          return;
+        }
+
+        const newRequest = {
+          role: 'faculty',
           name: name,
           email: email,
           password: pass,
           department: dept,
+          status: 'pending',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        const docRef = await db.collection('faculty').add(newFaculty);
+        await db.collection('registrationRequests').add(newRequest);
 
-        msg.textContent = '🎉 Faculty account created successfully! You can now login.';
+        msg.textContent = 'Registration submitted successfully. Your account is waiting for administrator approval.';
         msg.className = 'msg success';
         msg.style.display = 'block';
 
-        // Pre-fill login input on index.html
-        document.getElementById('facultyEmail').value = email;
-        document.getElementById('facultyPassword').value = '';
         document.getElementById('teacherSelfRegForm').reset();
 
         setTimeout(() => {
           closeTeacherRegisterModal();
-          showLoginMessage('facultyLoginMsg', 'Account registered! Enter your password to login.', false);
-        }, 1800);
+          showLoginMessage('facultyLoginMsg', 'Registration submitted. Awaiting administrator approval.', false);
+        }, 2500);
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';

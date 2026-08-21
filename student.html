@@ -75,25 +75,47 @@
       const password = document.getElementById('password').value.trim();
       try {
         const snapshot = await db.collection('students').where('email', '==', email).get();
-        if (snapshot.empty) {
-          msg.textContent = 'Invalid email or password';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
+        if (!snapshot.empty) {
+          const student = snapshot.docs[0].data();
+          const studentId = snapshot.docs[0].id;
+          if (student.password !== password) {
+            msg.textContent = 'Invalid email or password';
+            msg.className = 'msg error';
+            msg.style.display = 'block';
+            return;
+          }
+          localStorage.setItem('studentId', studentId);
+          localStorage.setItem('studentName', student.name);
+          localStorage.setItem('studentDept', student.dept);
+          localStorage.setItem('faceRegistered', student.faceRegistered ? 'true' : 'false');
+          window.location.href = 'dashboard.html';
           return;
         }
-        const student = snapshot.docs[0].data();
-        const studentId = snapshot.docs[0].id;
-        if (student.password !== password) {
-          msg.textContent = 'Invalid email or password';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          return;
+
+        // Check if student registration request is pending or rejected
+        const reqSnap = await db.collection('registrationRequests')
+          .where('email', '==', email)
+          .where('role', '==', 'student')
+          .get();
+
+        if (!reqSnap.empty) {
+          const reqData = reqSnap.docs[0].data();
+          if (reqData.status === 'pending') {
+            msg.textContent = 'Your registration is still awaiting administrator approval.';
+            msg.className = 'msg info';
+            msg.style.display = 'block';
+            return;
+          } else if (reqData.status === 'rejected') {
+            msg.textContent = 'Your registration was rejected. Please contact the administration.';
+            msg.className = 'msg error';
+            msg.style.display = 'block';
+            return;
+          }
         }
-        localStorage.setItem('studentId', studentId);
-        localStorage.setItem('studentName', student.name);
-        localStorage.setItem('studentDept', student.dept);
-        localStorage.setItem('faceRegistered', student.faceRegistered ? 'true' : 'false');
-        window.location.href = 'dashboard.html';
+
+        msg.textContent = 'Invalid email or password';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';

@@ -90,6 +90,8 @@
 html {
   font-size: 16px;
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 body {
@@ -102,6 +104,22 @@ body {
   flex-direction: column;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+img, video {
+  max-width: 100%;
+  height: auto;
+}
+
+canvas {
+  max-width: 100%;
+}
+
+#regCanvas,
+#attCanvas {
+  display: none;
 }
 
 /* --- Institutional Mesh Background --- */
@@ -1277,6 +1295,237 @@ tbody tr:hover {
 }
 
 /* ==========================================================================
+   FILTER ROWS & TOOLBARS (Reports & Directories)
+   ========================================================================== */
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.filter-row input,
+.filter-row select {
+  flex: 1 1 160px;
+  min-width: 130px;
+  height: 42px;
+}
+
+.filter-row .btn {
+  flex: 0 0 auto;
+  height: 42px;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   DIRECTORY TABS & NAVIGATION (Admin Directory)
+   ========================================================================== */
+.tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+
+.tab {
+  padding: 8px 16px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.tab:hover {
+  color: var(--accent-blue);
+}
+
+.tab.active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   CHECKBOX GROUPS & SELECTION ROSTERS
+   ========================================================================== */
+.checkbox-group {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  background: var(--bg-surface-alt);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  border: 1px solid var(--border-light);
+  font-size: 0.86rem;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.checkbox-item:hover {
+  background: #f8fafc;
+}
+
+.checkbox-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--accent-blue);
+}
+
+.checkbox-item label {
+  cursor: pointer;
+  word-break: break-word;
+  color: var(--text-main);
+  font-size: 0.86rem;
+}
+
+/* ==========================================================================
+   FACULTY LIVE SESSIONS & ANALYTICS MATRIX
+   ========================================================================== */
+.session-info {
+  background: #ffffff;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  box-shadow: var(--shadow-xs);
+}
+
+.duration-select {
+  height: 38px;
+  padding: 0 28px 0 10px;
+  font-size: 0.82rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  min-width: 85px;
+}
+
+.analytics-select {
+  max-width: 400px;
+  width: 100%;
+}
+
+.att-matrix {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  margin-top: 12px;
+}
+
+.att-matrix table {
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.att-matrix th, .att-matrix td {
+  padding: 10px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.att-matrix th:first-child, .att-matrix td:first-child {
+  text-align: left;
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  background: #ffffff;
+  z-index: 1;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.04);
+}
+
+.att-matrix thead th:first-child {
+  background: var(--bg-surface-alt);
+  z-index: 2;
+}
+
+.present {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--emerald-subtle);
+  color: var(--emerald-dark);
+  font-weight: 700;
+  font-size: 0.76rem;
+  border: 1px solid var(--emerald-border);
+}
+
+.absent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--crimson-subtle);
+  color: var(--crimson-dark);
+  font-weight: 700;
+  font-size: 0.76rem;
+  border: 1px solid var(--crimson-border);
+}
+
+.percent {
+  font-weight: 700;
+}
+
+.percent.high {
+  color: var(--emerald-dark);
+}
+
+.percent.low {
+  color: var(--crimson-dark);
+}
+
+.settings-input {
+  width: 140px;
+  height: 40px;
+}
+
+.full {
+  width: 100%;
+}
+
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+/* ==========================================================================
    DEPARTMENT SUMMARY CARDS & ACTION BUTTONS (Admin Panel)
    ========================================================================== */
 .dept-summary-card {
@@ -1491,32 +1740,6 @@ tbody tr:hover {
   cursor: not-allowed;
 }
 
-@media (max-width: 768px) {
-  .dept-summary-card {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 14px 16px;
-  }
-  .dept-action-buttons {
-    width: 100%;
-  }
-  .btn-dept-action {
-    flex: 1;
-    justify-content: center;
-  }
-  .modal-overlay {
-    padding: 10px;
-  }
-  .modal-card {
-    width: 100%;
-    max-height: 94vh;
-    border-radius: var(--radius-lg);
-  }
-  .modal-header, .modal-body {
-    padding: 16px;
-  }
-}
-
 /* Special Portal Card for Login */
 .portal-card {
   width: min(1080px, 94vw);
@@ -1647,25 +1870,635 @@ tbody tr:hover {
 }
 
 /* ==========================================================================
-   RESPONSIVE DESIGN BREAKPOINTS
+   RESPONSIVE DESIGN SYSTEM & BREAKPOINTS
+   Optimized for: 768px, 414px, 390px, 375px, 320px viewports
    ========================================================================== */
+
+/* --- Medium Devices / Tablets (<= 860px) --- */
 @media (max-width: 860px) {
-  .login-columns, .register-actions {
+  .login-columns,
+  .register-actions {
     grid-template-columns: 1fr;
   }
   .portal-card {
-    padding: 24px 18px;
+    padding: 28px 20px;
   }
   .header-container {
-    padding: 12px 16px;
+    padding: 12px 18px;
   }
   .page-wrap {
-    padding: 18px 14px 36px;
+    padding: 20px 16px 36px;
   }
   .student-hero {
     padding: 22px 20px;
   }
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* --- Tablets & Phablets (<= 768px) --- */
+@media (max-width: 768px) {
+  /* Page structure */
+  .page-wrap {
+    padding: 16px 12px 32px;
+  }
+
+  /* Header & Navigation */
+  .header-container {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  .brand-text h1 {
+    font-size: 1.05rem;
+  }
+  .brand-text p {
+    font-size: 0.68rem;
+  }
+  .brand-logo-wrap {
+    width: 38px;
+    height: 38px;
+  }
+  .user-badge {
+    padding: 5px 10px;
+    gap: 8px;
+  }
+
+  /* Hero Section */
+  .student-hero {
+    padding: 18px 16px;
+    border-radius: var(--radius-lg);
+    gap: 14px;
+  }
+  .hero-left h1 {
+    font-size: 1.35rem;
+  }
+  .hero-left p {
+    font-size: 0.85rem;
+  }
+  .hero-badges {
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .hero-badge-item {
+    padding: 4px 10px;
+    font-size: 0.74rem;
+  }
+
+  /* Compact Stats Cards (Keep 2-column layout side-by-side) */
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .stat {
+    padding: 14px 14px;
+    border-radius: var(--radius-md);
+  }
+  .stat-num {
+    font-size: 1.65rem;
+  }
+  .stat-label {
+    font-size: 0.72rem;
+  }
+  .stat-icon-wrap {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+
+  /* Cards & Headers */
+  .card {
+    padding: 18px 16px !important;
+    margin-bottom: 16px;
+    border-radius: var(--radius-md);
+  }
+  .card-header {
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+  }
+  .card h2,
+  .card-title {
+    font-size: 1.02rem;
+  }
+  .card-desc {
+    font-size: 0.82rem;
+    margin-top: -4px;
+    margin-bottom: 12px;
+  }
+
+  /* Camera & Biometric Scanner HUD */
+  .biometric-scanner-wrap {
+    max-width: 340px;
+  }
+  .scanner-video {
+    height: 240px;
+  }
+  .hud-reticle {
+    width: 140px;
+    height: 170px;
+  }
+
+  /* Table & Matrix Responsiveness */
+  .table-responsive,
+  .att-matrix {
+    margin-top: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+  table th,
+  table td {
+    padding: 10px 12px;
+    font-size: 0.82rem;
+  }
+
+  /* Department Summary Cards (Admin) */
+  .dept-summary-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 14px 16px;
+    gap: 12px;
+  }
+  .dept-summary-main {
+    min-width: unset;
+    width: 100%;
+  }
+  .dept-action-buttons {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 6px;
+  }
+  .btn-dept-action {
+    width: 100%;
+    justify-content: center;
+    height: 34px;
+    font-size: 0.78rem;
+    padding: 0 8px;
+  }
+
+  /* Modals */
+  .modal-overlay {
+    padding: 10px;
+  }
+  .modal-card {
+    width: 100%;
+    max-height: 94vh;
+    border-radius: var(--radius-lg);
+  }
+  .modal-header,
+  .modal-body {
+    padding: 16px;
+  }
+}
+
+/* --- Mobile Standard & Phones (<= 480px, covers 414px, 390px, 375px) --- */
+@media (max-width: 480px) {
+  /* Global page adjustments */
+  .page-wrap {
+    padding: 12px 10px 28px;
+  }
+
+  /* Floating decorative icons */
+  .floating-icon {
+    display: none !important;
+  }
+
+  /* App Header & Navigation */
+  .header-container {
+    padding: 8px 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .brand-section {
+    gap: 8px;
+  }
+  .brand-logo-wrap {
+    width: 34px;
+    height: 34px;
+  }
+  .brand-text h1 {
+    font-size: 0.96rem;
+  }
+  .brand-text p {
+    display: none;
+  }
+  .header-actions {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .user-badge {
+    padding: 3px 8px;
+    gap: 6px;
+  }
+  .user-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 0.74rem;
+  }
+  .user-name {
+    font-size: 0.78rem;
+    max-width: 85px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .user-role {
+    display: none;
+  }
+  .logout-btn,
+  .back-btn {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 0.76rem;
+    gap: 4px;
+  }
+
+  /* Portal Login Card (Gateway) */
+  .portal-card {
+    padding: 18px 12px 16px;
+    border-radius: var(--radius-lg);
+    width: 100%;
+  }
+  .portal-header {
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .portal-header h1 {
+    font-size: 1.22rem;
+  }
+  .portal-header p {
+    font-size: 0.78rem !important;
+  }
+  .logo-placeholder {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto;
+  }
+  .login-panel {
+    padding: 16px 12px;
+    border-radius: var(--radius-md);
+  }
+  .panel-head {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .panel-icon {
+    width: 34px;
+    height: 34px;
+    font-size: 1.1rem;
+  }
+  .register-section {
+    margin-top: 18px;
+    padding-top: 14px;
+  }
+  .register-section h3 {
+    font-size: 0.98rem;
+  }
+  .register-section p {
+    font-size: 0.8rem;
+    margin-bottom: 12px;
+  }
+  .btn-register {
+    height: 42px;
+    font-size: 0.76rem;
+    padding: 0 10px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  /* Student Hero Banner */
+  .student-hero {
+    padding: 14px 12px;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .hero-left h1 {
+    font-size: 1.18rem;
+    margin-bottom: 4px;
+  }
+  .hero-left p {
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+  .hero-badges {
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .hero-badge-item {
+    padding: 3px 8px;
+    font-size: 0.7rem;
+    gap: 4px;
+  }
+
+  /* Compact 2-Column Stats on Phones */
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .stat {
+    padding: 12px 10px;
+    border-radius: var(--radius-md);
+  }
+  .stat-num {
+    font-size: 1.4rem;
+    margin-bottom: 2px;
+  }
+  .stat-label {
+    font-size: 0.66rem;
+    line-height: 1.25;
+  }
+  .stat-icon-wrap {
+    width: 28px;
+    height: 28px;
+    font-size: 0.9rem;
+  }
+  .stat-progress-bar {
+    margin-top: 8px;
+    height: 5px;
+  }
+
+  /* Cards */
+  .card {
+    padding: 14px 12px !important;
+    margin-bottom: 14px;
+    border-radius: var(--radius-md);
+  }
+  .card-header {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .card h2,
+  .card-title {
+    font-size: 0.92rem;
+    gap: 6px;
+  }
+  .card-desc {
+    font-size: 0.78rem;
+    margin-bottom: 10px;
+    line-height: 1.35;
+  }
+
+  /* Form controls & inputs */
+  .input-wrap {
+    padding: 0 10px;
+    margin-bottom: 10px;
+  }
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="date"],
+  select,
+  .select {
+    height: 40px;
+    padding: 0 10px;
+    font-size: 0.85rem;
+  }
+  .input-wrap input {
+    height: 40px;
+    font-size: 0.85rem;
+  }
+  .form-grid-2,
+  form div[style*="grid-template-columns: 1fr 1fr"],
+  form div[style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+  form input,
+  form select {
+    margin-bottom: 10px;
+  }
+  .btn,
+  .submit-btn,
+  .login-btn,
+  .start-btn,
+  .stop-btn,
+  .view-btn,
+  .reg-btn,
+  .att-btn,
+  .export-btn {
+    height: 38px;
+    padding: 0 14px;
+    font-size: 0.82rem;
+  }
+  .btn-row {
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+  .btn-row .btn {
+    width: 100%;
+  }
+
+  /* Biometric Camera HUD */
+  .biometric-scanner-wrap {
+    max-width: 100%;
+    border-radius: var(--radius-md);
+  }
+  .scanner-video {
+    height: 210px;
+  }
+  .hud-reticle {
+    width: 130px;
+    height: 155px;
+  }
+  .hud-status-strip {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 6px 8px;
+  }
+  .status-chip {
+    font-size: 0.72rem;
+  }
+
+  /* Subject items & Live session items */
+  .subject-card-item {
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .subject-card-name {
+    font-size: 0.84rem;
+  }
+  .session-badge-item {
+    padding: 10px 12px;
+  }
+  .session-info {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 12px;
+    gap: 8px;
+  }
+  .session-info .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Filter Rows (Reports & Directory) */
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .filter-row input,
+  .filter-row select,
+  .filter-row .btn {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  /* Admin Settings Form */
+  #settingsForm div[style*="justify-content: space-between"] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+  }
+  .settings-input {
+    width: 100%;
+  }
+  #addDepartmentForm {
+    flex-direction: column;
+    gap: 8px;
+  }
+  #addDepartmentForm button {
+    width: 100%;
+  }
+
+  /* Directory Tabs */
+  .tabs {
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+  .tab {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+
+  /* Modals / Drawers */
+  .modal-overlay {
+    padding: 6px;
+  }
+  .modal-card {
+    max-height: 96vh;
+    border-radius: var(--radius-md);
+  }
+  .modal-header {
+    padding: 12px 14px;
+  }
+  .modal-header h2 {
+    font-size: 1.02rem;
+  }
+  .modal-close-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 0.9rem;
+  }
+  .modal-body {
+    padding: 12px 14px;
+  }
+  .modal-pagination-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+  }
+  .pagination-btn-group {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Footer */
+  .portal-footer {
+    padding: 16px 10px;
+    font-size: 0.74rem;
+  }
+  .portal-footer a {
+    margin: 3px 6px;
+    display: inline-block;
+  }
+}
+
+/* --- Ultra-compact Small Mobile (<= 360px, covers 320px) --- */
+@media (max-width: 360px) {
+  .page-wrap {
+    padding: 10px 8px 24px;
+  }
+  .header-container {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+  .brand-logo-wrap {
+    width: 30px;
+    height: 30px;
+  }
+  .brand-text h1 {
+    font-size: 0.88rem;
+  }
+  .user-badge {
+    padding: 2px 6px;
+  }
+  .user-avatar {
+    width: 22px;
+    height: 22px;
+    font-size: 0.7rem;
+  }
+  .user-name {
+    max-width: 60px;
+    font-size: 0.72rem;
+  }
+  .logout-btn,
+  .back-btn {
+    height: 28px;
+    padding: 0 8px;
+    font-size: 0.72rem;
+  }
+
+  /* 2-Column Stats at 320px */
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .stat {
+    padding: 10px 8px;
+  }
+  .stat-num {
+    font-size: 1.25rem;
+  }
+  .stat-label {
+    font-size: 0.62rem;
+  }
+  .stat-icon-wrap {
+    width: 24px;
+    height: 24px;
+    font-size: 0.8rem;
+  }
+
+  .card {
+    padding: 12px 8px !important;
+  }
+  .card h2,
+  .card-title {
+    font-size: 0.88rem;
+  }
+  .scanner-video {
+    height: 180px;
+  }
+  .hud-reticle {
+    width: 110px;
+    height: 135px;
+  }
+  .dept-action-buttons {
+    grid-template-columns: 1fr;
+  }
+  table th,
+  table td {
+    padding: 8px 8px;
+    font-size: 0.76rem;
   }
 }

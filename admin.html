@@ -54,6 +54,10 @@
         <div class="stat-num" id="totalDepts">0</div>
         <div class="stat-label">Departments</div>
       </div>
+      <div class="stat">
+        <div class="stat-num" id="totalPendingRequests" style="color:var(--amber-dark);">0</div>
+        <div class="stat-label">Pending Requests</div>
+      </div>
     </div>
 
     <!-- 2-Column Grid for Management Modules -->
@@ -167,6 +171,53 @@
       </div>
     </div>
 
+    <!-- Registration Requests Approval Section -->
+    <div class="card" style="margin-top: 24px;">
+      <div class="card-header">
+        <h2>📝 Registration Requests</h2>
+        <span class="badge amber" id="pendingRequestsBadge">0 Pending Requests</span>
+      </div>
+      <p class="card-desc">Review, approve, or reject pending student and faculty account self-registration requests.</p>
+
+      <!-- Two Tabs: Student Requests & Faculty Requests -->
+      <div class="tabs" id="requestTabs">
+        <div class="tab active" data-req-tab="student" onclick="switchRequestTab(this)">👨‍🎓 Student Requests (<span id="studentReqCount">0</span>)</div>
+        <div class="tab" data-req-tab="faculty" onclick="switchRequestTab(this)">👩‍🏫 Faculty Requests (<span id="facultyReqCount">0</span>)</div>
+      </div>
+
+      <!-- Filters & Search Toolbar -->
+      <div class="filter-row">
+        <input type="text" id="requestSearch" placeholder="🔍 Search requests by name, email, or dept..." oninput="onRequestsSearch()" style="flex: 2 1 200px;" />
+        <select id="requestStatusFilter" onchange="renderRequestsTable()" style="flex: 1 1 140px;">
+          <option value="all">All Statuses</option>
+          <option value="pending" selected>Pending Review</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        <button type="button" class="btn btn-primary" onclick="loadRegistrationRequests()">🔄 Refresh Requests</button>
+      </div>
+
+      <!-- Requests Table -->
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Applicant Name</th>
+              <th>Applicant ID / Email</th>
+              <th>Department</th>
+              <th>Registration Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="requestsTableBody">
+            <tr><td colspan="6" class="empty">Loading registration requests...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="requestActionMsg" class="msg"></div>
+    </div>
+
     <!-- Department-wise Directory Card -->
     <div class="card" style="margin-top: 24px;">
       <div class="card-header">
@@ -216,6 +267,29 @@
     </div>
   </div>
 
+  <!-- Confirmation Modal for Approve / Reject -->
+  <div id="confirmActionModal" class="modal-overlay" style="display:none;" onclick="closeConfirmModalOnBackdrop(event)">
+    <div class="modal-card" style="max-width: 480px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span id="confirmModalBadge" class="badge amber">Confirmation Required</span>
+          <h2 id="confirmModalTitle" style="margin-top:4px;">Approve Registration</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeConfirmModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmModalText" style="font-size: 0.92rem; color: var(--text-main); margin-bottom: 14px; line-height: 1.5;">
+          Are you sure you want to proceed with this action?
+        </p>
+        <div id="confirmApplicantDetails" class="info-box" style="margin-bottom: 16px;"></div>
+        <div class="btn-row" style="justify-content: flex-end; width: 100%;">
+          <button type="button" class="btn back-btn" onclick="closeConfirmModal()">Cancel</button>
+          <button type="button" id="confirmModalSubmitBtn" class="btn btn-approve" onclick="executePendingAction()">✓ Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
@@ -223,6 +297,11 @@
     const db = firebase.firestore();
     let currentTab = 'students';
     let deptMap = {};
+
+    // Registration Requests State
+    let currentRequestTab = 'student';
+    let allRequests = [];
+    let pendingApprovalAction = null; // { type: 'approve' | 'reject', requestId, requestData }
 
     // Department Data & Modal State
     const deptDataCache = {
@@ -627,17 +706,297 @@
 
     async function updateStats() {
       try {
-        const [sSnap, fSnap, subSnap, dSnap] = await Promise.all([
+        const [sSnap, fSnap, subSnap, dSnap, rSnap] = await Promise.all([
           db.collection('students').get(),
           db.collection('faculty').get(),
           db.collection('subjects').get(),
-          db.collection('departments').get()
+          db.collection('departments').get(),
+          db.collection('registrationRequests').where('status', '==', 'pending').get()
         ]);
         document.getElementById('totalStudents').textContent = sSnap.size;
         document.getElementById('totalFaculty').textContent = fSnap.size;
         document.getElementById('totalSubjects').textContent = subSnap.size;
         document.getElementById('totalDepts').textContent = dSnap.size;
-      } catch (err) {}
+        const pendingEl = document.getElementById('totalPendingRequests');
+        if (pendingEl) pendingEl.textContent = rSnap.size;
+      } catch (err) {
+        console.error('Error updating stats:', err);
+      }
+    }
+
+    // =========================================================================
+    // REGISTRATION REQUESTS APPROVAL WORKFLOW
+    // =========================================================================
+    function switchRequestTab(tabEl) {
+      document.querySelectorAll('#requestTabs .tab').forEach(t => t.classList.remove('active'));
+      tabEl.classList.add('active');
+      currentRequestTab = tabEl.dataset.reqTab;
+      renderRequestsTable();
+    }
+
+    async function loadRegistrationRequests() {
+      const tbody = document.getElementById('requestsTableBody');
+      try {
+        const snap = await db.collection('registrationRequests').get();
+        allRequests = [];
+        snap.forEach(doc => {
+          allRequests.push({ id: doc.id, ...doc.data() });
+        });
+
+        allRequests.sort((a, b) => {
+          const tA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+          const tB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+          return tB - tA;
+        });
+
+        // Count pending
+        const pendingTotal = allRequests.filter(r => r.status === 'pending').length;
+        const pendingStudent = allRequests.filter(r => r.role === 'student' && r.status === 'pending').length;
+        const pendingFaculty = allRequests.filter(r => r.role === 'faculty' && r.status === 'pending').length;
+
+        const badgeEl = document.getElementById('pendingRequestsBadge');
+        if (badgeEl) {
+          badgeEl.textContent = `${pendingTotal} Pending Request${pendingTotal === 1 ? '' : 's'}`;
+          badgeEl.className = pendingTotal > 0 ? 'badge amber' : 'badge';
+        }
+        const stuCountEl = document.getElementById('studentReqCount');
+        if (stuCountEl) stuCountEl.textContent = pendingStudent;
+        const facCountEl = document.getElementById('facultyReqCount');
+        if (facCountEl) facCountEl.textContent = pendingFaculty;
+        const totalPendingEl = document.getElementById('totalPendingRequests');
+        if (totalPendingEl) totalPendingEl.textContent = pendingTotal;
+
+        renderRequestsTable();
+      } catch (err) {
+        console.error('Error loading registration requests:', err);
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty" style="color:var(--crimson-dark);">Error loading requests: ' + err.message + '</td></tr>';
+      }
+    }
+
+    function onRequestsSearch() {
+      renderRequestsTable();
+    }
+
+    function renderRequestsTable() {
+      const tbody = document.getElementById('requestsTableBody');
+      if (!tbody) return;
+
+      const query = (document.getElementById('requestSearch')?.value || '').trim().toLowerCase();
+      const statusFilter = document.getElementById('requestStatusFilter')?.value || 'pending';
+
+      let filtered = allRequests.filter(r => (r.role || 'student') === currentRequestTab);
+
+      if (statusFilter !== 'all') {
+        filtered = filtered.filter(r => r.status === statusFilter);
+      }
+
+      if (query) {
+        filtered = filtered.filter(r => {
+          const nameMatch = (r.name || '').toLowerCase().includes(query);
+          const emailMatch = (r.email || '').toLowerCase().includes(query);
+          const deptId = r.dept || r.department || '';
+          const deptName = (deptMap[deptId] || deptId).toLowerCase();
+          return nameMatch || emailMatch || deptName.includes(query);
+        });
+      }
+
+      if (filtered.length === 0) {
+        const filterName = statusFilter === 'all' ? '' : statusFilter + ' ';
+        tbody.innerHTML = `<tr><td colspan="6" class="empty">No ${filterName}${currentRequestTab} registration requests found.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(r => {
+        const deptId = r.dept || r.department || '';
+        const deptDisplay = deptMap[deptId] || deptId || '-';
+        const dateDisplay = r.createdAt?.toDate 
+          ? r.createdAt.toDate().toLocaleDateString('en-GB') + ' ' + r.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          : 'Recently';
+
+        let statusBadge = '<span class="badge amber">● Pending</span>';
+        if (r.status === 'approved') statusBadge = '<span class="badge green">✓ Approved</span>';
+        if (r.status === 'rejected') statusBadge = '<span class="badge red">✕ Rejected</span>';
+
+        let actionHtml = '';
+        if (r.status === 'pending') {
+          actionHtml = `
+            <div style="display:inline-flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" class="btn-approve" onclick="promptConfirmAction('approve', '${r.id}')">✓ Approve</button>
+              <button type="button" class="btn-reject" onclick="promptConfirmAction('reject', '${r.id}')">✕ Reject</button>
+            </div>
+          `;
+        } else if (r.status === 'approved') {
+          actionHtml = `<span style="font-size:0.8rem; color:var(--emerald-dark); font-weight:700;">● Active Account</span>`;
+        } else {
+          actionHtml = `<span style="font-size:0.8rem; color:var(--crimson-dark); font-weight:700;">● Rejected</span>`;
+        }
+
+        return `
+          <tr>
+            <td><strong>${r.name || 'Unknown'}</strong></td>
+            <td>${r.email || '-'}</td>
+            <td><span class="badge blue">${deptDisplay}</span></td>
+            <td>${dateDisplay}</td>
+            <td>${statusBadge}</td>
+            <td>${actionHtml}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function promptConfirmAction(actionType, requestId) {
+      const requestData = allRequests.find(r => r.id === requestId);
+      if (!requestData) return;
+
+      pendingApprovalAction = { type: actionType, requestId, requestData };
+
+      const modal = document.getElementById('confirmActionModal');
+      const badge = document.getElementById('confirmModalBadge');
+      const title = document.getElementById('confirmModalTitle');
+      const text = document.getElementById('confirmModalText');
+      const details = document.getElementById('confirmApplicantDetails');
+      const submitBtn = document.getElementById('confirmModalSubmitBtn');
+
+      const roleLabel = requestData.role === 'faculty' ? 'Faculty Member' : 'Student';
+      const deptId = requestData.dept || requestData.department || '';
+      const deptName = deptMap[deptId] || deptId || '-';
+
+      details.innerHTML = `
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size:0.85rem;">
+          <div><strong>Name:</strong> ${requestData.name || '-'}</div>
+          <div><strong>Role:</strong> ${roleLabel}</div>
+          <div><strong>Email:</strong> ${requestData.email || '-'}</div>
+          <div><strong>Department:</strong> ${deptName}</div>
+        </div>
+      `;
+
+      if (actionType === 'approve') {
+        badge.className = 'badge green';
+        badge.textContent = 'Approve Account';
+        title.textContent = `Approve ${roleLabel} Registration`;
+        text.textContent = `Approving this registration will create an active institutional account for ${requestData.name}, enabling immediate login.`;
+        submitBtn.className = 'btn btn-approve';
+        submitBtn.textContent = '✓ Confirm & Create Account';
+      } else {
+        badge.className = 'badge red';
+        badge.textContent = 'Reject Request';
+        title.textContent = `Reject ${roleLabel} Registration`;
+        text.textContent = `Are you sure you want to reject the registration request for ${requestData.name}? No active account will be created.`;
+        submitBtn.className = 'btn btn-reject';
+        submitBtn.textContent = '✕ Confirm Rejection';
+      }
+
+      modal.style.display = 'flex';
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirmActionModal').style.display = 'none';
+      pendingApprovalAction = null;
+    }
+
+    function closeConfirmModalOnBackdrop(e) {
+      if (e.target.id === 'confirmActionModal') {
+        closeConfirmModal();
+      }
+    }
+
+    async function executePendingAction() {
+      if (!pendingApprovalAction) return;
+
+      const { type, requestId, requestData } = pendingApprovalAction;
+      const submitBtn = document.getElementById('confirmModalSubmitBtn');
+      const actionMsg = document.getElementById('requestActionMsg');
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Processing...';
+
+      try {
+        const reqRef = db.collection('registrationRequests').doc(requestId);
+        const reqDoc = await reqRef.get();
+
+        if (!reqDoc.exists) {
+          throw new Error('Registration request not found.');
+        }
+
+        const currentReq = reqDoc.data();
+        if (currentReq.status !== 'pending') {
+          throw new Error(`This request has already been ${currentReq.status}.`);
+        }
+
+        if (type === 'approve') {
+          let targetCollection = currentReq.role === 'faculty' ? 'faculty' : 'students';
+
+          // Prevent duplicate accounts if an account with this email already exists
+          const existingSnap = await db.collection(targetCollection).where('email', '==', currentReq.email).get();
+          let accountId = null;
+
+          if (existingSnap.empty) {
+            if (currentReq.role === 'faculty') {
+              const newFaculty = {
+                name: currentReq.name,
+                email: currentReq.email,
+                password: currentReq.password,
+                department: currentReq.department || currentReq.dept || '',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+              };
+              const docRef = await db.collection('faculty').add(newFaculty);
+              accountId = docRef.id;
+            } else {
+              const newStudent = {
+                name: currentReq.name,
+                email: currentReq.email,
+                password: currentReq.password,
+                dept: currentReq.dept || currentReq.department || '',
+                faceRegistered: false,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+              };
+              const docRef = await db.collection('students').add(newStudent);
+              accountId = docRef.id;
+            }
+          } else {
+            accountId = existingSnap.docs[0].id;
+          }
+
+          // Mark request as approved
+          await reqRef.update({
+            status: 'approved',
+            approvedAccountId: accountId,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+
+          if (actionMsg) {
+            actionMsg.textContent = `✓ Successfully approved registration for ${currentReq.name}. Active account created!`;
+            actionMsg.className = 'msg success';
+            actionMsg.style.display = 'block';
+            setTimeout(() => { actionMsg.style.display = 'none'; }, 4000);
+          }
+        } else if (type === 'reject') {
+          // Mark request as rejected (do NOT create active account)
+          await reqRef.update({
+            status: 'rejected',
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+
+          if (actionMsg) {
+            actionMsg.textContent = `✕ Registration request for ${currentReq.name} was rejected.`;
+            actionMsg.className = 'msg info';
+            actionMsg.style.display = 'block';
+            setTimeout(() => { actionMsg.style.display = 'none'; }, 4000);
+          }
+        }
+
+        closeConfirmModal();
+        await loadRegistrationRequests();
+        await updateStats();
+        await loadDepartments();
+        await loadFacultyOptions();
+        renderListing();
+      } catch (err) {
+        alert('Action error: ' + err.message);
+        console.error(err);
+      } finally {
+        submitBtn.disabled = false;
+      }
     }
 
     document.getElementById('addDepartmentForm').addEventListener('submit', async (e) => {
@@ -834,6 +1193,7 @@
 
     loadFacultyOptions();
     loadDepartments();
+    loadRegistrationRequests();
     loadSettings();
     updateStats();
     renderListing();
