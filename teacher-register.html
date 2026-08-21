@@ -83,10 +83,12 @@
   </main>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script>
     const db = firebase.firestore();
+    const auth = firebase.auth();
 
     if (localStorage.getItem('facultyId')) {
       window.location.replace('faculty_dashboard.html');
@@ -128,43 +130,28 @@
       submitBtn.disabled = true;
       submitBtn.textContent = 'Submitting Request...';
 
+      let createdAuthUser = null;
       try {
-        const snap = await db.collection('faculty').where('email', '==', email).get();
-        if (!snap.empty) {
-          msg.textContent = 'A faculty account with this email already exists.';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Create Faculty Account';
-          return;
-        }
+        // 1. Create Firebase Authentication account securely
+        const userCred = await auth.createUserWithEmailAndPassword(email, pass);
+        createdAuthUser = userCred.user;
+        const uid = createdAuthUser.uid;
 
-        const reqSnap = await db.collection('registrationRequests')
-          .where('email', '==', email)
-          .where('role', '==', 'faculty')
-          .where('status', '==', 'pending')
-          .get();
-
-        if (!reqSnap.empty) {
-          msg.textContent = 'A registration request for this email is already awaiting administrator approval.';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Create Faculty Account';
-          return;
-        }
-
+        // 2. Create registration request in Firestore keyed by UID (NO password stored)
         const newRequest = {
+          uid: uid,
           role: 'faculty',
-          name,
-          email,
-          password: pass,
+          name: name,
+          email: email,
           department: dept,
           status: 'pending',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        await db.collection('registrationRequests').add(newRequest);
+        await db.collection('registrationRequests').doc(uid).set(newRequest);
+
+        // 3. Sign out immediately so pending user is not left authenticated in session
+        await auth.signOut();
 
         msg.textContent = 'Registration submitted successfully. Your account is waiting for administrator approval.';
         msg.className = 'msg success';
@@ -172,7 +159,15 @@
 
         document.getElementById('facultyRegisterForm').reset();
       } catch (err) {
-        msg.textContent = 'Error: ' + err.message;
+        // Rollback orphaned Firebase Auth account if Firestore request write fails
+        if (createdAuthUser) {
+          try { await createdAuthUser.delete(); } catch (e) {}
+        }
+        let errorMsg = err.message;
+        if (err.code === 'auth/email-already-in-use') {
+          errorMsg = 'An account or registration request with this email already exists.';
+        }
+        msg.textContent = errorMsg;
         msg.className = 'msg error';
         msg.style.display = 'block';
       } finally {

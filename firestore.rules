@@ -1,32 +1,265 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /students/{studentId} {
-      allow read, write: if true;
+
+    // =========================================================================
+    // AUTHENTICATION & ROLE HELPER FUNCTIONS
+    // =========================================================================
+    
+    function isSignedIn() {
+      return request.auth != null;
     }
-    match /faculty/{facultyId} {
-      allow read, write: if true;
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'admin@cit.edu') ||
+        ('admin' in request.auth.token && request.auth.token.admin == true) ||
+        request.auth.token.get('admin', false) == true
+      );
     }
-    match /subjects/{subjectId} {
-      allow read, write: if true;
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
     }
-    match /attendanceSessions/{sessionId} {
-      allow read, write: if true;
-    }
-    match /attendance/{recordId} {
-      allow read, write: if true;
-    }
-    match /attendanceRecords/{recordId} {
-      allow read, write: if true;
-    }
-    match /departments/{deptId} {
-      allow read, write: if true;
-    }
-    match /settings/{settingId} {
-      allow read, write: if true;
-    }
+
+    // =========================================================================
+    // REGISTRATION REQUESTS COLLECTION
+    // =========================================================================
+    // Newly registered applicants submit pending requests keyed by their Auth UID.
+    // Admins review and approve/reject requests.
+    // =========================================================================
     match /registrationRequests/{requestId} {
-      allow read, write: if true;
+      allow create: if isSignedIn()
+        && request.auth.uid == requestId
+        && request.resource.data.uid == request.auth.uid
+        && (request.resource.data.role == 'student' || request.resource.data.role == 'faculty')
+        && request.resource.data.status == 'pending'
+        && request.resource.data.name is string
+        && request.resource.data.name != ''
+        && request.resource.data.email is string
+        && request.resource.data.email != ''
+        && !('password' in request.resource.data)
+        && !('passwordHash' in request.resource.data)
+        && !('admin' in request.resource.data);
+
+      allow read: if isAdmin() || (
+        isSignedIn() && (
+          request.auth.uid == requestId ||
+          resource.data.uid == request.auth.uid ||
+          resource.data.email == request.auth.token.email
+        )
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // STUDENTS COLLECTION (Biometric Data Protected)
+    // =========================================================================
+    // Contains student profiles including sensitive faceDescriptor biometrics.
+    // Read: Restricted strictly to the student themselves (UID/Email) or Admin.
+    // Update: Admin (all fields) or Student (own faceDescriptor/faceRegistered only).
+    // Create/Delete: Admin only.
+    // =========================================================================
+    match /students/{studentId} {
+      allow read: if isOwner(studentId) || (isSignedIn() && resource.data.email == request.auth.token.email) || isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (
+        isOwner(studentId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['faceDescriptor', 'faceRegistered'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // FACULTY COLLECTION
+    // =========================================================================
+    // Contains approved faculty profiles.
+    // Read: Restricted strictly to the faculty member themselves (UID/Email) or Admin.
+    // Create/Update/Delete: Admin only.
+    // =========================================================================
+    match /faculty/{facultyId} {
+      allow read: if isOwner(facultyId) || (isSignedIn() && resource.data.email == request.auth.token.email) || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // DEPARTMENTS COLLECTION
+    // =========================================================================
+    // Read: allowed for registration dropdowns and dashboards.
+    // Write: strictly admin only.
+    // =========================================================================
+    match /departments/{deptId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // SUBJECTS COLLECTION
+    // =========================================================================
+    // Contains subject metadata, assigned facultyId, and enrolled studentIds.
+    // Read:
+    // - Admin: full access.
+    // - Assigned Faculty: modern faculty UID or verified legacy email.
+    // - Enrolled Student: authenticated UID is present in studentIds.
+    // Write: strictly admin only.
+    // =========================================================================
+    match /subjects/{subjectId} {
+      function isAssignedFaculty() {
+        return resource.data.facultyId == request.auth.uid ||
+          (
+            exists(/databases/$(database)/documents/faculty/$(resource.data.facultyId)) &&
+            get(/databases/$(database)/documents/faculty/$(resource.data.facultyId)).data.email == request.auth.token.email
+          );
+      }
+
+      function isEnrolledStudent() {
+        return request.auth.uid in resource.data.studentIds;
+      }
+
+      allow read: if isAdmin() || (
+        isSignedIn() && (
+          isAssignedFaculty() ||
+          isEnrolledStudent()
+        )
+      );
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // ATTENDANCE SESSIONS COLLECTION
+    // =========================================================================
+    // Active classroom beacons created by faculty.
+    // Read:
+    // - Admin: full access.
+    // - Faculty: their own sessions.
+    // - Enrolled Student: only currently active session for a subject they are enrolled in.
+    // Create: Verified faculty member assigned to the subject (Auth UID or verified legacy email).
+    // Update: Owner faculty member (can toggle active status to stop attendance).
+    // Delete: Admin only.
+    // =========================================================================
+    match /attendanceSessions/{sessionId} {
+      function isAssignedFacultyForSession() {
+        let subjectDoc = get(/databases/$(database)/documents/subjects/$(resource.data.subjectId));
+        return resource.data.facultyUid == request.auth.uid ||
+          resource.data.facultyId == request.auth.uid ||
+          (
+            subjectDoc != null && (
+              subjectDoc.data.facultyId == request.auth.uid ||
+              (
+                exists(/databases/$(database)/documents/faculty/$(subjectDoc.data.facultyId)) &&
+                get(/databases/$(database)/documents/faculty/$(subjectDoc.data.facultyId)).data.email == request.auth.token.email
+              )
+            )
+          );
+      }
+
+      function isEnrolledStudentForActiveSession() {
+        let subjectDoc = get(/databases/$(database)/documents/subjects/$(resource.data.subjectId));
+        return resource.data.active == true
+          && resource.data.subjectId is string
+          && subjectDoc != null
+          && request.auth.uid in subjectDoc.data.studentIds;
+      }
+
+      function isValidFacultySessionCreation() {
+        let subjectDoc = get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId));
+        let isModernFaculty = exists(/databases/$(database)/documents/faculty/$(request.auth.uid));
+        
+        return isSignedIn()
+          && request.resource.data.facultyUid == request.auth.uid
+          && request.resource.data.subjectId is string
+          && request.resource.data.active == true
+          && subjectDoc != null
+          && (
+            // Modern approved faculty teaching this subject
+            (isModernFaculty && (
+              subjectDoc.data.facultyId == request.auth.uid ||
+              subjectDoc.data.facultyId == request.resource.data.facultyId
+            )) ||
+            // Legacy faculty verified by email ownership against subject's assigned faculty doc
+            (
+              exists(/databases/$(database)/documents/faculty/$(subjectDoc.data.facultyId)) &&
+              get(/databases/$(database)/documents/faculty/$(subjectDoc.data.facultyId)).data.email == request.auth.token.email
+            )
+          );
+      }
+
+      allow read: if isAdmin() || (
+        isSignedIn() && (
+          isAssignedFacultyForSession() ||
+          isEnrolledStudentForActiveSession()
+        )
+      );
+      allow create: if isAdmin() || isValidFacultySessionCreation();
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        (resource.data.facultyUid == request.auth.uid || resource.data.facultyId == request.auth.uid)
+      );
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // ATTENDANCE RECORDS COLLECTION
+    // =========================================================================
+    // Verified attendance submissions.
+    // Create: Enforces authentic student ownership, active session existence,
+    // subject matching, and verified course enrollment (direct UID or verified legacy email).
+    // Read: The submitting student, the course instructor, or Admin.
+    // Update / Delete: Strictly admin only.
+    // =========================================================================
+    match /attendance/{recordId} {
+      function isValidAttendanceSubmission() {
+        let sessionDoc = get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId));
+        let subjectDoc = get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId));
+        let submittedStudentId = request.resource.data.studentId;
+
+        return request.resource.data.studentUid == request.auth.uid
+          && request.resource.data.sessionId is string
+          && request.resource.data.subjectId is string
+          && request.resource.data.date is string
+          && sessionDoc != null
+          && sessionDoc.data.active == true
+          && sessionDoc.data.subjectId == request.resource.data.subjectId
+          && subjectDoc != null
+          && (
+            // Case A: Modern student whose Auth UID is directly enrolled in subject
+            request.auth.uid in subjectDoc.data.studentIds ||
+            // Case B: Legacy student where submitted studentId is enrolled AND verified to belong to caller's email
+            (
+              submittedStudentId in subjectDoc.data.studentIds &&
+              exists(/databases/$(database)/documents/students/$(submittedStudentId)) &&
+              get(/databases/$(database)/documents/students/$(submittedStudentId)).data.email == request.auth.token.email
+            )
+          );
+      }
+
+      allow create: if isAdmin() || (isSignedIn() && isValidAttendanceSubmission());
+      allow read: if isAdmin() || (
+        isSignedIn() && (
+          resource.data.studentUid == request.auth.uid ||
+          resource.data.studentId == request.auth.uid ||
+          resource.data.facultyUid == request.auth.uid ||
+          resource.data.facultyId == request.auth.uid
+        )
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // Legacy alias collection match (if present in historical test data)
+    match /attendanceRecords/{recordId} {
+      allow read, write: if isAdmin();
+    }
+
+    // =========================================================================
+    // SYSTEM SETTINGS COLLECTION
+    // =========================================================================
+    // Geofencing thresholds and configuration settings.
+    // Read: authenticated users.
+    // Write: strictly admin only.
+    // =========================================================================
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
   }
 }

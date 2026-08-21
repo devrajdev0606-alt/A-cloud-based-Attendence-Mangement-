@@ -58,10 +58,12 @@
   </main>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script>
     const db = firebase.firestore();
+    const auth = firebase.auth();
 
     if (localStorage.getItem('studentId')) {
       window.location.replace('dashboard.html');
@@ -73,44 +75,71 @@
       msg.style.display = 'none';
       const email = document.getElementById('email').value.trim().toLowerCase();
       const password = document.getElementById('password').value.trim();
+
       try {
-        const snapshot = await db.collection('students').where('email', '==', email).get();
-        if (!snapshot.empty) {
-          const student = snapshot.docs[0].data();
-          const studentId = snapshot.docs[0].id;
-          if (student.password !== password) {
-            msg.textContent = 'Invalid email or password';
-            msg.className = 'msg error';
-            msg.style.display = 'block';
-            return;
+        // 1. Authenticate with Firebase Authentication
+        let user = null;
+        try {
+          const userCred = await auth.signInWithEmailAndPassword(email, password);
+          user = userCred.user;
+        } catch (authErr) {
+          msg.textContent = 'Invalid email or password';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // 2. Check if approved student profile exists (by UID or email)
+        let studentDoc = await db.collection('students').doc(user.uid).get();
+        let student = null;
+        let studentId = user.uid;
+
+        if (studentDoc.exists) {
+          student = studentDoc.data();
+        } else {
+          // Fallback check by email (for legacy profiles)
+          const emailSnap = await db.collection('students').where('email', '==', email).get();
+          if (!emailSnap.empty) {
+            studentDoc = emailSnap.docs[0];
+            student = studentDoc.data();
+            studentId = studentDoc.id;
           }
+        }
+
+        if (student) {
           localStorage.setItem('studentId', studentId);
-          localStorage.setItem('studentName', student.name);
-          localStorage.setItem('studentDept', student.dept);
+          localStorage.setItem('studentUid', user.uid);
+          localStorage.setItem('studentName', student.name || 'Student');
+          localStorage.setItem('studentDept', student.dept || '');
           localStorage.setItem('faceRegistered', student.faceRegistered ? 'true' : 'false');
           window.location.href = 'dashboard.html';
           return;
         }
 
-        // Check if student registration request is pending or rejected
-        const reqSnap = await db.collection('registrationRequests')
-          .where('email', '==', email)
-          .where('role', '==', 'student')
-          .get();
+        // 3. If no active student profile, check registration request status
+        const reqDoc = await db.collection('registrationRequests').doc(user.uid).get();
+        let reqData = reqDoc.exists ? reqDoc.data() : null;
 
-        if (!reqSnap.empty) {
-          const reqData = reqSnap.docs[0].data();
-          if (reqData.status === 'pending') {
-            msg.textContent = 'Your registration is still awaiting administrator approval.';
-            msg.className = 'msg info';
-            msg.style.display = 'block';
-            return;
-          } else if (reqData.status === 'rejected') {
-            msg.textContent = 'Your registration was rejected. Please contact the administration.';
-            msg.className = 'msg error';
-            msg.style.display = 'block';
-            return;
+        if (!reqData) {
+          const reqSnap = await db.collection('registrationRequests').where('email', '==', email).get();
+          if (!reqSnap.empty) {
+            reqData = reqSnap.docs[0].data();
           }
+        }
+
+        await auth.signOut();
+        localStorage.clear();
+
+        if (reqData && reqData.status === 'pending') {
+          msg.textContent = 'Your registration is awaiting administrator approval.';
+          msg.className = 'msg info';
+          msg.style.display = 'block';
+          return;
+        } else if (reqData && reqData.status === 'rejected') {
+          msg.textContent = 'Your registration was rejected. Please contact the administration.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
         }
 
         msg.textContent = 'Invalid email or password';

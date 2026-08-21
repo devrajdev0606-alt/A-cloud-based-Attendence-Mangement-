@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body style="display: none;">
   <!-- Mesh Background Scene -->
   <div class="bg-scene">
     <div class="overlay"></div>
@@ -29,8 +29,9 @@
       </a>
 
       <div class="header-actions">
+        <span class="badge" style="background: rgba(13, 148, 136, 0.15); color: #0d9488; border: 1px solid rgba(13, 148, 136, 0.3); font-weight: 700;">Admin: admin@cit.edu</span>
         <a href="admin.html" class="back-btn">← Back to Admin Panel</a>
-        <a href="index.html" class="back-btn">Portal Home</a>
+        <button class="back-btn" onclick="adminLogout()" style="background: rgba(225, 29, 72, 0.1); color: #e11d48; border-color: rgba(225, 29, 72, 0.25); cursor: pointer;">Sign Out</button>
       </div>
     </div>
   </header>
@@ -38,36 +39,61 @@
   <main class="page-wrap">
     <!-- Stat Counter Cards -->
     <div class="stats">
-      <div class="stat">
-        <div class="stat-num" id="totalRecords">0</div>
-        <div class="stat-label">Total Verified Records</div>
+      <div class="card stat-card">
+        <div class="stat-icon-wrap" style="background: rgba(13, 148, 136, 0.1); color: var(--teal-accent);">👥</div>
+        <div class="stat-meta">
+          <h3>Registered Students</h3>
+          <p id="totalStudents" class="stat-num">0</p>
+        </div>
       </div>
-      <div class="stat">
-        <div class="stat-num" id="todayRecords">0</div>
-        <div class="stat-label">Today's Attendance</div>
+      <div class="card stat-card">
+        <div class="stat-icon-wrap" style="background: rgba(2, 132, 199, 0.1); color: var(--sky-accent);">📋</div>
+        <div class="stat-meta">
+          <h3>Total Attendance Logs</h3>
+          <p id="totalRecords" class="stat-num">0</p>
+        </div>
       </div>
-      <div class="stat">
-        <div class="stat-num" id="totalStudents">0</div>
-        <div class="stat-label">Enrolled Students</div>
+      <div class="card stat-card">
+        <div class="stat-icon-wrap" style="background: rgba(16, 185, 129, 0.1); color: var(--emerald-accent);">🎯</div>
+        <div class="stat-meta">
+          <h3>Today's Attendance</h3>
+          <p id="todayRecords" class="stat-num">0</p>
+        </div>
       </div>
     </div>
 
-    <!-- Main Report Card -->
+    <!-- Filter Bar Card -->
+    <div class="card filter-bar">
+      <div class="filter-group">
+        <label for="dateFilter">Filter by Date</label>
+        <input type="date" id="dateFilter" />
+      </div>
+      <div class="filter-group">
+        <label for="subjectFilter">Filter by Subject</label>
+        <select id="subjectFilter">
+          <option value="">All Subjects</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="facultyFilter">Filter by Faculty</label>
+        <select id="facultyFilter">
+          <option value="">All Faculty</option>
+        </select>
+      </div>
+      <div class="filter-actions">
+        <button class="btn btn-secondary" onclick="exportCSV()">📥 Export Filtered CSV</button>
+      </div>
+    </div>
+
+    <!-- Attendance Log Table Card -->
     <div class="card">
       <div class="card-header">
-        <h2>📊 Global Attendance Records & Filters</h2>
+        <div>
+          <h2>Master Attendance Audit Log</h2>
+          <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Verified geolocation and biometric attendance history</p>
+        </div>
       </div>
-      <p class="card-desc">Filter records by date, subject, or faculty, and export institutional reports as CSV files.</p>
-
-      <div class="filter-row">
-        <input type="date" id="dateFilter" title="Filter by date" />
-        <select id="subjectFilter"><option value="">All Subjects</option></select>
-        <select id="facultyFilter"><option value="">All Faculty</option></select>
-        <button type="button" class="btn btn-primary" onclick="filterRecords()">🔍 Filter Records</button>
-        <button type="button" class="btn export-btn" onclick="exportCSV()">📥 Export CSV</button>
-      </div>
-
-      <div class="table-responsive">
+      <div class="table-wrap">
         <table>
           <thead>
             <tr>
@@ -77,7 +103,7 @@
               <th>Time</th>
               <th>Latitude</th>
               <th>Longitude</th>
-              <th>Verification</th>
+              <th>Verification Status</th>
             </tr>
           </thead>
           <tbody id="recordsTable">
@@ -89,11 +115,53 @@
   </main>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script>
     const db = firebase.firestore();
+    const auth = firebase.auth();
 
+    const DESIGNATED_ADMIN_EMAIL = 'admin@cit.edu';
+    let isReportInitialized = false;
+
+    // Admin Auth Guard
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        window.location.replace('index.html?adminLogin=1');
+        return;
+      }
+
+      const idTokenResult = await user.getIdTokenResult().catch(() => ({ claims: {} }));
+      const isAdminUser = (user.email && user.email.toLowerCase() === DESIGNATED_ADMIN_EMAIL) || Boolean(idTokenResult.claims.admin);
+
+      if (!isAdminUser) {
+        await auth.signOut();
+        window.location.replace('index.html?adminLogin=1');
+        return;
+      }
+
+      document.body.style.display = 'block';
+
+      if (!isReportInitialized) {
+        isReportInitialized = true;
+        loadFilters().then(() => loadAttendance());
+      }
+    });
+
+    async function adminLogout() {
+      try {
+        await auth.signOut();
+      } catch (err) {
+        console.error('Signout error:', err);
+      }
+      localStorage.clear();
+      window.location.replace('index.html?adminLogin=1');
+    }
+
+
+
+    
     let allRecords = [];
     let deptMap = {};
 
@@ -217,8 +285,6 @@
     document.getElementById('dateFilter').addEventListener('change', filterRecords);
     document.getElementById('subjectFilter').addEventListener('change', filterRecords);
     document.getElementById('facultyFilter').addEventListener('change', filterRecords);
-
-    loadFilters().then(() => loadAttendance());
   </script>
 </body>
 </html>

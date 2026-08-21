@@ -80,28 +80,88 @@
   </main>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script>
     const db = firebase.firestore();
+    const auth = firebase.auth();
 
-    const facultyId = localStorage.getItem('facultyId');
-    const facultyName = localStorage.getItem('facultyName');
+    let facultyId = localStorage.getItem('facultyId');
+    let facultyUid = localStorage.getItem('facultyUid');
+    let facultyName = localStorage.getItem('facultyName') || 'Faculty';
     const reportSubjectId = localStorage.getItem('reportSubjectId');
-    if (!facultyId) { window.location.href = 'faculty.html'; }
-
     let allRecords = [];
+    let isInitialized = false;
+
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        localStorage.clear();
+        window.location.replace('faculty.html');
+        return;
+      }
+
+      facultyUid = user.uid;
+
+      // Profile lookup
+      let facultyDoc = await db.collection('faculty').doc(user.uid).get().catch(() => null);
+      let facultyData = facultyDoc && facultyDoc.exists ? facultyDoc.data() : null;
+      let effectiveId = user.uid;
+
+      if (!facultyData && user.email) {
+        const emailSnap = await db.collection('faculty').where('email', '==', user.email.toLowerCase()).get().catch(() => null);
+        if (emailSnap && !emailSnap.empty) {
+          facultyDoc = emailSnap.docs[0];
+          facultyData = facultyDoc.data();
+          effectiveId = facultyDoc.id;
+        }
+      }
+
+      if (!facultyData) {
+        await auth.signOut();
+        localStorage.clear();
+        window.location.replace('faculty.html');
+        return;
+      }
+
+      facultyId = effectiveId;
+      facultyName = facultyData.name || 'Faculty';
+      localStorage.setItem('facultyId', facultyId);
+      localStorage.setItem('facultyUid', facultyUid);
+      localStorage.setItem('facultyName', facultyName);
+
+      if (!isInitialized) {
+        isInitialized = true;
+        loadAttendance();
+      }
+    });
 
     async function loadAttendance() {
       const tbody = document.getElementById('recordsTable');
       try {
-        let query = db.collection('attendance').where('facultyId', '==', facultyId);
-        if (reportSubjectId) {
-          query = query.where('subjectId', '==', reportSubjectId);
+        let q1 = db.collection('attendance').where('facultyId', '==', facultyId);
+        if (reportSubjectId) q1 = q1.where('subjectId', '==', reportSubjectId);
+
+        const queries = [q1.get()];
+        if (facultyUid && facultyUid !== facultyId) {
+          let q2 = db.collection('attendance').where('facultyUid', '==', facultyUid);
+          if (reportSubjectId) q2 = q2.where('subjectId', '==', reportSubjectId);
+          queries.push(q2.get());
         }
-        const snapshot = await query.get();
+
+        const snapshots = await Promise.all(queries);
+        const seenDocIds = new Set();
         allRecords = [];
-        snapshot.forEach(doc => allRecords.push(doc.data()));
+
+        snapshots.forEach(snap => {
+          snap.forEach(doc => {
+            if (!seenDocIds.has(doc.id)) {
+              seenDocIds.add(doc.id);
+              allRecords.push(doc.data());
+            }
+          });
+        });
+
         allRecords.sort((a, b) => (b.timestamp?.toDate?.() || 0) - (a.timestamp?.toDate?.() || 0));
         updateStats(allRecords);
         renderTable(allRecords);
@@ -169,8 +229,6 @@
       a.click();
       URL.revokeObjectURL(url);
     }
-
-    loadAttendance();
   </script>
 </body>
 </html>

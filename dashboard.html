@@ -261,18 +261,20 @@
   </main>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.1/dist/face-api.min.js"></script>
   <script>
     const db = firebase.firestore();
+    const auth = firebase.auth();
 
-    const studentId = localStorage.getItem('studentId');
-    const studentName = localStorage.getItem('studentName');
-    const studentDept = localStorage.getItem('studentDept');
-    const faceRegistered = localStorage.getItem('faceRegistered') === 'true';
-
-    if (!studentId) { window.location.href = 'index.html'; }
+    let studentId = localStorage.getItem('studentId');
+    let studentUid = localStorage.getItem('studentUid');
+    let studentName = localStorage.getItem('studentName') || 'Student';
+    let studentDept = localStorage.getItem('studentDept') || '';
+    let faceRegistered = localStorage.getItem('faceRegistered') === 'true';
+    let isDashboardInitialized = false;
 
     // Display formatted date in hero
     const nowOptions = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
@@ -280,47 +282,106 @@
     const dateEl = document.getElementById('currentDateDisplay');
     if (dateEl) dateEl.textContent = todayFormatted;
 
-    // Set Welcome headers
-    document.getElementById('welcome').textContent = `${studentName || 'Student'}`;
-    const heroGreeting = document.getElementById('heroGreeting');
-    if (heroGreeting) heroGreeting.textContent = `Welcome back, ${studentName || 'Student'}!`;
+    // =========================================================================
+    // STUDENT AUTHENTICATION & LEGACY PROFILE GUARD
+    // =========================================================================
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        localStorage.clear();
+        window.location.replace('student.html');
+        return;
+      }
 
-    if (studentDept) {
-      db.collection('departments').doc(studentDept).get().then(snap => {
-        const deptName = snap.exists ? snap.data().name : studentDept;
-        document.getElementById('classInfo').textContent = deptName;
+      studentUid = user.uid;
+
+      // 1. Check profile by UID (new architecture)
+      let studentDoc = await db.collection('students').doc(user.uid).get().catch(() => null);
+      let studentData = studentDoc && studentDoc.exists ? studentDoc.data() : null;
+      let effectiveId = user.uid;
+
+      // 2. Fallback check by email (legacy document support)
+      if (!studentData && user.email) {
+        const emailSnap = await db.collection('students').where('email', '==', user.email.toLowerCase()).get().catch(() => null);
+        if (emailSnap && !emailSnap.empty) {
+          studentDoc = emailSnap.docs[0];
+          studentData = studentDoc.data();
+          effectiveId = studentDoc.id;
+        }
+      }
+
+      if (!studentData) {
+        // Not an active/approved student account
+        await auth.signOut();
+        localStorage.clear();
+        window.location.replace('student.html');
+        return;
+      }
+
+      studentId = effectiveId;
+      studentName = studentData.name || 'Student';
+      studentDept = studentData.dept || '';
+      faceRegistered = Boolean(studentData.faceRegistered);
+
+      localStorage.setItem('studentId', studentId);
+      localStorage.setItem('studentUid', studentUid);
+      localStorage.setItem('studentName', studentName);
+      localStorage.setItem('studentDept', studentDept);
+      localStorage.setItem('faceRegistered', faceRegistered ? 'true' : 'false');
+
+      // Update UI Header Elements
+      document.getElementById('welcome').textContent = studentName;
+      const heroGreeting = document.getElementById('heroGreeting');
+      if (heroGreeting) heroGreeting.textContent = `Welcome back, ${studentName}!`;
+
+      if (studentDept) {
+        db.collection('departments').doc(studentDept).get().then(snap => {
+          const deptName = snap.exists ? snap.data().name : studentDept;
+          document.getElementById('classInfo').textContent = deptName;
+          const heroDept = document.getElementById('heroDeptDisplay');
+          if (heroDept) heroDept.textContent = deptName;
+        }).catch(() => {
+          document.getElementById('classInfo').textContent = studentDept || '-';
+          const heroDept = document.getElementById('heroDeptDisplay');
+          if (heroDept) heroDept.textContent = studentDept || 'Student';
+        });
+      } else {
+        document.getElementById('classInfo').textContent = '-';
         const heroDept = document.getElementById('heroDeptDisplay');
-        if (heroDept) heroDept.textContent = deptName;
-      }).catch(() => {
-        document.getElementById('classInfo').textContent = studentDept || '-';
-        const heroDept = document.getElementById('heroDeptDisplay');
-        if (heroDept) heroDept.textContent = studentDept || 'Student';
-      });
-    } else {
-      document.getElementById('classInfo').textContent = '-';
-      const heroDept = document.getElementById('heroDeptDisplay');
-      if (heroDept) heroDept.textContent = 'Student';
-    }
-    
-    // Update Biometric Status Pills
-    const regStatusEl = document.getElementById('regStatus');
-    const heroBioStatus = document.getElementById('heroBioStatus');
-    if (regStatusEl) {
-      regStatusEl.textContent = faceRegistered ? '● Face Registered' : 'Pending Enrollment';
-      regStatusEl.className = faceRegistered ? 'badge green' : 'badge';
-    }
-    if (heroBioStatus) {
-      heroBioStatus.textContent = faceRegistered ? 'Biometrics Active' : 'Biometrics Not Registered';
-    }
-    
-    if (faceRegistered) {
-      document.getElementById('startRegBtn').disabled = true;
-      document.getElementById('captureRegBtn').disabled = true;
-    }
+        if (heroDept) heroDept.textContent = 'Student';
+      }
+
+      // Update Biometric Status Pills
+      const regStatusEl = document.getElementById('regStatus');
+      const heroBioStatus = document.getElementById('heroBioStatus');
+      if (regStatusEl) {
+        regStatusEl.textContent = faceRegistered ? '● Face Registered' : 'Pending Enrollment';
+        regStatusEl.className = faceRegistered ? 'badge green' : 'badge';
+      }
+      if (heroBioStatus) {
+        heroBioStatus.textContent = faceRegistered ? 'Biometrics Active' : 'Biometrics Not Registered';
+      }
+
+      if (faceRegistered) {
+        const startBtn = document.getElementById('startRegBtn');
+        const capBtn = document.getElementById('captureRegBtn');
+        if (startBtn) startBtn.disabled = true;
+        if (capBtn) capBtn.disabled = true;
+      }
+
+      if (!isDashboardInitialized) {
+        isDashboardInitialized = true;
+        loadSettings();
+        loadMySubjects().then(() => {
+          loadActiveSessions();
+          loadMyAttendance();
+        });
+      }
+    });
 
     let modelsLoaded = false;
     const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.1/weights';
     let studentSubjects = [];
+    let studentSubjectsMap = {};
     let distanceThreshold = 10;
     let gpsAccuracyThreshold = 50;
     const faceDistanceThreshold = 0.6;
@@ -376,39 +437,6 @@
       }
     }
 
-    async function loadMySubjects() {
-      const loadingEl = document.getElementById('subjectsLoading');
-      const listEl = document.getElementById('subjectsList');
-      try {
-        const subjectSnap = await db.collection('subjects').where('studentIds', 'array-contains', studentId).get();
-        
-        if (subjectSnap.empty) {
-          loadingEl.textContent = 'No subjects currently enrolled. Please ask your department administrator to assign subjects.';
-          loadingEl.style.display = 'block';
-          return;
-        }
-        
-        loadingEl.style.display = 'none';
-        listEl.style.display = 'block';
-        listEl.innerHTML = '';
-        studentSubjects = [];
-        subjectSnap.forEach(doc => {
-          const s = doc.data();
-          studentSubjects.push(doc.id);
-          listEl.innerHTML += `
-            <div class="subject-card-item">
-              <div class="subject-card-top">
-                <span class="subject-card-name">📖 ${s.subjectName}</span>
-                <span class="badge blue">${s.subjectCode || 'Course'}</span>
-              </div>
-            </div>`;
-        });
-      } catch (err) {
-        loadingEl.textContent = 'Error loading enrolled subjects';
-        console.error(err);
-      }
-    }
-
     async function loadActiveSessions() {
       const loadingEl = document.getElementById('sessionsLoading');
       const listEl = document.getElementById('sessionsList');
@@ -416,22 +444,42 @@
       const beaconText = document.getElementById('beaconText');
       
       try {
-        const snapshot = await db.collection('attendanceSessions')
-          .where('active', '==', true)
-          .get();
+        if (!studentSubjects || studentSubjects.length === 0) {
+          if (loadingEl) loadingEl.textContent = 'No active attendance sessions right now.';
+          if (loadingEl) loadingEl.style.display = 'block';
+          const markCard = document.getElementById('markAttendanceCard');
+          if (markCard) markCard.style.display = 'none';
+          if (beaconText) beaconText.textContent = 'No Active Classes';
+          return;
+        }
+
+        // Query active sessions scoped strictly to the student's enrolled subjects
+        const sessionQueries = studentSubjects.map(sid =>
+          db.collection('attendanceSessions')
+            .where('subjectId', '==', sid)
+            .where('active', '==', true)
+            .get()
+        );
+        const sessionSnapshots = await Promise.all(sessionQueries);
         
         const sessionsBySubject = {};
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const sid = data.subjectId;
-          if (!sessionsBySubject[sid] || (data.classNumber || 0) > (sessionsBySubject[sid].classNumber || 0)) {
-            sessionsBySubject[sid] = { id: doc.id, ...data };
-          }
+        sessionSnapshots.forEach(snap => {
+          snap.forEach(doc => {
+            const data = doc.data();
+            const sid = data.subjectId;
+            const expiresAt = data.expiresAt;
+            if (expiresAt && expiresAt.toDate && expiresAt.toDate() <= new Date()) {
+              return;
+            }
+            if (!sessionsBySubject[sid] || (data.classNumber || 0) > (sessionsBySubject[sid].classNumber || 0)) {
+              sessionsBySubject[sid] = { id: doc.id, ...data };
+            }
+          });
         });
         
         activeSessions = sessionsBySubject;
         
-        const subjectIds = Object.keys(sessionsBySubject).filter(id => studentSubjects.includes(id));
+        const subjectIds = Object.keys(sessionsBySubject);
         
         if (subjectIds.length === 0) {
           if (loadingEl) loadingEl.textContent = 'No active attendance sessions right now.';
@@ -447,12 +495,11 @@
         const markCard = document.getElementById('markAttendanceCard');
         if (markCard) markCard.style.display = 'block';
         
-        const subjectPromises = subjectIds.map(async (sid) => {
-          const subDoc = await db.collection('subjects').doc(sid).get();
-          return { id: sid, name: subDoc.exists ? subDoc.data().subjectName || sid : sid };
-        });
+        const subjects = subjectIds.map(sid => ({
+          id: sid,
+          name: studentSubjectsMap[sid] || sid
+        }));
         
-        const subjects = await Promise.all(subjectPromises);
         if (loadingEl) loadingEl.style.display = 'none';
         if (listEl) listEl.style.display = 'block';
         if (listEl) listEl.innerHTML = subjects.map(s => {
@@ -758,20 +805,72 @@
       });
     }
 
+    async function loadMySubjects() {
+      const loadingEl = document.getElementById('subjectsLoading');
+      const listEl = document.getElementById('subjectsList');
+      try {
+        const queries = [db.collection('subjects').where('studentIds', 'array-contains', studentId).get()];
+        if (studentUid && studentUid !== studentId) {
+          queries.push(db.collection('subjects').where('studentIds', 'array-contains', studentUid).get());
+        }
+        const snapshots = await Promise.all(queries);
+        const seenSubjectIds = new Set();
+        const subjectDocs = [];
+        snapshots.forEach(snap => {
+          snap.forEach(doc => {
+            if (!seenSubjectIds.has(doc.id)) {
+              seenSubjectIds.add(doc.id);
+              subjectDocs.push(doc);
+            }
+          });
+        });
+        
+        if (subjectDocs.length === 0) {
+          loadingEl.textContent = 'No subjects currently enrolled. Please ask your department administrator to assign subjects.';
+          loadingEl.style.display = 'block';
+          return;
+        }
+        
+        loadingEl.style.display = 'none';
+        listEl.style.display = 'block';
+        listEl.innerHTML = '';
+        studentSubjects = [];
+        studentSubjectsMap = {};
+        subjectDocs.forEach(doc => {
+          const s = doc.data();
+          studentSubjects.push(doc.id);
+          studentSubjectsMap[doc.id] = s.subjectName || 'Course';
+          listEl.innerHTML += `
+            <div class="subject-card-item">
+              <div class="subject-card-top">
+                <span class="subject-card-name">📖 ${s.subjectName}</span>
+                <span class="badge blue">${s.subjectCode || 'Course'}</span>
+              </div>
+            </div>`;
+        });
+      } catch (err) {
+        loadingEl.textContent = 'Error loading enrolled subjects';
+        console.error(err);
+      }
+    }
+
     async function saveAttendance(lat, lng, subjectId, session, distance) {
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB');
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
       try {
         const attRef = db.collection('attendance');
         await attRef.add({
-          studentId,
+          studentId: studentId || currentAuthUid,
+          studentUid: currentAuthUid,
           studentName,
           studentDept,
           subjectId,
           sessionId: session?.id,
           classNumber: session?.classNumber,
           facultyId: session?.facultyId,
+          facultyUid: session?.facultyUid || session?.facultyId,
           facultyName: session?.facultyName,
           date: dateStr,
           time: timeStr,
@@ -790,32 +889,39 @@
     async function loadMyAttendance() {
       const tbody = document.getElementById('recordsTable');
       try {
-        const [snapshot, deptSnap, subjectSnap] = await Promise.all([
-          db.collection('attendance').where('studentId', '==', studentId).get(),
+        const queries = [db.collection('attendance').where('studentId', '==', studentId).get()];
+        if (studentUid && studentUid !== studentId) {
+          queries.push(db.collection('attendance').where('studentUid', '==', studentUid).get());
+        }
+        const [deptSnap, ...attSnapshots] = await Promise.all([
           db.collection('departments').get(),
-          db.collection('subjects').get()
+          ...queries
         ]);
         const deptMap = {};
         deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
-        const subjectMap = {};
-        subjectSnap.forEach(doc => { subjectMap[doc.id] = doc.data().subjectName; });
         
         let total = 0, today = 0;
         const todayDate = new Date().toLocaleDateString('en-GB');
         tbody.innerHTML = '';
+        const seenAttIds = new Set();
         const records = [];
-        snapshot.forEach((doc) => {
-          const r = doc.data();
-          records.push(r);
-          total++;
-          if (r.date === todayDate) today++;
+        attSnapshots.forEach(snap => {
+          snap.forEach((doc) => {
+            if (!seenAttIds.has(doc.id)) {
+              seenAttIds.add(doc.id);
+              const r = doc.data();
+              records.push(r);
+              total++;
+              if (r.date === todayDate) today++;
+            }
+          });
         });
         
         records.sort((a, b) => (b.timestamp?.toDate?.() || 0) - (a.timestamp?.toDate?.() || 0));
         
         records.forEach(r => {
           const distDisplay = r.distance ? `${r.distance.toFixed(1)} m` : 'N/A';
-          const subjectName = subjectMap[r.subjectId] || r.subjectId;
+          const subjectName = studentSubjectsMap[r.subjectId] || r.subjectName || r.subjectId;
           const deptName = deptMap[r.studentDept] || r.studentDept || '-';
           const coordsDisplay = (r.latitude && r.longitude) ? `${Number(r.latitude).toFixed(4)}, ${Number(r.longitude).toFixed(4)}` : '-';
           tbody.innerHTML += `<tr>
@@ -849,11 +955,6 @@
       }
     }
 
-    loadMySubjects().then(() => {
-      loadActiveSessions();
-    });
-    loadMyAttendance();
-
     function showMsg(id, type, text) {
       const el = document.getElementById(id);
       el.textContent = text;
@@ -861,7 +962,12 @@
       el.style.display = 'block';
     }
 
-    function logout() {
+    async function logout() {
+      try {
+        await auth.signOut();
+      } catch (e) {
+        console.error('Signout error:', e);
+      }
       localStorage.clear();
       window.location.href = 'index.html';
     }

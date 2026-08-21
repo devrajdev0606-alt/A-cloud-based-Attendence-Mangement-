@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body style="display: none;">
   <!-- Mesh Background Scene -->
   <div class="bg-scene">
     <div class="overlay"></div>
@@ -30,6 +30,11 @@
 
       <div class="header-actions">
         <a href="report.html" class="btn btn-primary" style="font-size:0.84rem;">📊 View Attendance Report</a>
+        <div class="user-badge" style="background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+          <div class="user-avatar" style="background: var(--amber-subtle, #fef3c7); color: var(--amber-dark, #92400e); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px;">⚙️</div>
+          <span id="adminEmailDisplay" style="font-size: 0.82rem; font-weight: 600; color: #fff;">admin@cit.edu</span>
+        </div>
+        <button type="button" class="logout-btn" onclick="adminLogout()" title="Sign out of Admin Suite">Logout</button>
         <a href="index.html" class="back-btn">Portal Home</a>
       </div>
     </div>
@@ -291,12 +296,72 @@
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script>
     const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    // =========================================================================
+    // ADMIN AUTHENTICATION GUARD
+    // =========================================================================
+    let isAdminInitialized = false;
+
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        localStorage.removeItem('adminUid');
+        localStorage.removeItem('adminEmail');
+        window.location.replace('index.html?adminLogin=1');
+        return;
+      }
+
+      const tokenResult = await user.getIdTokenResult().catch(() => null);
+      const isAdminClaim = tokenResult?.claims?.admin === true;
+
+      const userEmail = (user.email || '').toLowerCase();
+      if (userEmail !== 'admin@cit.edu' && !isAdminClaim) {
+        await auth.signOut();
+        localStorage.clear();
+        window.location.replace('index.html?adminLogin=1');
+        return;
+      }
+
+      // Reveal admin portal once authenticated
+      document.body.style.display = 'block';
+
+      // Display authenticated admin email
+      const emailDisplay = document.getElementById('adminEmailDisplay');
+      if (emailDisplay) emailDisplay.textContent = user.email;
+
+      // Initialize admin dashboard once verified
+      if (!isAdminInitialized) {
+        isAdminInitialized = true;
+        initAdminDashboard();
+      }
+    });
+
+    async function adminLogout() {
+      try {
+        await auth.signOut();
+      } catch (e) {
+        console.error('Logout error:', e);
+      }
+      localStorage.clear();
+      window.location.href = 'index.html';
+    }
+
     let currentTab = 'students';
     let deptMap = {};
+
+    function getDepartmentDisplayName(deptVal) {
+      if (!deptVal) return 'Not specified';
+      if (deptMap[deptVal]) return deptMap[deptVal];
+      const knownNames = Object.values(deptMap);
+      if (knownNames.includes(deptVal)) return deptVal;
+      if (deptVal.length <= 12 && !/^[A-Za-z0-9_-]{16,}$/.test(deptVal)) return deptVal;
+      return 'Unknown Department';
+    }
 
     // Registration Requests State
     let currentRequestTab = 'student';
@@ -406,6 +471,7 @@
         subjectDept.innerHTML = '<option value="">Select Department</option>';
         deptSnap.forEach(doc => {
           const d = doc.data();
+          deptMap[doc.id] = d.name;
           subjectDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
         });
       } catch (err) {
@@ -426,7 +492,6 @@
           db.collection('subjects').doc(subjectId).get(),
           db.collection('departments').get()
         ]);
-        const deptMap = {};
         deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
         const assigned = new Set((subjectSnap.data()?.studentIds || []));
         container.innerHTML = '';
@@ -437,8 +502,9 @@
         studentsSnap.forEach(doc => {
           const s = doc.data();
           const checked = assigned.has(doc.id) ? 'checked' : '';
-          const deptName = deptMap[s.dept] || s.dept || '-';
-          container.innerHTML += `<div class="checkbox-item"><input type="checkbox" id="stu-${doc.id}" value="${doc.id}" ${checked}><label for="stu-${doc.id}"><strong>${s.name}</strong> (${deptName})</label></div>`;
+          const deptName = getDepartmentDisplayName(s.dept);
+          const studentName = s.name || 'Student';
+          container.innerHTML += `<div class="checkbox-item"><input type="checkbox" id="stu-${doc.id}" value="${doc.id}" data-name="${studentName}" ${checked}><label for="stu-${doc.id}"><strong>${studentName}</strong> (${deptName})</label></div>`;
         });
       } catch (err) {
         container.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Error loading students</p>';
@@ -456,14 +522,19 @@
         facultyDept.innerHTML = '<option value="">Select Department</option>';
         filterDept.innerHTML = '<option value="">All Departments</option>';
         
+        deptSnap.forEach(doc => {
+          const d = doc.data();
+          deptMap[doc.id] = d.name;
+          studentDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
+          facultyDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
+          filterDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
+        });
+
         const [stuSnap, facSnap, subSnap] = await Promise.all([
           db.collection('students').get(),
           db.collection('faculty').get(),
           db.collection('subjects').get()
         ]);
-
-        const deptMap = {};
-        deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
         
         // Reset cache
         deptDataCache.studentsByDept = {};
@@ -707,18 +778,18 @@
     async function updateStats() {
       try {
         const [sSnap, fSnap, subSnap, dSnap, rSnap] = await Promise.all([
-          db.collection('students').get(),
-          db.collection('faculty').get(),
-          db.collection('subjects').get(),
-          db.collection('departments').get(),
-          db.collection('registrationRequests').where('status', '==', 'pending').get()
+          db.collection('students').get().catch(e => { console.warn('Students stats error:', e); return null; }),
+          db.collection('faculty').get().catch(e => { console.warn('Faculty stats error:', e); return null; }),
+          db.collection('subjects').get().catch(e => { console.warn('Subjects stats error:', e); return null; }),
+          db.collection('departments').get().catch(e => { console.warn('Departments stats error:', e); return null; }),
+          db.collection('registrationRequests').where('status', '==', 'pending').get().catch(e => { console.warn('RegistrationRequests stats error:', e); return null; })
         ]);
-        document.getElementById('totalStudents').textContent = sSnap.size;
-        document.getElementById('totalFaculty').textContent = fSnap.size;
-        document.getElementById('totalSubjects').textContent = subSnap.size;
-        document.getElementById('totalDepts').textContent = dSnap.size;
+        if (sSnap) document.getElementById('totalStudents').textContent = sSnap.size;
+        if (fSnap) document.getElementById('totalFaculty').textContent = fSnap.size;
+        if (subSnap) document.getElementById('totalSubjects').textContent = subSnap.size;
+        if (dSnap) document.getElementById('totalDepts').textContent = dSnap.size;
         const pendingEl = document.getElementById('totalPendingRequests');
-        if (pendingEl) pendingEl.textContent = rSnap.size;
+        if (pendingEl && rSnap) pendingEl.textContent = rSnap.size;
       } catch (err) {
         console.error('Error updating stats:', err);
       }
@@ -737,6 +808,11 @@
     async function loadRegistrationRequests() {
       const tbody = document.getElementById('requestsTableBody');
       try {
+        if (Object.keys(deptMap).length === 0) {
+          const deptSnap = await db.collection('departments').get().catch(() => null);
+          if (deptSnap) deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
+        }
+
         const snap = await db.collection('registrationRequests').get();
         allRequests = [];
         snap.forEach(doc => {
@@ -794,8 +870,8 @@
         filtered = filtered.filter(r => {
           const nameMatch = (r.name || '').toLowerCase().includes(query);
           const emailMatch = (r.email || '').toLowerCase().includes(query);
-          const deptId = r.dept || r.department || '';
-          const deptName = (deptMap[deptId] || deptId).toLowerCase();
+          const deptVal = r.dept || r.department || '';
+          const deptName = getDepartmentDisplayName(deptVal).toLowerCase();
           return nameMatch || emailMatch || deptName.includes(query);
         });
       }
@@ -807,8 +883,8 @@
       }
 
       tbody.innerHTML = filtered.map(r => {
-        const deptId = r.dept || r.department || '';
-        const deptDisplay = deptMap[deptId] || deptId || '-';
+        const deptVal = r.dept || r.department || '';
+        const deptDisplay = getDepartmentDisplayName(deptVal);
         const dateDisplay = r.createdAt?.toDate 
           ? r.createdAt.toDate().toLocaleDateString('en-GB') + ' ' + r.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           : 'Recently';
@@ -858,8 +934,8 @@
       const submitBtn = document.getElementById('confirmModalSubmitBtn');
 
       const roleLabel = requestData.role === 'faculty' ? 'Faculty Member' : 'Student';
-      const deptId = requestData.dept || requestData.department || '';
-      const deptName = deptMap[deptId] || deptId || '-';
+      const deptVal = requestData.dept || requestData.department || '';
+      const deptName = getDepartmentDisplayName(deptVal);
 
       details.innerHTML = `
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size:0.85rem;">
@@ -874,14 +950,14 @@
         badge.className = 'badge green';
         badge.textContent = 'Approve Account';
         title.textContent = `Approve ${roleLabel} Registration`;
-        text.textContent = `Approving this registration will create an active institutional account for ${requestData.name}, enabling immediate login.`;
+        text.textContent = `Firebase Authentication account already exists for this registration request. Approving will activate the official institutional profile for ${requestData.name}, enabling immediate login.`;
         submitBtn.className = 'btn btn-approve';
-        submitBtn.textContent = '✓ Confirm & Create Account';
+        submitBtn.textContent = '✓ Confirm & Activate Profile';
       } else {
         badge.className = 'badge red';
         badge.textContent = 'Reject Request';
         title.textContent = `Reject ${roleLabel} Registration`;
-        text.textContent = `Are you sure you want to reject the registration request for ${requestData.name}? No active account will be created.`;
+        text.textContent = `Are you sure you want to reject the registration request for ${requestData.name}? No active institutional profile will be created.`;
         submitBtn.className = 'btn btn-reject';
         submitBtn.textContent = '✕ Confirm Rejection';
       }
@@ -923,55 +999,50 @@
           throw new Error(`This request has already been ${currentReq.status}.`);
         }
 
+        const uid = currentReq.uid || requestId;
+        if (!uid) {
+          throw new Error('Unable to determine applicant UID for approval.');
+        }
+
         if (type === 'approve') {
-          let targetCollection = currentReq.role === 'faculty' ? 'faculty' : 'students';
-
-          // Prevent duplicate accounts if an account with this email already exists
-          const existingSnap = await db.collection(targetCollection).where('email', '==', currentReq.email).get();
-          let accountId = null;
-
-          if (existingSnap.empty) {
-            if (currentReq.role === 'faculty') {
-              const newFaculty = {
-                name: currentReq.name,
-                email: currentReq.email,
-                password: currentReq.password,
-                department: currentReq.department || currentReq.dept || '',
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-              };
-              const docRef = await db.collection('faculty').add(newFaculty);
-              accountId = docRef.id;
-            } else {
-              const newStudent = {
-                name: currentReq.name,
-                email: currentReq.email,
-                password: currentReq.password,
-                dept: currentReq.dept || currentReq.department || '',
-                faceRegistered: false,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-              };
-              const docRef = await db.collection('students').add(newStudent);
-              accountId = docRef.id;
-            }
+          if (currentReq.role === 'faculty') {
+            const newFaculty = {
+              uid: uid,
+              name: currentReq.name || '',
+              email: currentReq.email,
+              department: currentReq.department || currentReq.dept || '',
+              createdAt: currentReq.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
+              approvedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            await db.collection('faculty').doc(uid).set(newFaculty, { merge: true });
           } else {
-            accountId = existingSnap.docs[0].id;
+            const newStudent = {
+              uid: uid,
+              name: currentReq.name || '',
+              email: currentReq.email,
+              dept: currentReq.dept || currentReq.department || '',
+              faceRegistered: false,
+              createdAt: currentReq.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
+              approvedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            await db.collection('students').doc(uid).set(newStudent, { merge: true });
           }
 
           // Mark request as approved
           await reqRef.update({
             status: 'approved',
-            approvedAccountId: accountId,
+            approvedAccountId: uid,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           });
 
           if (actionMsg) {
-            actionMsg.textContent = `✓ Successfully approved registration for ${currentReq.name}. Active account created!`;
+            actionMsg.textContent = `✓ Successfully approved registration for ${currentReq.name}. Active profile activated!`;
             actionMsg.className = 'msg success';
             actionMsg.style.display = 'block';
             setTimeout(() => { actionMsg.style.display = 'none'; }, 4000);
           }
         } else if (type === 'reject') {
-          // Mark request as rejected (do NOT create active account)
+          // Mark request as rejected (do NOT create active profile, do NOT delete Firebase Auth)
           await reqRef.update({
             status: 'rejected',
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -996,6 +1067,21 @@
         console.error(err);
       } finally {
         submitBtn.disabled = false;
+      }
+    }
+
+    // Helper: Securely creates a secondary Auth user without logging out active admin session
+    async function createAuthUserWithoutSignout(email, password) {
+      const secondaryAppName = 'SecondaryAuthApp_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+      const secondaryApp = firebase.initializeApp(firebaseConfig, secondaryAppName);
+      try {
+        const secondaryAuth = secondaryApp.auth();
+        const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+        const uid = cred.user.uid;
+        await secondaryAuth.signOut();
+        return uid;
+      } finally {
+        try { await secondaryApp.delete(); } catch(e) {}
       }
     }
 
@@ -1028,24 +1114,43 @@
     document.getElementById('addStudentForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const msg = document.getElementById('studentMsg');
-      const student = {
-        name: document.getElementById('name').value.trim(),
-        email: document.getElementById('email').value.trim().toLowerCase(),
-        password: document.getElementById('password').value.trim(),
-        dept: document.getElementById('studentDept').value,
-        faceRegistered: false,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      };
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim().toLowerCase();
+      const password = document.getElementById('password').value.trim();
+      const dept = document.getElementById('studentDept').value;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Registering Student...';
+      msg.style.display = 'none';
+
+      let createdUid = null;
       try {
-        const snap = await db.collection('students').where('email', '==', student.email).get();
+        // 1. Check if student email already exists in Firestore
+        const snap = await db.collection('students').where('email', '==', email).get();
         if (!snap.empty) {
-          msg.textContent = 'Student email already exists!';
+          msg.textContent = 'A student profile with this email already exists!';
           msg.className = 'msg error';
           msg.style.display = 'block';
           return;
         }
-        await db.collection('students').add(student);
-        msg.textContent = 'Student onboarded successfully!';
+
+        // 2. Create Firebase Authentication account securely via isolated secondary app
+        createdUid = await createAuthUserWithoutSignout(email, password);
+
+        // 3. Create Firestore student profile keyed by UID (NO password stored)
+        const student = {
+          uid: createdUid,
+          name: name,
+          email: email,
+          dept: dept,
+          faceRegistered: false,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection('students').doc(createdUid).set(student);
+
+        msg.textContent = 'Student onboarded successfully! Firebase Auth credentials provisioned.';
         msg.className = 'msg success';
         msg.style.display = 'block';
         document.getElementById('addStudentForm').reset();
@@ -1053,32 +1158,58 @@
         updateStats();
         renderListing();
       } catch (err) {
-        msg.textContent = 'Error: ' + err.message;
+        let errorMsg = err.message;
+        if (err.code === 'auth/email-already-in-use') {
+          errorMsg = 'An account with this email already exists in Firebase Authentication.';
+        }
+        msg.textContent = 'Error: ' + errorMsg;
         msg.className = 'msg error';
         msg.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Register Student';
       }
     });
 
     document.getElementById('addFacultyForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const msg = document.getElementById('facultyMsg');
-      const faculty = {
-        name: document.getElementById('facultyName').value.trim(),
-        email: document.getElementById('facultyEmail').value.trim().toLowerCase(),
-        password: document.getElementById('facultyPassword').value.trim(),
-        department: document.getElementById('facultyDept').value,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      };
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      const name = document.getElementById('facultyName').value.trim();
+      const email = document.getElementById('facultyEmail').value.trim().toLowerCase();
+      const password = document.getElementById('facultyPassword').value.trim();
+      const dept = document.getElementById('facultyDept').value;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Registering Faculty...';
+      msg.style.display = 'none';
+
+      let createdUid = null;
       try {
-        const snap = await db.collection('faculty').where('email', '==', faculty.email).get();
+        // 1. Check if faculty email already exists in Firestore
+        const snap = await db.collection('faculty').where('email', '==', email).get();
         if (!snap.empty) {
-          msg.textContent = 'Faculty email already exists!';
+          msg.textContent = 'A faculty profile with this email already exists!';
           msg.className = 'msg error';
           msg.style.display = 'block';
           return;
         }
-        await db.collection('faculty').add(faculty);
-        msg.textContent = 'Faculty member onboarded successfully!';
+
+        // 2. Create Firebase Authentication account securely via isolated secondary app
+        createdUid = await createAuthUserWithoutSignout(email, password);
+
+        // 3. Create Firestore faculty profile keyed by UID (NO password stored)
+        const faculty = {
+          uid: createdUid,
+          name: name,
+          email: email,
+          department: dept,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection('faculty').doc(createdUid).set(faculty);
+
+        msg.textContent = 'Faculty member onboarded successfully! Firebase Auth credentials provisioned.';
         msg.className = 'msg success';
         msg.style.display = 'block';
         document.getElementById('addFacultyForm').reset();
@@ -1087,9 +1218,16 @@
         updateStats();
         renderListing();
       } catch (err) {
-        msg.textContent = 'Error: ' + err.message;
+        let errorMsg = err.message;
+        if (err.code === 'auth/email-already-in-use') {
+          errorMsg = 'An account with this email already exists in Firebase Authentication.';
+        }
+        msg.textContent = 'Error: ' + errorMsg;
         msg.className = 'msg error';
         msg.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Register Faculty';
       }
     });
 
@@ -1101,7 +1239,8 @@
         subjectCode: document.getElementById('subjectCode').value.trim(),
         facultyId: document.getElementById('subjectFaculty').value,
         departmentId: document.getElementById('subjectDept').value,
-        studentIds: []
+        studentIds: [],
+        enrolledRoster: []
       };
       try {
         await db.collection('subjects').add(subject);
@@ -1125,9 +1264,24 @@
       const msg = document.getElementById('assignMsg');
       const subjectId = document.getElementById('assignSubject').value;
       const checkboxes = document.querySelectorAll('#studentCheckboxes input:checked');
+      
+      // Authoritative enrollment relationship
       const studentIds = Array.from(checkboxes).map(cb => cb.value);
+      
+      // Non-sensitive display cache containing ONLY id and name
+      const enrolledRoster = Array.from(checkboxes).map(cb => {
+        const studentName = cb.getAttribute('data-name') || cb.closest('.checkbox-item')?.querySelector('label strong')?.textContent?.trim() || 'Student';
+        return {
+          id: cb.value,
+          name: studentName
+        };
+      });
+
       try {
-        await db.collection('subjects').doc(subjectId).update({ studentIds });
+        await db.collection('subjects').doc(subjectId).update({
+          studentIds: studentIds,
+          enrolledRoster: enrolledRoster
+        });
         msg.textContent = 'Student enrollment saved successfully!';
         msg.className = 'msg success';
         msg.style.display = 'block';
@@ -1191,12 +1345,14 @@
       }
     }
 
-    loadFacultyOptions();
-    loadDepartments();
-    loadRegistrationRequests();
-    loadSettings();
-    updateStats();
-    renderListing();
+    function initAdminDashboard() {
+      loadFacultyOptions();
+      loadDepartments();
+      loadRegistrationRequests();
+      loadSettings();
+      updateStats();
+      renderListing();
+    }
   </script>
 </body>
 </html>

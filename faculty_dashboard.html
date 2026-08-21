@@ -97,17 +97,74 @@
   </main>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script>
     const db = firebase.firestore();
+    const auth = firebase.auth();
 
-    const facultyId = localStorage.getItem('facultyId');
-    const facultyName = localStorage.getItem('facultyName');
+    let facultyId = localStorage.getItem('facultyId');
+    let facultyUid = localStorage.getItem('facultyUid');
+    let facultyName = localStorage.getItem('facultyName') || 'Faculty';
+    let facultyDept = localStorage.getItem('facultyDept') || '';
     let gpsAccuracyThreshold = 50;
-    if (!facultyId) { window.location.href = 'faculty.html'; }
+    let isDashboardInitialized = false;
 
-    document.getElementById('welcome').textContent = `${facultyName || 'Faculty'}`;
+    // =========================================================================
+    // FACULTY AUTHENTICATION & LEGACY PROFILE GUARD
+    // =========================================================================
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        localStorage.clear();
+        window.location.replace('faculty.html');
+        return;
+      }
+
+      facultyUid = user.uid;
+
+      // 1. Check profile by UID (new architecture)
+      let facultyDoc = await db.collection('faculty').doc(user.uid).get().catch(() => null);
+      let facultyData = facultyDoc && facultyDoc.exists ? facultyDoc.data() : null;
+      let effectiveId = user.uid;
+
+      // 2. Fallback check by email (legacy document support)
+      if (!facultyData && user.email) {
+        const emailSnap = await db.collection('faculty').where('email', '==', user.email.toLowerCase()).get().catch(() => null);
+        if (emailSnap && !emailSnap.empty) {
+          facultyDoc = emailSnap.docs[0];
+          facultyData = facultyDoc.data();
+          effectiveId = facultyDoc.id;
+        }
+      }
+
+      if (!facultyData) {
+        // Not an active/approved faculty account
+        await auth.signOut();
+        localStorage.clear();
+        window.location.replace('faculty.html');
+        return;
+      }
+
+      facultyId = effectiveId;
+      facultyName = facultyData.name || 'Faculty';
+      facultyDept = facultyData.department || '';
+
+      localStorage.setItem('facultyId', facultyId);
+      localStorage.setItem('facultyUid', facultyUid);
+      localStorage.setItem('facultyName', facultyName);
+      localStorage.setItem('facultyDept', facultyDept);
+
+      document.getElementById('welcome').textContent = facultyName;
+
+      if (!isDashboardInitialized) {
+        isDashboardInitialized = true;
+        loadSettings();
+        loadSubjects();
+        loadActiveSessions();
+        setInterval(refreshSessionsAndCleanup, 15000);
+      }
+    });
 
     async function loadSettings() {
       try {
@@ -125,13 +182,28 @@
     async function loadSubjects() {
       const tbody = document.getElementById('subjectsTable');
       try {
-        const snapshot = await db.collection('subjects').where('facultyId', '==', facultyId).get();
-        if (snapshot.empty) {
+        const queries = [db.collection('subjects').where('facultyId', '==', facultyId).get()];
+        if (facultyUid && facultyUid !== facultyId) {
+          queries.push(db.collection('subjects').where('facultyId', '==', facultyUid).get());
+        }
+        const snapshots = await Promise.all(queries);
+        const seenSubjectIds = new Set();
+        const subjectDocs = [];
+        snapshots.forEach(snap => {
+          snap.forEach(doc => {
+            if (!seenSubjectIds.has(doc.id)) {
+              seenSubjectIds.add(doc.id);
+              subjectDocs.push(doc);
+            }
+          });
+        });
+
+        if (subjectDocs.length === 0) {
           tbody.innerHTML = '<tr><td colspan="4" class="empty">No subjects assigned yet. Please contact admin.</td></tr>';
           return;
         }
         tbody.innerHTML = '';
-        for (const doc of snapshot.docs) {
+        for (const doc of subjectDocs) {
           const s = doc.data();
           const sessionSnapshot = await db.collection('attendanceSessions').where('subjectId', '==', doc.id).where('active', '==', true).get();
           const activeSession = sessionSnapshot.docs.find(sessionDoc => {
@@ -164,7 +236,7 @@
           </tr>`;
         }
         document.getElementById('analyticsSubject').innerHTML = '<option value="">-- Select Subject --</option>';
-        for (const doc of snapshot.docs) {
+        for (const doc of subjectDocs) {
           document.getElementById('analyticsSubject').innerHTML += `<option value="${doc.id}">${doc.data().subjectName} (${doc.data().subjectCode})</option>`;
         }
       } catch (err) {
@@ -176,17 +248,28 @@
     async function loadActiveSessions() {
       const container = document.getElementById('activeSessions');
       try {
-        const snapshot = await db.collection('attendanceSessions').where('facultyId', '==', facultyId).where('active', '==', true).get();
-        const activeDocs = snapshot.docs.filter(sessionDoc => {
-          const expiresAt = sessionDoc.data().expiresAt;
-          return !expiresAt || expiresAt.toDate() > new Date();
-        });
-        for (const sessionDoc of snapshot.docs) {
-          const expiresAt = sessionDoc.data().expiresAt;
-          if (expiresAt && expiresAt.toDate() <= new Date()) {
-            await db.collection('attendanceSessions').doc(sessionDoc.id).update({ active: false });
-          }
+        const queries = [db.collection('attendanceSessions').where('facultyId', '==', facultyId).where('active', '==', true).get()];
+        if (facultyUid && facultyUid !== facultyId) {
+          queries.push(db.collection('attendanceSessions').where('facultyUid', '==', facultyUid).where('active', '==', true).get());
         }
+        const snapshots = await Promise.all(queries);
+        const seenSessionIds = new Set();
+        const activeDocs = [];
+
+        snapshots.forEach(snap => {
+          snap.forEach(sessionDoc => {
+            if (!seenSessionIds.has(sessionDoc.id)) {
+              seenSessionIds.add(sessionDoc.id);
+              const expiresAt = sessionDoc.data().expiresAt;
+              if (!expiresAt || expiresAt.toDate() > new Date()) {
+                activeDocs.push(sessionDoc);
+              } else {
+                db.collection('attendanceSessions').doc(sessionDoc.id).update({ active: false }).catch(() => {});
+              }
+            }
+          });
+        });
+
         if (activeDocs.length === 0) {
           container.innerHTML = '<p class="empty">No active attendance sessions in progress.</p>';
           return;
@@ -306,9 +389,12 @@
         const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         const dateStr = now.toLocaleDateString('en-GB');
         const classNumber = await getNextClassNumber(subjectId);
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : (facultyUid || facultyId);
+
         await db.collection('attendanceSessions').add({
           subjectId,
-          facultyId,
+          facultyId: facultyId || currentAuthUid,
+          facultyUid: currentAuthUid,
           facultyName,
           active: true,
           latitude: selectedPos.coords.latitude,
@@ -351,6 +437,7 @@
       }
     }
 
+    // Step 9: Use subject.enrolledRoster for non-sensitive display (zero queries to students collection)
     async function loadAnalytics() {
       const subjectId = document.getElementById('analyticsSubject').value;
       const container = document.getElementById('analyticsContainer');
@@ -359,20 +446,24 @@
         return;
       }
       try {
-        const [subjectSnap, studentsSnap, sessionsSnap, attendanceSnap] = await Promise.all([
+        const [subjectSnap, sessionsSnap, attendanceSnap] = await Promise.all([
           db.collection('subjects').doc(subjectId).get(),
-          db.collection('students').get(),
           db.collection('attendanceSessions').where('subjectId', '==', subjectId).where('active', '==', false).get(),
           db.collection('attendance').where('subjectId', '==', subjectId).get()
         ]);
         const subject = subjectSnap.data();
         const studentIds = subject?.studentIds || [];
-        const students = [];
-        studentsSnap.forEach(doc => {
-          if (studentIds.includes(doc.id)) {
-            students.push({ id: doc.id, name: doc.data().name });
-          }
-        });
+        const enrolledRoster = subject?.enrolledRoster || [];
+
+        // Build roster from non-sensitive enrolledRoster cache, with graceful fallback for legacy subjects
+        const rosterMap = {};
+        enrolledRoster.forEach(r => { if (r && r.id) rosterMap[r.id] = r.name || 'Student'; });
+
+        const students = studentIds.map(id => ({
+          id: id,
+          name: rosterMap[id] || `Student (${id.substring(0, 6)}...)`
+        }));
+
         const sessions = [];
         sessionsSnap.forEach(doc => {
           sessions.push({ id: doc.id, ...doc.data() });
@@ -388,6 +479,7 @@
           const sid = a.sessionId;
           if (!attendanceBySession[sid]) attendanceBySession[sid] = {};
           attendanceBySession[sid][a.studentId] = true;
+          if (a.studentUid) attendanceBySession[sid][a.studentUid] = true;
         });
         let html = '<div class="att-matrix"><table><thead><tr><th>Enrolled Student</th>';
         sessions.forEach(s => {
@@ -421,15 +513,15 @@
       window.location.href = 'faculty_report.html';
     }
 
-    function logout() {
+    async function logout() {
+      try {
+        await auth.signOut();
+      } catch (e) {
+        console.error('Signout error:', e);
+      }
       localStorage.clear();
       window.location.href = 'index.html';
     }
-
-    loadSubjects();
-    loadActiveSessions();
-    loadSettings();
-    setInterval(refreshSessionsAndCleanup, 15000);
   </script>
 </body>
 </html>

@@ -13,3 +13,4 @@ if (!firebase.apps.length) {
 }
 
 window.db = firebase.firestore();
+window.auth = firebase.auth ? firebase.auth() : null;
