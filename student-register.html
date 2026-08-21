@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Registration - CIT Attendance Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Background Scene -->
+  <div class="bg-scene">
+    <div class="overlay"></div>
+  </div>
+
+  <main class="page-wrap" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 24px;">
+    <div style="width: 100%; max-width: 460px;">
+      <a href="index.html" class="back-btn" style="margin-bottom: 20px;">← Back to Portal Home</a>
+      
+      <div class="card" style="padding: 32px 28px; box-shadow: var(--shadow-glass);">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div class="logo-placeholder" style="margin: 0 auto 14px; width: 52px; height: 52px;">
+            <img src="cit logo.jpg" alt="CIT Logo" class="cit-logo" />
+          </div>
+          <span class="badge blue" style="margin-bottom: 8px;">👨‍🎓 Student Portal</span>
+          <h1 style="font-family: var(--font-display); font-size: 1.45rem; font-weight: 800; color: var(--primary-navy); margin-top: 4px;">Student Registration</h1>
+          <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 4px;">Create your student account for smart attendance</p>
+        </div>
+
+        <form id="studentRegisterForm" style="display: flex; flex-direction: column; gap: 14px;">
+          <div>
+            <label class="form-label" for="name">Full Student Name *</label>
+            <div class="input-wrap" style="margin-bottom: 0;">
+              <span class="input-icon">👤</span>
+              <input type="text" id="name" placeholder="Alex Johnson" required />
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label" for="email">Institutional Email *</label>
+            <div class="input-wrap" style="margin-bottom: 0;">
+              <span class="input-icon">📧</span>
+              <input type="email" id="email" placeholder="student@cit.edu" required autocomplete="username" />
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label" for="dept">Academic Department *</label>
+            <select id="dept" required>
+              <option value="">-- Select Department --</option>
+            </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+              <label class="form-label" for="password">Password *</label>
+              <div class="input-wrap" style="margin-bottom: 0;">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="password" placeholder="Min 6 chars" required minlength="6" autocomplete="new-password" />
+              </div>
+            </div>
+            <div>
+              <label class="form-label" for="confirmPassword">Confirm *</label>
+              <div class="input-wrap" style="margin-bottom: 0;">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="confirmPassword" placeholder="Repeat pass" required minlength="6" autocomplete="new-password" />
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" id="submitBtn" class="btn btn-student" style="width: 100%; margin-top: 8px;">Create Student Account</button>
+        </form>
+
+        <div id="regMsg" class="msg"></div>
+
+        <div style="text-align: center; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-light); font-size: 0.85rem; color: var(--text-muted);">
+          Already have an account? <a href="student.html" style="color: var(--accent-blue); font-weight: 600; text-decoration: none;">Login here</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script>
+    const db = firebase.firestore();
+
+    if (localStorage.getItem('studentId')) {
+      window.location.replace('dashboard.html');
+    }
+
+    async function loadDepartments() {
+      const deptSelect = document.getElementById('dept');
+      try {
+        const snap = await db.collection('departments').orderBy('name').get();
+        deptSelect.innerHTML = '<option value="">-- Select Department --</option>';
+        snap.forEach(doc => {
+          deptSelect.innerHTML += `<option value="${doc.id}">${doc.data().name}</option>`;
+        });
+      } catch (err) {
+        console.error('Error loading departments:', err);
+      }
+    }
+
+    loadDepartments();
+
+    document.getElementById('studentRegisterForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById('regMsg');
+      const submitBtn = document.getElementById('submitBtn');
+
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim().toLowerCase();
+      const dept = document.getElementById('dept').value;
+      const pass = document.getElementById('password').value;
+      const confirmPass = document.getElementById('confirmPassword').value;
+
+      if (pass !== confirmPass) {
+        msg.textContent = 'Passwords do not match.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Creating Account...';
+
+      try {
+        const snap = await db.collection('students').where('email', '==', email).get();
+        if (!snap.empty) {
+          msg.textContent = 'A student account with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Create Student Account';
+          return;
+        }
+
+        const newStudent = {
+          name,
+          email,
+          password: pass,
+          dept,
+          faceRegistered: false,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        const docRef = await db.collection('students').add(newStudent);
+
+        msg.textContent = '🎉 Account registered successfully! Redirecting to login...';
+        msg.className = 'msg success';
+        msg.style.display = 'block';
+
+        setTimeout(() => {
+          window.location.href = 'student.html';
+        }, 1500);
+      } catch (err) {
+        msg.textContent = 'Error: ' + err.message;
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Student Account';
+      }
+    });
+  </script>
+</body>
+</html>

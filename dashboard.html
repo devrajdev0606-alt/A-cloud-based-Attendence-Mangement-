@@ -1,296 +1,504 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Student Dashboard - Face Attendance</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-  body { min-height: 100vh; background: #f5f5f7; color: #1d1d1f; padding: 24px; }
-  .header { display: flex; justify-content: space-between; align-items: center; max-width: 800px; margin: 0 auto 24px; }
-  .header h1 { font-size: 1.4rem; font-weight: 600; }
-  .logout-btn { padding: 8px 16px; background: #f5f5f7; color: #1d1d1f; border: 1px solid #d2d2d7; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
-  .card { max-width: 800px; margin: 0 auto 20px; padding: 24px; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #e5e5e7; }
-  .card h2 { margin-bottom: 14px; color: #1d1d1f; font-size: 1.1rem; font-weight: 600; }
-  .video-box { display: inline-block; border-radius: 10px; overflow: hidden; border: 1px solid #d2d2d7; background: #fafafa; }
-  video { display: block; width: 320px; max-width: 100%; border-radius: 8px; }
-  canvas { display: none; }
-  .btn-row { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
-  .btn { padding: 10px 22px; font-size: 14px; font-weight: 500; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
-  .reg-btn { background: #0071e3; color: #fff; }
-  .reg-btn:hover { background: #0077ed; }
-  .att-btn { background: #34c759; color: #fff; }
-  .att-btn:hover { background: #30b350; }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .msg { padding: 10px; border-radius: 6px; margin-top: 12px; font-size: 14px; display: none; }
-  .success { background: #e6f9ef; color: #0d7a3a; }
-  .error { background: #ffe6e6; color: #c0392b; }
-  .info { background: #e6f0fa; color: #0058b3; }
-  .info-box { background: #fafafa; padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 13px; color: #6e6e73; }
-  .stats { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
-  .stat { background: #fafafa; padding: 14px 24px; border-radius: 8px; min-width: 130px; text-align: center; border: 1px solid #e5e5e7; }
-  .stat-num { font-size: 1.5rem; font-weight: 600; color: #0071e3; }
-  .stat-label { font-size: 12px; color: #6e6e73; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.3px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-  th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid #e5e5e7; font-size: 13px; }
-  th { color: #6e6e73; font-weight: 500; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Portal - CIT Smart Attendance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="header">
-    <div>
-      <h1 id="welcome">Welcome</h1>
-      <p style="color:#6e6e73; font-size:13px;" id="classInfo"></p>
-    </div>
-    <button class="logout-btn" onclick="logout()">Logout</button>
+  <!-- Mesh Background Scene -->
+  <div class="bg-scene">
+    <div class="overlay"></div>
   </div>
 
-  <div class="card">
-    <h2>My Subjects</h2>
-    <div id="subjectsContainer" style="margin-top:10px;">
-      <div id="subjectsLoading" class="info-box">Loading subjects...</div>
-      <div id="subjectsList" style="display:none;"></div>
-    </div>
-  </div>
+  <!-- App Header / Navbar -->
+  <header class="app-header">
+    <div class="header-container">
+      <a href="dashboard.html" class="brand-section">
+        <div class="brand-logo-wrap">
+          <img src="cit logo.jpg" alt="CIT Logo" class="cit-logo" />
+        </div>
+        <div class="brand-text">
+          <h1>CIT <span>PORTAL</span></h1>
+          <p>Student Attendance Portal</p>
+        </div>
+      </a>
 
-  <div class="card">
-    <h2>Active Attendance Sessions</h2>
-    <div id="sessionsContainer" style="margin-top:10px;">
-      <div id="sessionsLoading" class="info-box">Loading active sessions...</div>
-      <div id="sessionsList" style="display:none;"></div>
+      <div class="header-actions">
+        <div class="user-badge">
+          <div class="user-avatar">👨‍🎓</div>
+          <div class="user-info">
+            <div class="user-name" id="welcome">Welcome</div>
+            <div class="user-role" id="classInfo">Student</div>
+          </div>
+        </div>
+        <button class="logout-btn" onclick="logout()" title="Sign out of student portal">Logout</button>
+      </div>
     </div>
-    <select id="subjectSelect" style="margin-top:12px; padding:8px; border-radius:6px; border:1px solid #d2d2d7; display:none; width:100%;">
-      <option value="">-- Select Subject --</option>
-    </select>
-  </div>
+  </header>
 
-  <div class="card">
-    <h2>Register Face <span id="regStatus" style="font-size:12px; color:#6e6e73; font-weight:400;"></span></h2>
-    <div class="video-box">
-      <video id="regVideo" autoplay muted playsinline></video>
-    </div>
-    <canvas id="regCanvas"></canvas>
-    <div class="btn-row">
-      <button class="btn reg-btn" id="startRegBtn" onclick="startRegistration()">Open Camera</button>
-      <button class="btn reg-btn" id="captureRegBtn" onclick="captureFace()" disabled>Capture & Register</button>
-    </div>
-    <div id="regMsg" class="msg"></div>
-  </div>
+  <main class="page-wrap">
+    <!-- Student Hero Welcome Section -->
+    <section class="student-hero">
+      <div class="hero-left">
+        <h1 id="heroGreeting">Welcome back!</h1>
+        <p id="heroContext">Verify your attendance seamlessly using AI facial recognition and GPS geolocation proximity.</p>
+        <div class="hero-badges">
+          <div class="hero-badge-item">
+            <span>📅</span> <span id="currentDateDisplay">Loading date...</span>
+          </div>
+          <div class="hero-badge-item">
+            <span>🏛️</span> <span id="heroDeptDisplay">Department</span>
+          </div>
+          <div class="hero-badge-item">
+            <span>🔐</span> <span id="heroBioStatus">Checking biometrics...</span>
+          </div>
+        </div>
+      </div>
+      <div style="text-align: right;">
+        <div class="live-beacon" id="sessionStatusBeacon">
+          <span class="beacon-dot"></span>
+          <span id="beaconText">Checking active classes...</span>
+        </div>
+      </div>
+    </section>
 
-  <div class="card" id="markAttendanceCard">
-    <h2>Mark Attendance</h2>
-    <div class="video-box">
-      <video id="attVideo" autoplay muted playsinline></video>
-    </div>
-    <canvas id="attCanvas"></canvas>
-    <div class="btn-row">
-      <button class="btn att-btn" id="startAttBtn" onclick="startAttendance()">Open Camera</button>
-      <button class="btn att-btn" id="captureAttBtn" onclick="markAttendance()" disabled>Mark Attendance</button>
-    </div>
-    <div id="attMsg" class="msg"></div>
-    <div id="gpsInfo" class="info-box" style="display:none;"></div>
-  </div>
-
-<div class="card">
-    <h2>My Attendance</h2>
+    <!-- Overview Stats Cards -->
     <div class="stats">
-      <div class="stat"><div class="stat-num" id="totalCount">0</div><div class="stat-label">Total Present</div></div>
-      <div class="stat"><div class="stat-num" id="todayCount">0</div><div class="stat-label">Today</div></div>
+      <div class="stat">
+        <div class="stat-header">
+          <span class="stat-label">Total Verified Attendance</span>
+          <div class="stat-icon-wrap">✓</div>
+        </div>
+        <div class="stat-num" id="totalCount">0</div>
+        <div class="stat-progress-bar">
+          <div class="stat-progress-fill" id="totalProgressFill" style="width: 0%;"></div>
+        </div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-header">
+          <span class="stat-label">Today's Attended Classes</span>
+          <div class="stat-icon-wrap" style="background:var(--emerald-subtle); color:var(--emerald-dark);">📅</div>
+        </div>
+        <div class="stat-num" id="todayCount" style="color:var(--emerald-dark);">0</div>
+        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:8px;" id="todayStatusText">No classes attended today</div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-header">
+          <span class="stat-label">Biometric Verification</span>
+          <div class="stat-icon-wrap" style="background:var(--info-subtle); color:var(--info-blue);">👤</div>
+        </div>
+        <div style="margin-top: 6px;">
+          <span id="regStatus" class="badge" style="font-size:0.85rem; padding:6px 12px;">Checking...</span>
+        </div>
+        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:12px;">Required for dual-factor check</div>
+      </div>
     </div>
-    <div style="overflow-x:auto; margin-top:16px;">
-      <table>
-        <thead>
-          <tr><th>Date</th><th>Subject</th><th>Department</th><th>Time</th><th>Distance</th><th>Latitude</th><th>Longitude</th></tr>
-        </thead>
-        <tbody id="recordsTable"></tbody>
-      </table>
+
+    <!-- Main Content Layout -->
+    <div class="dashboard-grid">
+      <!-- Left Column: Enrolled Subjects & Live Sessions -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <!-- Active Attendance Sessions Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>🟢 Active Attendance Sessions</h2>
+            <span class="live-beacon"><span class="beacon-dot"></span> Live</span>
+          </div>
+          <p class="card-desc">When your faculty initiates attendance, the active session will appear below for verification.</p>
+          
+          <div id="sessionsContainer">
+            <div id="sessionsLoading" class="info-box">Scanning for active course sessions...</div>
+            <div id="sessionsList" style="display:none;"></div>
+          </div>
+
+          <div style="margin-top: 16px;">
+            <label class="form-label" for="subjectSelect" style="font-size:0.84rem;">Select Subject for Attendance Verification:</label>
+            <select id="subjectSelect" style="display:none;">
+              <option value="">-- Select Active Subject --</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Enrolled Subjects Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>📚 My Enrolled Subjects</h2>
+          </div>
+          <p class="card-desc">Courses and subjects assigned to you for the current academic term.</p>
+          <div id="subjectsContainer">
+            <div id="subjectsLoading" class="info-box">Loading enrolled subjects...</div>
+            <div id="subjectsList" style="display:none;"></div>
+          </div>
+        </div>
+
+        <!-- Biometric Face Enrollment Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>👤 Face Biometrics Enrollment</h2>
+          </div>
+          <p class="card-desc">Enroll your facial biometric template once to enable rapid camera-based attendance verification.</p>
+          
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
+            <!-- Biometric Scanner HUD Frame -->
+            <div class="biometric-scanner-wrap" id="regScannerWrap">
+              <video id="regVideo" class="scanner-video" autoplay muted playsinline></video>
+              <div class="scanner-hud-overlay">
+                <div class="hud-corner tl"></div>
+                <div class="hud-corner tr"></div>
+                <div class="hud-corner bl"></div>
+                <div class="hud-corner br"></div>
+                <div class="hud-reticle" id="regReticle"></div>
+                <div class="scan-laser"></div>
+              </div>
+            </div>
+            <canvas id="regCanvas"></canvas>
+
+            <!-- Status HUD Strip -->
+            <div class="hud-status-strip">
+              <div class="status-chip">
+                <span class="status-chip-dot" id="regCamDot"></span>
+                <span id="regCamText">Camera: Standby</span>
+              </div>
+              <div class="status-chip">
+                <span class="status-chip-dot" id="regModelDot"></span>
+                <span id="regModelText">AI Model: Ready</span>
+              </div>
+            </div>
+
+            <div class="btn-row" style="justify-content: center; width: 100%;">
+              <button type="button" class="btn reg-btn" id="startRegBtn" onclick="startRegistration()">📷 Open Camera</button>
+              <button type="button" class="btn reg-btn" id="captureRegBtn" onclick="captureFace()" disabled>Capture & Register Face</button>
+            </div>
+          </div>
+          <div id="regMsg" class="msg"></div>
+        </div>
+      </div>
+
+      <!-- Right Column: Mark Attendance & Verification HUD + History -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <!-- Mark Attendance Card -->
+        <div class="card" id="markAttendanceCard" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>📍 Mark Class Attendance (Face + GPS)</h2>
+            <span class="badge green">Verification Open</span>
+          </div>
+          <p class="card-desc">Select an active class above, look straight into the camera, and keep geolocation enabled.</p>
+          
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
+            <!-- Biometric Scanner HUD Frame -->
+            <div class="biometric-scanner-wrap" id="attScannerWrap">
+              <video id="attVideo" class="scanner-video" autoplay muted playsinline></video>
+              <div class="scanner-hud-overlay">
+                <div class="hud-corner tl"></div>
+                <div class="hud-corner tr"></div>
+                <div class="hud-corner bl"></div>
+                <div class="hud-corner br"></div>
+                <div class="hud-reticle" id="attReticle"></div>
+                <div class="scan-laser"></div>
+              </div>
+            </div>
+            <canvas id="attCanvas"></canvas>
+
+            <!-- Status HUD Strip -->
+            <div class="hud-status-strip">
+              <div class="status-chip">
+                <span class="status-chip-dot" id="attCamDot"></span>
+                <span id="attCamText">Camera: Off</span>
+              </div>
+              <div class="status-chip">
+                <span class="status-chip-dot" id="attGpsDot"></span>
+                <span id="attGpsText">GPS: Ready</span>
+              </div>
+              <div class="status-chip">
+                <span class="status-chip-dot" id="attFaceDot"></span>
+                <span id="attFaceText">Face: Standby</span>
+              </div>
+            </div>
+
+            <div class="btn-row" style="justify-content: center; width: 100%;">
+              <button type="button" class="btn att-btn" id="startAttBtn" onclick="startAttendance()">📷 Open Camera</button>
+              <button type="button" class="btn att-btn" id="captureAttBtn" onclick="markAttendance()" disabled>✓ Verify & Mark Attendance</button>
+            </div>
+          </div>
+          <div id="attMsg" class="msg"></div>
+          <div id="gpsInfo" class="info-box" style="display:none;"></div>
+        </div>
+
+        <!-- Attendance History Table Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>📋 My Attendance History Log</h2>
+          </div>
+          <p class="card-desc">Chronological record of your verified class attendances with GPS proximity and timestamps.</p>
+          
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Subject</th>
+                  <th>Department</th>
+                  <th>Time</th>
+                  <th>GPS Distance</th>
+                  <th>Coordinates</th>
+                </tr>
+              </thead>
+              <tbody id="recordsTable">
+                <tr><td colspan="6" class="empty">Loading your attendance records...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
+  </main>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-     <script src="firebase-config.js"></script>
-   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.1/dist/face-api.min.js"></script>
-   <script>
-     const db = firebase.firestore();
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.1/dist/face-api.min.js"></script>
+  <script>
+    const db = firebase.firestore();
 
-      const studentId = localStorage.getItem('studentId');
-      const studentName = localStorage.getItem('studentName');
-      const studentDept = localStorage.getItem('studentDept');
-      const faceRegistered = localStorage.getItem('faceRegistered') === 'true';
+    const studentId = localStorage.getItem('studentId');
+    const studentName = localStorage.getItem('studentName');
+    const studentDept = localStorage.getItem('studentDept');
+    const faceRegistered = localStorage.getItem('faceRegistered') === 'true';
 
-      if (!studentId) { window.location.href = 'index.html'; }
+    if (!studentId) { window.location.href = 'index.html'; }
 
-      document.getElementById('welcome').textContent = `Welcome, ${studentName}`;
-      if (studentDept) {
-        db.collection('departments').doc(studentDept).get().then(snap => {
-          document.getElementById('classInfo').textContent = snap.exists ? snap.data().name : studentDept;
-        }).catch(() => {
-          document.getElementById('classInfo').textContent = studentDept || '-';
-        });
-      } else {
-        document.getElementById('classInfo').textContent = '-';
-      }
-      document.getElementById('regStatus').textContent = faceRegistered ? '(Already Registered)' : '(Not Registered)';
-     if (faceRegistered) {
-       document.getElementById('startRegBtn').disabled = true;
-       document.getElementById('captureRegBtn').disabled = true;
-     }
+    // Display formatted date in hero
+    const nowOptions = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+    const todayFormatted = new Date().toLocaleDateString('en-US', nowOptions);
+    const dateEl = document.getElementById('currentDateDisplay');
+    if (dateEl) dateEl.textContent = todayFormatted;
 
-     let modelsLoaded = false;
-     const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.1/weights';
-     let studentSubjects = [];
-       let distanceThreshold = 10;
+    // Set Welcome headers
+    document.getElementById('welcome').textContent = `${studentName || 'Student'}`;
+    const heroGreeting = document.getElementById('heroGreeting');
+    if (heroGreeting) heroGreeting.textContent = `Welcome back, ${studentName || 'Student'}!`;
 
-      async function loadSettings() {
-        try {
-          const snap = await db.collection('settings').doc('attendance').get();
-          if (snap.exists) {
-            distanceThreshold = snap.data().distanceThreshold || 10;
-          }
-        } catch (err) {
-          distanceThreshold = 10;
+    if (studentDept) {
+      db.collection('departments').doc(studentDept).get().then(snap => {
+        const deptName = snap.exists ? snap.data().name : studentDept;
+        document.getElementById('classInfo').textContent = deptName;
+        const heroDept = document.getElementById('heroDeptDisplay');
+        if (heroDept) heroDept.textContent = deptName;
+      }).catch(() => {
+        document.getElementById('classInfo').textContent = studentDept || '-';
+        const heroDept = document.getElementById('heroDeptDisplay');
+        if (heroDept) heroDept.textContent = studentDept || 'Student';
+      });
+    } else {
+      document.getElementById('classInfo').textContent = '-';
+      const heroDept = document.getElementById('heroDeptDisplay');
+      if (heroDept) heroDept.textContent = 'Student';
+    }
+    
+    // Update Biometric Status Pills
+    const regStatusEl = document.getElementById('regStatus');
+    const heroBioStatus = document.getElementById('heroBioStatus');
+    if (regStatusEl) {
+      regStatusEl.textContent = faceRegistered ? '● Face Registered' : 'Pending Enrollment';
+      regStatusEl.className = faceRegistered ? 'badge green' : 'badge';
+    }
+    if (heroBioStatus) {
+      heroBioStatus.textContent = faceRegistered ? 'Biometrics Active' : 'Biometrics Not Registered';
+    }
+    
+    if (faceRegistered) {
+      document.getElementById('startRegBtn').disabled = true;
+      document.getElementById('captureRegBtn').disabled = true;
+    }
+
+    let modelsLoaded = false;
+    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.1/weights';
+    let studentSubjects = [];
+    let distanceThreshold = 10;
+    let gpsAccuracyThreshold = 50;
+    const faceDistanceThreshold = 0.6;
+
+    async function loadSettings() {
+      try {
+        const snap = await db.collection('settings').doc('attendance').get();
+        if (snap.exists) {
+          const data = snap.data();
+          distanceThreshold = data.distanceThreshold || 10;
+          gpsAccuracyThreshold = data.gpsAccuracyThreshold || 50;
         }
+      } catch (err) {
+        distanceThreshold = 10;
+        gpsAccuracyThreshold = 50;
       }
+    }
 
-      async function getLatestSession(subjectId) {
-        const snap = await db.collection('attendanceSessions')
-          .where('subjectId', '==', subjectId)
+    async function getLatestSession(subjectId) {
+      const snap = await db.collection('attendanceSessions')
+        .where('subjectId', '==', subjectId)
+        .where('active', '==', true)
+        .get();
+      let latest = null;
+      snap.forEach(doc => {
+        const d = doc.data();
+        if (d.expiresAt && d.expiresAt.toDate() <= new Date()) return;
+        if (!latest || (d.classNumber || 0) > (latest.classNumber || 0)) {
+          latest = { id: doc.id, ...d };
+        }
+      });
+      return latest;
+    }
+
+    async function loadModels() {
+      if (modelsLoaded) return true;
+      showMsg('regMsg', 'info', 'Loading biometric AI neural network models, please wait...');
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        modelsLoaded = true;
+        const modelDot = document.getElementById('regModelDot');
+        if (modelDot) modelDot.className = 'status-chip-dot active';
+        const modelText = document.getElementById('regModelText');
+        if (modelText) modelText.textContent = 'AI Model: Active';
+        return true;
+      } catch (err) {
+        const detail = err?.message || 'Network or CORS issue loading models.';
+        showMsg('regMsg', 'error', 'Failed to load AI models: ' + detail);
+        console.error('Model load error:', err);
+        return false;
+      }
+    }
+
+    async function loadMySubjects() {
+      const loadingEl = document.getElementById('subjectsLoading');
+      const listEl = document.getElementById('subjectsList');
+      try {
+        const subjectSnap = await db.collection('subjects').where('studentIds', 'array-contains', studentId).get();
+        
+        if (subjectSnap.empty) {
+          loadingEl.textContent = 'No subjects currently enrolled. Please ask your department administrator to assign subjects.';
+          loadingEl.style.display = 'block';
+          return;
+        }
+        
+        loadingEl.style.display = 'none';
+        listEl.style.display = 'block';
+        listEl.innerHTML = '';
+        studentSubjects = [];
+        subjectSnap.forEach(doc => {
+          const s = doc.data();
+          studentSubjects.push(doc.id);
+          listEl.innerHTML += `
+            <div class="subject-card-item">
+              <div class="subject-card-top">
+                <span class="subject-card-name">📖 ${s.subjectName}</span>
+                <span class="badge blue">${s.subjectCode || 'Course'}</span>
+              </div>
+            </div>`;
+        });
+      } catch (err) {
+        loadingEl.textContent = 'Error loading enrolled subjects';
+        console.error(err);
+      }
+    }
+
+    async function loadActiveSessions() {
+      const loadingEl = document.getElementById('sessionsLoading');
+      const listEl = document.getElementById('sessionsList');
+      const selectEl = document.getElementById('subjectSelect');
+      const beaconText = document.getElementById('beaconText');
+      
+      try {
+        const snapshot = await db.collection('attendanceSessions')
           .where('active', '==', true)
           .get();
-        let latest = null;
-        snap.forEach(doc => {
-          const d = doc.data();
-          if (d.expiresAt && d.expiresAt.toDate() <= new Date()) return;
-          if (!latest || (d.classNumber || 0) > (latest.classNumber || 0)) {
-            latest = { id: doc.id, ...d };
+        
+        const sessionsBySubject = {};
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const sid = data.subjectId;
+          if (!sessionsBySubject[sid] || (data.classNumber || 0) > (sessionsBySubject[sid].classNumber || 0)) {
+            sessionsBySubject[sid] = { id: doc.id, ...data };
           }
         });
-        return latest;
+        
+        activeSessions = sessionsBySubject;
+        
+        const subjectIds = Object.keys(sessionsBySubject).filter(id => studentSubjects.includes(id));
+        
+        if (subjectIds.length === 0) {
+          if (loadingEl) loadingEl.textContent = 'No active attendance sessions right now.';
+          if (loadingEl) loadingEl.style.display = 'block';
+          const markCard = document.getElementById('markAttendanceCard');
+          if (markCard) markCard.style.display = 'none';
+          if (beaconText) beaconText.textContent = 'No Active Classes';
+          return;
+        }
+        
+        if (beaconText) beaconText.textContent = `${subjectIds.length} Session Available`;
+
+        const markCard = document.getElementById('markAttendanceCard');
+        if (markCard) markCard.style.display = 'block';
+        
+        const subjectPromises = subjectIds.map(async (sid) => {
+          const subDoc = await db.collection('subjects').doc(sid).get();
+          return { id: sid, name: subDoc.exists ? subDoc.data().subjectName || sid : sid };
+        });
+        
+        const subjects = await Promise.all(subjectPromises);
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (listEl) listEl.style.display = 'block';
+        if (listEl) listEl.innerHTML = subjects.map(s => {
+          const session = activeSessions[s.id];
+          return `
+            <div class="session-badge-item">
+              <div>
+                <strong style="color:var(--primary-navy); font-size:0.92rem;">● ${s.name}</strong>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Class ${session?.classNumber || 1} • Duration: ${session?.duration} mins</div>
+              </div>
+              <span class="badge green">Open Now</span>
+            </div>`;
+        }).join('');
+        
+        selectEl.innerHTML = '<option value="">-- Select Subject to Mark Attendance --</option>' + 
+          subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        if (selectEl) selectEl.style.display = 'block';
+      } catch (err) {
+        if (loadingEl) loadingEl.textContent = 'Error checking active sessions';
+        console.error(err);
       }
+    }
 
-     async function loadModels() {
-       if (modelsLoaded) return true;
-       showMsg('regMsg', 'info', 'Loading AI models, please wait...');
-       try {
-         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-         modelsLoaded = true;
-         return true;
-       } catch (err) {
-         const detail = err?.message || 'Network or CORS issue loading models.';
-         showMsg('regMsg', 'error', 'Failed to load AI models: ' + detail);
-         console.error('Model load error:', err);
-         return false;
-       }
-     }
+    function calculateDistance(lat1, lng1, lat2, lng2) {
+      if (lat1 === 'N/A' || lng1 === 'N/A' || lat2 === 'N/A' || lng2 === 'N/A') return null;
+      const R = 6371e3;
+      const toRad = x => x * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
 
-async function loadMySubjects() {
-        const loadingEl = document.getElementById('subjectsLoading');
-        const listEl = document.getElementById('subjectsList');
-        try {
-          const subjectSnap = await db.collection('subjects').where('studentIds', 'array-contains', studentId).get();
-          
-          if (subjectSnap.empty) {
-            loadingEl.textContent = 'No subjects enrolled. Ask admin to assign subjects to you.';
-            loadingEl.style.display = 'block';
-            return;
-          }
-          
-          loadingEl.style.display = 'none';
-          listEl.style.display = 'block';
-          listEl.innerHTML = '';
-          subjectSnap.forEach(doc => {
-            const s = doc.data();
-            studentSubjects.push(doc.id);
-            listEl.innerHTML += `<div style="padding:8px 0; border-bottom:1px solid #e5e5e7; font-size:14px;">${s.subjectName}</div>`;
-          });
-} catch (err) {
-           loadingEl.textContent = 'Error loading subjects';
-           console.error(err);
-         }
-       }
+    async function checkDuplicate(subjectId, sessionId) {
+      const snapshot = await db.collection('attendance')
+        .where('studentId', '==', studentId)
+        .where('subjectId', '==', subjectId)
+        .where('sessionId', '==', sessionId)
+        .get();
+      return !snapshot.empty;
+    }
 
- async function loadActiveSessions() {
-         const loadingEl = document.getElementById('sessionsLoading');
-         const listEl = document.getElementById('sessionsList');
-         const selectEl = document.getElementById('subjectSelect');
-         
-         try {
-           const snapshot = await db.collection('attendanceSessions')
-             .where('active', '==', true)
-             .get();
-           
-           const sessionsBySubject = {};
-           snapshot.forEach(doc => {
-             const data = doc.data();
-             const sid = data.subjectId;
-             if (!sessionsBySubject[sid] || (data.classNumber || 0) > (sessionsBySubject[sid].classNumber || 0)) {
-               sessionsBySubject[sid] = { id: doc.id, ...data };
-             }
-           });
-           
-           activeSessions = sessionsBySubject;
-           
-           const subjectIds = Object.keys(sessionsBySubject).filter(id => studentSubjects.includes(id));
-           
-           if (subjectIds.length === 0) {
-             if (loadingEl) loadingEl.textContent = 'No active attendance sessions';
-             if (loadingEl) loadingEl.style.display = 'block';
-             const markCard = document.getElementById('markAttendanceCard');
-             if (markCard) markCard.style.display = 'none';
-             return;
-           }
-           
-           const markCard = document.getElementById('markAttendanceCard');
-           if (markCard) markCard.style.display = 'block';
-           
-           const subjectPromises = subjectIds.map(async (sid) => {
-             const subDoc = await db.collection('subjects').doc(sid).get();
-             return { id: sid, name: subDoc.exists ? subDoc.data().subjectName || sid : sid };
-           });
-           
-           const subjects = await Promise.all(subjectPromises);
-           if (loadingEl) loadingEl.style.display = 'none';
-           if (listEl) listEl.style.display = 'block';
-           if (listEl) listEl.innerHTML = subjects.map(s => {
-             const session = activeSessions[s.id];
-             return `<div style="padding:8px 0; border-bottom:1px solid #e5e5e7; font-size:14px; color:#34c759;">● ${s.name} (Class ${session?.classNumber || '-'} - ${session?.duration} min)</div>`;
-           }).join('');
-           
- selectEl.innerHTML = '<option value="">-- Select Subject --</option>' + 
-              subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-           if (selectEl) selectEl.style.display = 'block';
- } catch (err) {
-           if (loadingEl) loadingEl.textContent = 'Error loading sessions';
-           console.error(err);
-         }
-       }
-
-     function calculateDistance(lat1, lng1, lat2, lng2) {
-       if (lat1 === 'N/A' || lng1 === 'N/A' || lat2 === 'N/A' || lng2 === 'N/A') return null;
-       const R = 6371e3;
-       const toRad = x => x * Math.PI / 180;
-       const dLat = toRad(lat2 - lat1);
-       const dLng = toRad(lng2 - lng1);
-       const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                 Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-                 Math.sin(dLng/2) * Math.sin(dLng/2);
-       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-       return R * c;
-     }
-
-      async function checkDuplicate(subjectId, sessionId) {
-        const snapshot = await db.collection('attendance')
-          .where('studentId', '==', studentId)
-          .where('subjectId', '==', subjectId)
-          .where('sessionId', '==', sessionId)
-          .get();
-        return !snapshot.empty;
-      }
-
-     async function startRegistration() {
+    async function startRegistration() {
       const ok = await loadModels();
       if (!ok) return;
       try {
@@ -299,6 +507,14 @@ async function loadMySubjects() {
         video.srcObject = stream;
         document.getElementById('startRegBtn').disabled = true;
         document.getElementById('captureRegBtn').disabled = false;
+        
+        // HUD Animation & status
+        const wrap = document.getElementById('regScannerWrap');
+        if (wrap) wrap.classList.add('is-scanning');
+        const camDot = document.getElementById('regCamDot');
+        if (camDot) camDot.className = 'status-chip-dot active';
+        const camText = document.getElementById('regCamText');
+        if (camText) camText.textContent = 'Camera: Active';
       } catch (err) {
         showMsg('regMsg', 'error', 'Camera access denied: ' + err.message);
       }
@@ -311,11 +527,13 @@ async function loadMySubjects() {
       canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      showMsg('regMsg', 'info', 'Detecting face...');
+      showMsg('regMsg', 'info', 'Detecting face biometrics...');
       try {
         const detection = await faceapi.detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
         if (!detection) {
-          showMsg('regMsg', 'error', 'No face detected. Please look at the camera.');
+          showMsg('regMsg', 'error', 'No face detected. Please position your face directly inside the scanner reticle.');
+          const reticle = document.getElementById('regReticle');
+          if (reticle) reticle.className = 'hud-reticle error';
           return;
         }
         const descriptor = Array.from(detection.descriptor);
@@ -324,9 +542,19 @@ async function loadMySubjects() {
           faceRegistered: true
         });
         localStorage.setItem('faceRegistered', 'true');
-        showMsg('regMsg', 'success', 'Face Registered Successfully!');
+        showMsg('regMsg', 'success', '✓ Biometric Face Registered Successfully!');
         document.getElementById('captureRegBtn').disabled = true;
-        document.getElementById('regStatus').textContent = '(Registered)';
+        
+        const reticle = document.getElementById('regReticle');
+        if (reticle) reticle.className = 'hud-reticle verified';
+
+        const regStatus = document.getElementById('regStatus');
+        if (regStatus) {
+          regStatus.textContent = '● Face Registered';
+          regStatus.className = 'badge green';
+        }
+        const heroBio = document.getElementById('heroBioStatus');
+        if (heroBio) heroBio.textContent = 'Biometrics Active';
       } catch (err) {
         showMsg('regMsg', 'error', 'Error: ' + err.message);
         console.error(err);
@@ -342,196 +570,301 @@ async function loadMySubjects() {
         video.srcObject = stream;
         document.getElementById('startAttBtn').disabled = true;
         document.getElementById('captureAttBtn').disabled = false;
+        
+        // HUD Scanner animation
+        const wrap = document.getElementById('attScannerWrap');
+        if (wrap) wrap.classList.add('is-scanning');
+        const camDot = document.getElementById('attCamDot');
+        if (camDot) camDot.className = 'status-chip-dot active';
+        const camText = document.getElementById('attCamText');
+        if (camText) camText.textContent = 'Camera: Active';
       } catch (err) {
         showMsg('attMsg', 'error', 'Camera access denied: ' + err.message);
       }
     }
 
- async function markAttendance() {
-        const selectedSubject = document.getElementById('subjectSelect').value;
-        if (!selectedSubject) {
-          showMsg('attMsg', 'error', 'Please select a subject first.');
-          return;
-        }
-        
-        await loadSettings();
-        const latestSession = await getLatestSession(selectedSubject);
-        if (!latestSession) {
-          showMsg('attMsg', 'error', 'No active session found. Please try again.');
-          return;
-        }
-        
-        if (await checkDuplicate(selectedSubject, latestSession.id)) {
-          showMsg('attMsg', 'error', 'Attendance already marked for this class.');
-          return;
-        }
-        
-        const video = document.getElementById('attVideo');
-        const canvas = document.getElementById('attCanvas');
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        showMsg('attMsg', 'info', 'Verifying face...');
-        try {
-          const detection = await faceapi.detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-          if (!detection) {
-            showMsg('attMsg', 'error', 'Face Verification Failed - No face detected.');
-            return;
-          }
-          const doc = await db.collection('students').doc(studentId).get();
-          if (!doc.exists || !doc.data().faceDescriptor) {
-            showMsg('attMsg', 'error', 'Please register your face first.');
-            return;
-          }
-          const storedDescriptor = new Float32Array(doc.data().faceDescriptor);
-          const currentDescriptor = detection.descriptor;
-          const distance = faceapi.euclideanDistance(currentDescriptor, storedDescriptor);
-          if (distance > 0.6) {
-            showMsg('attMsg', 'error', `Face Verification Failed (${(1-distance).toFixed(0)}% match)`);
-            return;
-          }
-          showMsg('attMsg', 'success', `Face Verified (${(1-distance).toFixed(0)}% match)`);
-          document.getElementById('captureAttBtn').disabled = true;
-          await captureGPS(selectedSubject, latestSession);
-        } catch (err) {
-          showMsg('attMsg', 'error', 'Error: ' + err.message);
-          console.error(err);
-        }
+    async function markAttendance() {
+      const selectedSubject = document.getElementById('subjectSelect').value;
+      if (!selectedSubject) {
+        showMsg('attMsg', 'error', 'Please select a subject from the dropdown list first.');
+        return;
       }
-
- function captureGPS(subjectId, session) {
-         return new Promise((resolve) => {
-           const gpsInfo = document.getElementById('gpsInfo');
-           gpsInfo.style.display = 'block';
-           gpsInfo.textContent = 'Capturing GPS location...';
-           if (!navigator.geolocation) {
-             gpsInfo.textContent = 'Geolocation is required to mark attendance.';
-             showMsg('attMsg', 'error', 'Location access is required for attendance verification.');
-             resolve();
-             return;
-           }
-           navigator.geolocation.getCurrentPosition(
-             async (pos) => {
-               const lat = pos.coords.latitude.toFixed(4);
-               const lng = pos.coords.longitude.toFixed(4);
-               const accuracy = pos.coords.accuracy ? pos.coords.accuracy.toFixed(1) : 'N/A';
-               
-               const facLat = session?.latitude || 'N/A';
-               const facLng = session?.longitude || 'N/A';
-               
-               let dist = null;
-               if (session && session.latitude && session.longitude) {
-                 dist = calculateDistance(parseFloat(lat), parseFloat(lng), session.latitude, session.longitude);
-               }
-               
-               let debug = `Faculty: ${facLat}, ${facLng}<br>Student: ${lat}, ${lng}<br>GPS Accuracy: ${accuracy}m`;
-               if (dist !== null) {
-                 debug += `<br>Distance: <strong>${dist.toFixed(1)} meters</strong> (threshold: ${distanceThreshold}m)`;
-               }
-               gpsInfo.innerHTML = debug;
-               
-               if (dist !== null && dist > distanceThreshold) {
-                 showMsg('attMsg', 'error', `Too far from faculty (${dist.toFixed(1)}m). Must be within ${distanceThreshold} meters.`);
-                 resolve();
-                 return;
-               }
-               
-               await saveAttendance(lat, lng, subjectId, session, dist);
-               resolve();
-             },
-             async (err) => {
-               gpsInfo.textContent = 'GPS unavailable. Attendance was not saved.';
-               showMsg('attMsg', 'error', 'Location access is required for attendance verification.');
-               resolve();
-             },
-             { enableHighAccuracy: true, timeout: 10000 }
-           );
-         });
-       }
-
- async function saveAttendance(lat, lng, subjectId, session, distance) {
-         const now = new Date();
-         const dateStr = now.toLocaleDateString('en-GB');
-         const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-         try {
-           const attRef = db.collection('attendance');
-           await attRef.add({
-             studentId,
-             studentName,
-             studentDept,
-             subjectId,
-             sessionId: session?.id,
-             classNumber: session?.classNumber,
-             facultyId: session?.facultyId,
-             facultyName: session?.facultyName,
-             date: dateStr,
-             time: timeStr,
-             latitude: lat,
-             longitude: lng,
-             distance: distance,
-             timestamp: firebase.firestore.FieldValue.serverTimestamp()
-           });
-           showMsg('attMsg', 'success', 'Attendance Marked Successfully!');
-           loadMyAttendance();
-         } catch (err) {
-           showMsg('attMsg', 'error', 'Error: ' + err.message);
-         }
-       }
-
-      async function loadMyAttendance() {
-        const tbody = document.getElementById('recordsTable');
-        try {
-          const [snapshot, deptSnap, subjectSnap] = await Promise.all([
-            db.collection('attendance').where('studentId', '==', studentId).get(),
-            db.collection('departments').get(),
-            db.collection('subjects').get()
-          ]);
-          const deptMap = {};
-          deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
-          const subjectMap = {};
-          subjectSnap.forEach(doc => { subjectMap[doc.id] = doc.data().subjectName; });
-          let total = 0, today = 0;
-          const todayDate = new Date().toLocaleDateString('en-GB');
-          tbody.innerHTML = '';
-          const records = [];
-          snapshot.forEach((doc) => {
-            const r = doc.data();
-            records.push(r);
-            total++;
-            if (r.date === todayDate) today++;
-          });
-          records.sort((a, b) => (b.timestamp?.toDate?.() || 0) - (a.timestamp?.toDate?.() || 0));
-          records.forEach(r => {
-            const distDisplay = r.distance ? `${r.distance.toFixed(1)} meters` : 'N/A';
-            const subjectName = subjectMap[r.subjectId] || r.subjectId;
-            const deptName = deptMap[r.studentDept] || r.studentDept || '-';
-            tbody.innerHTML += `<tr><td>${r.date}</td><td>${subjectName}</td><td>${deptName}</td><td>${r.time}</td><td>${distDisplay}</td><td>${r.latitude}</td><td>${r.longitude}</td></tr>`;
-          });
-          document.getElementById('totalCount').textContent = total;
-          document.getElementById('todayCount').textContent = today;
-          if (total === 0) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#888;">No records yet</td></tr>';
-        } catch (err) {
-          console.error(err);
-        }
+      
+      await loadSettings();
+      const latestSession = await getLatestSession(selectedSubject);
+      if (!latestSession) {
+        showMsg('attMsg', 'error', 'No active session found for this subject. Please try again.');
+        return;
       }
+      
+      if (await checkDuplicate(selectedSubject, latestSession.id)) {
+        showMsg('attMsg', 'error', 'Attendance has already been marked for this class session.');
+        return;
+      }
+      
+      const video = document.getElementById('attVideo');
+      const canvas = document.getElementById('attCanvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      showMsg('attMsg', 'info', 'Analyzing facial biometrics...');
+      
+      const faceDot = document.getElementById('attFaceDot');
+      if (faceDot) faceDot.className = 'status-chip-dot warning';
+      const faceText = document.getElementById('attFaceText');
+      if (faceText) faceText.textContent = 'Face: Matching...';
 
-     loadMySubjects().then(() => {
-       loadActiveSessions();
-     });
-     loadMyAttendance();
+      try {
+        const detection = await faceapi.detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+        if (!detection) {
+          showMsg('attMsg', 'error', 'Face Verification Failed - No face detected in frame.');
+          const reticle = document.getElementById('attReticle');
+          if (reticle) reticle.className = 'hud-reticle error';
+          return;
+        }
+        const doc = await db.collection('students').doc(studentId).get();
+        if (!doc.exists || !doc.data().faceDescriptor) {
+          showMsg('attMsg', 'error', 'Please complete Face Biometrics Enrollment first.');
+          return;
+        }
+        const storedDescriptor = new Float32Array(doc.data().faceDescriptor);
+        const currentDescriptor = detection.descriptor;
+        const distance = faceapi.euclideanDistance(currentDescriptor, storedDescriptor);
+        const faceMatchPercent = Math.max(0, Math.round((1 - distance) * 100));
+        
+        if (distance > faceDistanceThreshold) {
+          showMsg('attMsg', 'error', `Face Verification Failed (${faceMatchPercent}% confidence match). Please try again.`);
+          const reticle = document.getElementById('attReticle');
+          if (reticle) reticle.className = 'hud-reticle error';
+          return;
+        }
 
-     function showMsg(id, type, text) {
-       const el = document.getElementById(id);
-       el.textContent = text;
-       el.className = 'msg ' + type;
-       el.style.display = 'block';
-     }
+        if (faceDot) faceDot.className = 'status-chip-dot active';
+        if (faceText) faceText.textContent = `Face: ${faceMatchPercent}% Match`;
+        
+        const reticle = document.getElementById('attReticle');
+        if (reticle) reticle.className = 'hud-reticle verified';
 
-     function logout() {
-       localStorage.clear();
-       window.location.href = 'index.html';
-     }
+        showMsg('attMsg', 'success', `Face Biometrics Verified (${faceMatchPercent}% match). Verifying GPS proximity...`);
+        document.getElementById('captureAttBtn').disabled = true;
+        await captureGPS(selectedSubject, latestSession);
+      } catch (err) {
+        showMsg('attMsg', 'error', 'Error: ' + err.message);
+        console.error(err);
+      }
+    }
+
+    function captureGPS(subjectId, session) {
+      return new Promise((resolve) => {
+        const gpsInfo = document.getElementById('gpsInfo');
+        const maxAttempts = 3;
+        const retryDelayMs = 1200;
+        gpsInfo.style.display = 'block';
+
+        const gpsDot = document.getElementById('attGpsDot');
+        const gpsText = document.getElementById('attGpsText');
+
+        if (!navigator.geolocation) {
+          gpsInfo.textContent = 'Geolocation is required to mark attendance.';
+          showMsg('attMsg', 'error', 'Location access is required for attendance verification.');
+          resolve();
+          return;
+        }
+
+        const getPosition = () => new Promise((resolvePos, rejectPos) => {
+          navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, { enableHighAccuracy: true, timeout: 30000, maximumAge: 15000 });
+        });
+
+        (async () => {
+          for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            gpsInfo.textContent = `Capturing high-accuracy GPS coordinates (attempt ${attempt}/${maxAttempts})...`;
+            if (gpsDot) gpsDot.className = 'status-chip-dot warning';
+            if (gpsText) gpsText.textContent = `GPS: Pinpointing (${attempt}/${maxAttempts})...`;
+
+            try {
+              const pos = await getPosition();
+              const lat = pos.coords.latitude;
+              const lng = pos.coords.longitude;
+              const accuracyMeters = typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null;
+              const accuracy = accuracyMeters !== null ? accuracyMeters.toFixed(1) : 'N/A';
+
+              const facLat = session?.latitude || 'N/A';
+              const facLng = session?.longitude || 'N/A';
+              let dist = null;
+              if (session && session.latitude && session.longitude) {
+                dist = calculateDistance(lat, lng, session.latitude, session.longitude);
+              }
+
+              const facLatDisplay = Number.isFinite(facLat) ? facLat.toFixed(6) : facLat;
+              const facLngDisplay = Number.isFinite(facLng) ? facLng.toFixed(6) : facLng;
+              let debug = `Faculty Location: <strong>${facLatDisplay}, ${facLngDisplay}</strong><br>Student Location: <strong>${lat.toFixed(6)}, ${lng.toFixed(6)}</strong><br>GPS Accuracy: <strong>${accuracy}m</strong> (Required: ≤ ${gpsAccuracyThreshold}m)`;
+              if (dist !== null) {
+                debug += `<br>Distance from Faculty: <strong>${dist.toFixed(1)} meters</strong> (Allowable: ≤ ${distanceThreshold}m)`;
+              }
+              gpsInfo.innerHTML = debug;
+
+              if (accuracyMeters !== null && accuracyMeters > gpsAccuracyThreshold) {
+                if (attempt < maxAttempts) {
+                  gpsInfo.innerHTML = `${debug}<br><span style="color:var(--accent-blue); font-weight:600;">GPS accuracy insufficient. Retrying...</span>`;
+                  await new Promise(r => setTimeout(r, retryDelayMs));
+                  continue;
+                }
+                showMsg('attMsg', 'error', `GPS accuracy too low (${accuracy}m). Please stand near an open window or ask admin to adjust tolerance.`);
+                if (gpsDot) gpsDot.className = 'status-chip-dot error';
+                if (gpsText) gpsText.textContent = 'GPS: Low Accuracy';
+                resolve();
+                return;
+              }
+
+              if (dist !== null && dist > distanceThreshold) {
+                showMsg('attMsg', 'error', `Outside allowable classroom range (${dist.toFixed(1)}m). Must be within ${distanceThreshold} meters.`);
+                if (gpsDot) gpsDot.className = 'status-chip-dot error';
+                if (gpsText) gpsText.textContent = 'GPS: Out of Range';
+                resolve();
+                return;
+              }
+
+              if (gpsDot) gpsDot.className = 'status-chip-dot active';
+              if (gpsText) gpsText.textContent = 'GPS: In Range';
+
+              await saveAttendance(lat, lng, subjectId, session, dist);
+              resolve();
+              return;
+            } catch (err) {
+              if (err?.code === 1) {
+                gpsInfo.textContent = 'Location access denied. Attendance was not recorded.';
+                showMsg('attMsg', 'error', 'Location access is required for proximity verification.');
+                if (gpsDot) gpsDot.className = 'status-chip-dot error';
+                if (gpsText) gpsText.textContent = 'GPS: Denied';
+                resolve();
+                return;
+              }
+              if (attempt < maxAttempts) {
+                gpsInfo.textContent = `GPS pinpoint retry (attempt ${attempt}/${maxAttempts})...`;
+                await new Promise(r => setTimeout(r, retryDelayMs));
+                continue;
+              }
+              gpsInfo.textContent = 'GPS coordinates unavailable.';
+              showMsg('attMsg', 'error', 'Location service unavailable. Attendance not recorded.');
+              if (gpsDot) gpsDot.className = 'status-chip-dot error';
+              if (gpsText) gpsText.textContent = 'GPS: Failed';
+              resolve();
+              return;
+            }
+          }
+          resolve();
+        })();
+      });
+    }
+
+    async function saveAttendance(lat, lng, subjectId, session, distance) {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-GB');
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      try {
+        const attRef = db.collection('attendance');
+        await attRef.add({
+          studentId,
+          studentName,
+          studentDept,
+          subjectId,
+          sessionId: session?.id,
+          classNumber: session?.classNumber,
+          facultyId: session?.facultyId,
+          facultyName: session?.facultyName,
+          date: dateStr,
+          time: timeStr,
+          latitude: lat,
+          longitude: lng,
+          distance: distance,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        showMsg('attMsg', 'success', '🎉 Attendance Marked Successfully! Verified with Face Biometrics & GPS.');
+        loadMyAttendance();
+      } catch (err) {
+        showMsg('attMsg', 'error', 'Error: ' + err.message);
+      }
+    }
+
+    async function loadMyAttendance() {
+      const tbody = document.getElementById('recordsTable');
+      try {
+        const [snapshot, deptSnap, subjectSnap] = await Promise.all([
+          db.collection('attendance').where('studentId', '==', studentId).get(),
+          db.collection('departments').get(),
+          db.collection('subjects').get()
+        ]);
+        const deptMap = {};
+        deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
+        const subjectMap = {};
+        subjectSnap.forEach(doc => { subjectMap[doc.id] = doc.data().subjectName; });
+        
+        let total = 0, today = 0;
+        const todayDate = new Date().toLocaleDateString('en-GB');
+        tbody.innerHTML = '';
+        const records = [];
+        snapshot.forEach((doc) => {
+          const r = doc.data();
+          records.push(r);
+          total++;
+          if (r.date === todayDate) today++;
+        });
+        
+        records.sort((a, b) => (b.timestamp?.toDate?.() || 0) - (a.timestamp?.toDate?.() || 0));
+        
+        records.forEach(r => {
+          const distDisplay = r.distance ? `${r.distance.toFixed(1)} m` : 'N/A';
+          const subjectName = subjectMap[r.subjectId] || r.subjectId;
+          const deptName = deptMap[r.studentDept] || r.studentDept || '-';
+          const coordsDisplay = (r.latitude && r.longitude) ? `${Number(r.latitude).toFixed(4)}, ${Number(r.longitude).toFixed(4)}` : '-';
+          tbody.innerHTML += `<tr>
+            <td><strong>${r.date}</strong></td>
+            <td><span style="font-weight:600; color:var(--primary-navy);">${subjectName}</span></td>
+            <td><span class="badge">${deptName}</span></td>
+            <td>${r.time}</td>
+            <td><span class="badge green">● ${distDisplay}</span></td>
+            <td style="font-size:0.8rem; color:var(--text-muted);">${coordsDisplay}</td>
+          </tr>`;
+        });
+
+        document.getElementById('totalCount').textContent = total;
+        document.getElementById('todayCount').textContent = today;
+        
+        // Progress bar indicator
+        const progressFill = document.getElementById('totalProgressFill');
+        if (progressFill) {
+          const pctWidth = Math.min(100, Math.max(10, total * 5));
+          progressFill.style.width = `${pctWidth}%`;
+        }
+
+        const todayStatus = document.getElementById('todayStatusText');
+        if (todayStatus) {
+          todayStatus.textContent = today > 0 ? `${today} verified class session(s) today` : 'No classes marked today yet';
+        }
+
+        if (total === 0) tbody.innerHTML = '<tr><td colspan="6" class="empty">No attendance records found yet. Mark attendance when a session is active.</td></tr>';
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    loadMySubjects().then(() => {
+      loadActiveSessions();
+    });
+    loadMyAttendance();
+
+    function showMsg(id, type, text) {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.className = 'msg ' + type;
+      el.style.display = 'block';
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = 'index.html';
+    }
   </script>
 </body>
 </html>

@@ -1,171 +1,218 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Admin Dashboard - Face Attendance</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-  body { min-height: 100vh; background: #f5f5f7; color: #1d1d1f; padding: 30px; }
-  .header { text-align: center; margin-bottom: 30px; }
-  .header h1 { font-size: 1.75rem; font-weight: 600; }
-  .back-btn { display: inline-block; padding: 8px 18px; background: #f5f5f7; color: #1d1d1f; text-decoration: none; border-radius: 8px; margin-bottom: 15px; font-size: 14px; border: 1px solid #d2d2d7; }
-  .card { max-width: 800px; margin: 0 auto 24px; padding: 28px; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #e5e5e7; }
-  .card h2 { margin-bottom: 18px; color: #1d1d1f; font-size: 1.15rem; font-weight: 600; }
-  form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  form input, form select { padding: 11px 14px; border: 1px solid #d2d2d7; background: #fff; color: #1d1d1f; border-radius: 8px; font-size: 14px; outline: none; }
-  form input:focus, form select:focus { border-color: #0071e3; }
-  .full { grid-column: 1 / -1; }
-  .submit-btn { padding: 12px 24px; background: #0071e3; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; transition: 0.2s; }
-  .submit-btn:hover { background: #0077ed; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e5e7; font-size: 14px; }
-  th { color: #6e6e73; font-weight: 500; }
-  tr:hover td { background: #fafafa; }
-  .msg { padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 14px; display: none; }
-  .success { background: #e6f9ef; color: #0d7a3a; }
-  .error { background: #ffe6e6; color: #c0392b; }
-  .checkbox-group { max-height: 150px; overflow-y: auto; border: 1px solid #d2d2d7; border-radius: 8px; padding: 12px; background: #fafafa; }
-  .checkbox-item { display: flex; align-items: center; margin-bottom: 8px; }
-  .checkbox-item input { width: auto; margin-right: 8px; }
-  .checkbox-item label { font-size: 13px; color: #1d1d1f; }
-  .stats { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 22px; }
-  .stat { background: #fafafa; padding: 14px 24px; border-radius: 8px; min-width: 130px; text-align: center; border: 1px solid #e5e5e7; }
-  .stat-num { font-size: 1.5rem; font-weight: 600; color: #0071e3; }
-  .stat-label { font-size: 12px; color: #6e6e73; margin-top: 2px; text-transform: uppercase; }
-  .dept-item { border: 1px solid #e5e5e7; border-radius: 8px; margin-bottom: 10px; background: #fff; overflow: hidden; }
-  .dept-header { padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #fafafa; user-select: none; }
-  .dept-header strong { font-size: 14px; color: #1d1d1f; }
-  .dept-header .badges { display: flex; gap: 8px; }
-  .badge { font-size: 12px; padding: 2px 10px; border-radius: 12px; font-weight: 500; background: #e6f0fa; color: #0058b3; }
-  .badge.green { background: #e6f9ef; color: #0d7a3a; }
-  .badge.purple { background: #f0e6fa; color: #6b3fa0; }
-  .dept-body { display: none; padding: 14px 16px; border-top: 1px solid #e5e5e7; }
-  .dept-body.open { display: block; }
-  .dept-body table { margin-top: 0; }
-  .empty { text-align: center; color: #888; padding: 10px; font-size: 13px; }
-  .filter-row { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-  .filter-row select { padding: 9px 12px; border: 1px solid #d2d2d7; background: #fff; color: #1d1d1f; border-radius: 6px; font-size: 13px; outline: none; min-width: 200px; }
-  .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
-  .tab { padding: 8px 16px; border: 1px solid #d2d2d7; background: #fafafa; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: #6e6e73; }
-  .tab.active { background: #0071e3; color: #fff; border-color: #0071e3; }
-  .settings-input { padding: 8px 12px; border: 1px solid #d2d2d7; border-radius: 6px; font-size: 13px; width: 100px; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard - CIT Smart Attendance Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <a href="index.html" class="back-btn">← Back</a>
-  <div class="header">
-    <h1>Admin Dashboard</h1>
-    <a href="report.html" style="padding:8px 18px; background:#0071e3; color:#fff; text-decoration:none; border-radius:6px; font-size:13px; font-weight:500;">📊 View Attendance Report</a>
+  <!-- Mesh Background Scene -->
+  <div class="bg-scene">
+    <div class="overlay"></div>
   </div>
 
-  <div class="card">
-    <h2>🏛️ Manage Departments</h2>
-    <form id="addDepartmentForm" style="margin-bottom:18px;">
-      <input type="text" id="deptName" placeholder="Department Name" required />
-      <button type="submit" class="submit-btn">Add Department</button>
-    </form>
-    <div id="deptAccordion"></div>
-    <div id="deptMsg" class="msg"></div>
-  </div>
+  <!-- App Header / Navbar -->
+  <header class="app-header">
+    <div class="header-container">
+      <a href="index.html" class="brand-section">
+        <div class="brand-logo-wrap">
+          <img src="cit logo.jpg" alt="CIT Logo" class="cit-logo" />
+        </div>
+        <div class="brand-text">
+          <h1>CIT <span>PORTAL</span></h1>
+          <p>Institutional Administration Suite</p>
+        </div>
+      </a>
 
-  <div class="card">
-    <h2>➕ Add Student</h2>
-    <form id="addStudentForm">
-      <input type="text" id="name" placeholder="Student Name" required />
-      <input type="email" id="email" placeholder="Email" required />
-      <input type="password" id="password" placeholder="Password" required />
-      <select id="studentDept" required>
-        <option value="">Select Department</option>
-      </select>
-      <button type="submit" class="submit-btn full">Add Student</button>
-    </form>
-    <div id="studentMsg" class="msg"></div>
-  </div>
-
-  <div class="card">
-    <h2>➕ Add Faculty</h2>
-    <form id="addFacultyForm">
-      <input type="text" id="facultyName" placeholder="Faculty Name" required />
-      <input type="email" id="facultyEmail" placeholder="Email" required />
-      <input type="password" id="facultyPassword" placeholder="Password" required />
-      <select id="facultyDept" required>
-        <option value="">Select Department</option>
-      </select>
-      <button type="submit" class="submit-btn full">Add Faculty</button>
-    </form>
-    <div id="facultyMsg" class="msg"></div>
-  </div>
-
-  <div class="card">
-    <h2>📚 Create Subject</h2>
-    <form id="addSubjectForm">
-      <input type="text" id="subjectName" placeholder="Subject Name" required />
-      <input type="text" id="subjectCode" placeholder="Subject Code" required />
-      <select id="subjectFaculty" required>
-        <option value="">Select Faculty</option>
-      </select>
-      <select id="subjectDept" required>
-        <option value="">Select Department</option>
-      </select>
-      <button type="submit" class="submit-btn full">Create Subject</button>
-    </form>
-    <div id="subjectMsg" class="msg"></div>
-  </div>
-
-  <div class="card">
-    <h2>👥 Assign Students to Subject</h2>
-    <form id="assignStudentsForm">
-      <select id="assignSubject" onchange="loadAvailableStudents()" required>
-        <option value="">Select Subject</option>
-      </select>
-      <div class="checkbox-group" id="studentCheckboxes">
-        <p style="color:#888;">Select a subject first</p>
+      <div class="header-actions">
+        <a href="report.html" class="btn btn-primary" style="font-size:0.84rem;">📊 View Attendance Report</a>
+        <a href="index.html" class="back-btn">Portal Home</a>
       </div>
-      <button type="submit" class="submit-btn full">Assign Students</button>
-    </form>
-    <div id="assignMsg" class="msg"></div>
-  </div>
+    </div>
+  </header>
 
-  <div class="card">
-    <h2>📊 Quick Stats</h2>
-  <div class="stats">
-    <div class="stat"><div class="stat-num" id="totalStudents">0</div><div class="stat-label">Students</div></div>
-    <div class="stat"><div class="stat-num" id="totalFaculty">0</div><div class="stat-label">Faculty</div></div>
-    <div class="stat"><div class="stat-num" id="totalSubjects">0</div><div class="stat-label">Subjects</div></div>
-    <div class="stat"><div class="stat-num" id="totalDepts">0</div><div class="stat-label">Departments</div></div>
-  </div>
-  </div>
-
-  <div class="card">
-    <h2>⚙️ Settings</h2>
-    <form id="settingsForm" onsubmit="saveSettings(event)">
-      <div style="display:flex; align-items:center; gap:10px;">
-        <label style="font-size:14px;">Distance Threshold (meters):</label>
-        <input type="number" id="distanceThreshold" class="settings-input" min="1" max="1000" required />
-        <button type="submit" class="submit-btn">Save</button>
+  <main class="page-wrap">
+    <!-- Quick Statistics Row -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-num" id="totalStudents">0</div>
+        <div class="stat-label">Total Students</div>
       </div>
-    </form>
-    <div id="settingsMsg" class="msg"></div>
-  </div>
+      <div class="stat">
+        <div class="stat-num" id="totalFaculty">0</div>
+        <div class="stat-label">Faculty Members</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="totalSubjects">0</div>
+        <div class="stat-label">Active Subjects</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="totalDepts">0</div>
+        <div class="stat-label">Departments</div>
+      </div>
+    </div>
 
-  <div class="card">
-    <h2>📋 Department-wise Listings</h2>
-    <div class="filter-row">
-      <select id="filterDept" onchange="renderListing()">
-        <option value="">All Departments</option>
-      </select>
+    <!-- 2-Column Grid for Management Modules -->
+    <div class="dashboard-grid">
+      <!-- Left Column -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <!-- Manage Departments Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>🏛️ Academic Departments Management</h2>
+          </div>
+          <form id="addDepartmentForm" style="display: flex; gap: 10px; margin-bottom: 18px;">
+            <input type="text" id="deptName" placeholder="Department Name (e.g. Computer Science)" required style="flex:1;" />
+            <button type="submit" class="btn submit-btn">Add Dept</button>
+          </form>
+          <div id="deptMsg" class="msg"></div>
+          <div id="deptAccordion" style="margin-top: 14px;"></div>
+        </div>
+
+        <!-- Add Student Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>👨‍🎓 Onboard New Student</h2>
+          </div>
+          <form id="addStudentForm">
+            <input type="text" id="name" placeholder="Full Student Name" required />
+            <input type="email" id="email" placeholder="Student Email" required />
+            <input type="password" id="password" placeholder="Initial Password" required />
+            <select id="studentDept" required>
+              <option value="">Select Department</option>
+            </select>
+            <button type="submit" class="btn submit-btn full">Register Student</button>
+          </form>
+          <div id="studentMsg" class="msg"></div>
+        </div>
+
+        <!-- Add Faculty Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>👩‍🏫 Onboard New Faculty</h2>
+          </div>
+          <form id="addFacultyForm">
+            <input type="text" id="facultyName" placeholder="Faculty Name & Title" required />
+            <input type="email" id="facultyEmail" placeholder="Faculty Email" required />
+            <input type="password" id="facultyPassword" placeholder="Initial Password" required />
+            <select id="facultyDept" required>
+              <option value="">Select Department</option>
+            </select>
+            <button type="submit" class="btn submit-btn full">Register Faculty</button>
+          </form>
+          <div id="facultyMsg" class="msg"></div>
+        </div>
+      </div>
+
+      <!-- Right Column -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <!-- Create Subject Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>📚 Course & Subject Creation</h2>
+          </div>
+          <form id="addSubjectForm">
+            <input type="text" id="subjectName" placeholder="Subject Name" required />
+            <input type="text" id="subjectCode" placeholder="Subject Code (e.g. CS501)" required />
+            <select id="subjectFaculty" required>
+              <option value="">Select Faculty</option>
+            </select>
+            <select id="subjectDept" required>
+              <option value="">Select Department</option>
+            </select>
+            <button type="submit" class="btn submit-btn full">Create Course Subject</button>
+          </form>
+          <div id="subjectMsg" class="msg"></div>
+        </div>
+
+        <!-- Assign Students to Subject Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>👥 Assign Students to Subject</h2>
+          </div>
+          <form id="assignStudentsForm" style="display: flex; flex-direction: column; gap: 14px;">
+            <select id="assignSubject" onchange="loadAvailableStudents()" required>
+              <option value="">Select Course Subject</option>
+            </select>
+            <div class="checkbox-group" id="studentCheckboxes">
+              <p class="empty">Select a subject above to load student roster</p>
+            </div>
+            <button type="submit" class="btn submit-btn" style="width: 100%;">Save Subject Enrollment</button>
+          </form>
+          <div id="assignMsg" class="msg"></div>
+        </div>
+
+        <!-- Geofence & System Settings Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>⚙️ Geofencing & GPS Verification Settings</h2>
+          </div>
+          <form id="settingsForm" onsubmit="saveSettings(event)" style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+              <label class="form-label" style="margin: 0;">Proximity Threshold (meters):</label>
+              <input type="number" id="distanceThreshold" class="settings-input" min="1" max="1000" required />
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+              <label class="form-label" style="margin: 0;">Required GPS Accuracy (meters):</label>
+              <input type="number" id="gpsAccuracyThreshold" class="settings-input" min="5" max="500" required />
+            </div>
+            <button type="submit" class="btn submit-btn" style="align-self: flex-end; margin-top: 4px;">Save Settings</button>
+          </form>
+          <div id="settingsMsg" class="msg"></div>
+        </div>
+      </div>
     </div>
-    <div class="tabs">
-      <div class="tab active" data-tab="students" onclick="switchTab(this)">Students</div>
-      <div class="tab" data-tab="faculty" onclick="switchTab(this)">Faculty</div>
-      <div class="tab" data-tab="subjects" onclick="switchTab(this)">Subjects</div>
+
+    <!-- Department-wise Directory Card -->
+    <div class="card" style="margin-top: 24px;">
+      <div class="card-header">
+        <h2>📋 Department-Wise Institutional Directory</h2>
+      </div>
+      <div class="filter-row">
+        <select id="filterDept" onchange="renderListing()">
+          <option value="">All Departments</option>
+        </select>
+      </div>
+      <div class="tabs">
+        <div class="tab active" data-tab="students" onclick="switchTab(this)">Students Directory</div>
+        <div class="tab" data-tab="faculty" onclick="switchTab(this)">Faculty Directory</div>
+        <div class="tab" data-tab="subjects" onclick="switchTab(this)">Subjects & Courses</div>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead id="listingHead"></thead>
+          <tbody id="listingBody"></tbody>
+        </table>
+      </div>
     </div>
-    <div style="overflow-x:auto;">
-      <table>
-        <thead id="listingHead"></thead>
-        <tbody id="listingBody"></tbody>
-      </table>
+  </main>
+
+  <!-- Department Detail Modal (Students, Faculty, Subjects) -->
+  <div id="deptDetailModal" class="modal-overlay" style="display:none;" onclick="closeDeptModalOnBackdrop(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span id="deptModalTypeBadge" class="badge blue">Department Detail</span>
+          <h2 id="deptModalTitle" style="margin-top:4px;">Department Detail</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeDeptModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-search-wrap">
+          <input type="text" id="deptModalSearch" placeholder="🔍 Search records..." oninput="onDeptModalSearch()" />
+        </div>
+        <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
+          <table>
+            <thead id="deptModalThead"></thead>
+            <tbody id="deptModalTbody"></tbody>
+          </table>
+        </div>
+        <div id="deptModalPagination" class="modal-pagination-row"></div>
+      </div>
     </div>
   </div>
 
@@ -176,6 +223,23 @@
     const db = firebase.firestore();
     let currentTab = 'students';
     let deptMap = {};
+
+    // Department Data & Modal State
+    const deptDataCache = {
+      studentsByDept: {},
+      facultyByDept: {},
+      subjectsByDept: {}
+    };
+
+    let currentModalState = {
+      deptId: '',
+      deptName: '',
+      type: '', // 'students', 'faculty', 'subjects'
+      allRecords: [],
+      filteredRecords: [],
+      page: 1,
+      pageSize: 10
+    };
 
     function switchTab(tabEl) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -188,7 +252,7 @@
       const filterDept = document.getElementById('filterDept').value;
       const thead = document.getElementById('listingHead');
       const tbody = document.getElementById('listingBody');
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">Loading...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">Loading institutional directory...</td></tr>';
       try {
         let deptSnap, stuSnap, facSnap, subSnap;
         if (!filterDept) {
@@ -209,33 +273,36 @@
         deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
         let rows = [];
         if (currentTab === 'students') {
-          thead.innerHTML = '<tr><th>Name</th><th>Email</th><th>Dept</th><th>Face</th></tr>';
+          thead.innerHTML = '<tr><th>Student Name</th><th>Email</th><th>Department</th><th>Biometric Face Status</th></tr>';
           stuSnap.forEach(doc => {
             const s = doc.data();
             const deptName = deptMap[s.dept] || s.dept || '-';
-            rows.push(`<tr><td>${s.name}</td><td>${s.email}</td><td>${deptName}</td><td>${s.faceRegistered ? 'Yes' : 'No'}</td></tr>`);
+            const faceBadge = s.faceRegistered 
+              ? '<span class="badge green">● Registered</span>' 
+              : '<span class="badge">Pending</span>';
+            rows.push(`<tr><td><strong>${s.name}</strong></td><td>${s.email}</td><td><span class="badge">${deptName}</span></td><td>${faceBadge}</td></tr>`);
           });
         } else if (currentTab === 'faculty') {
-          thead.innerHTML = '<tr><th>Name</th><th>Email</th><th>Department</th></tr>';
+          thead.innerHTML = '<tr><th>Faculty Name</th><th>Email</th><th>Department</th></tr>';
           facSnap.forEach(doc => {
             const f = doc.data();
             const deptName = deptMap[f.department] || f.department || '-';
-            rows.push(`<tr><td>${f.name}</td><td>${f.email}</td><td>${deptName}</td></tr>`);
+            rows.push(`<tr><td><strong>${f.name}</strong></td><td>${f.email}</td><td><span class="badge blue">${deptName}</span></td></tr>`);
           });
         } else {
-          thead.innerHTML = '<tr><th>Subject</th><th>Code</th><th>Faculty</th><th>Dept</th><th>Students</th></tr>';
+          thead.innerHTML = '<tr><th>Subject Name</th><th>Code</th><th>Assigned Faculty</th><th>Department</th><th>Enrolled Students</th></tr>';
           const facMap = {};
           facSnap.forEach(doc => { facMap[doc.id] = doc.data().name; });
           subSnap.forEach(doc => {
             const s = doc.data();
             const facName = facMap[s.facultyId] || '-';
             const deptName = deptMap[s.departmentId] || s.departmentId || '-';
-            rows.push(`<tr><td>${s.subjectName}</td><td>${s.subjectCode}</td><td>${facName}</td><td>${deptName}</td><td>${(s.studentIds || []).length}</td></tr>`);
+            rows.push(`<tr><td><strong>${s.subjectName}</strong></td><td><span class="badge">${s.subjectCode}</span></td><td>${facName}</td><td>${deptName}</td><td><span class="badge blue">${(s.studentIds || []).length} students</span></td></tr>`);
           });
         }
-        tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="5" class="empty">None</td></tr>' : rows.join('');
+        tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="5" class="empty">No records found.</td></tr>' : rows.join('');
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty" style="color:#c0392b;">Error loading</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="empty" style="color:var(--crimson-dark);">Error loading records</td></tr>`;
       }
     }
 
@@ -245,16 +312,19 @@
       const assignSubject = document.getElementById('assignSubject');
       try {
         const facultySnap = await db.collection('faculty').orderBy('name').get();
+        subjectFaculty.innerHTML = '<option value="">Select Faculty</option>';
         facultySnap.forEach(doc => {
           const f = doc.data();
           subjectFaculty.innerHTML += `<option value="${doc.id}">${f.name}</option>`;
         });
         const subjectSnap = await db.collection('subjects').orderBy('subjectName').get();
+        assignSubject.innerHTML = '<option value="">Select Course Subject</option>';
         subjectSnap.forEach(doc => {
           const s = doc.data();
-          assignSubject.innerHTML += `<option value="${doc.id}">${s.subjectName}</option>`;
+          assignSubject.innerHTML += `<option value="${doc.id}">${s.subjectName} (${s.subjectCode})</option>`;
         });
         const deptSnap = await db.collection('departments').orderBy('name').get();
+        subjectDept.innerHTML = '<option value="">Select Department</option>';
         deptSnap.forEach(doc => {
           const d = doc.data();
           subjectDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
@@ -268,7 +338,7 @@
       const subjectId = document.getElementById('assignSubject').value;
       const container = document.getElementById('studentCheckboxes');
       if (!subjectId) {
-        container.innerHTML = '<p style="color:#888;">Select a subject first</p>';
+        container.innerHTML = '<p class="empty">Select a subject above to load students.</p>';
         return;
       }
       try {
@@ -281,101 +351,279 @@
         deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
         const assigned = new Set((subjectSnap.data()?.studentIds || []));
         container.innerHTML = '';
+        if (studentsSnap.empty) {
+          container.innerHTML = '<p class="empty">No students found in the database.</p>';
+          return;
+        }
         studentsSnap.forEach(doc => {
           const s = doc.data();
           const checked = assigned.has(doc.id) ? 'checked' : '';
           const deptName = deptMap[s.dept] || s.dept || '-';
-          container.innerHTML += `<div class="checkbox-item"><input type="checkbox" id="stu-${doc.id}" value="${doc.id}" ${checked}><label for="stu-${doc.id}">${s.name} (${deptName})</label></div>`;
+          container.innerHTML += `<div class="checkbox-item"><input type="checkbox" id="stu-${doc.id}" value="${doc.id}" ${checked}><label for="stu-${doc.id}"><strong>${s.name}</strong> (${deptName})</label></div>`;
         });
       } catch (err) {
-        container.innerHTML = '<p style="color:#e74c3c;">Error loading students</p>';
+        container.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Error loading students</p>';
       }
     }
 
-async function loadDepartments() {
-       const studentDept = document.getElementById('studentDept');
-       const facultyDept = document.getElementById('facultyDept');
-       const filterDept = document.getElementById('filterDept');
-       const accordion = document.getElementById('deptAccordion');
-       try {
-         const deptSnap = await db.collection('departments').orderBy('name').get();
-         studentDept.innerHTML = '<option value="">Select Department</option>';
-         facultyDept.innerHTML = '<option value="">Select Department</option>';
-         filterDept.innerHTML = '<option value="">All Departments</option>';
-         const [stuSnap, facSnap, subSnap] = await Promise.all([
-           db.collection('students').get(),
-           db.collection('faculty').get(),
-           db.collection('subjects').get()
-         ]);
-         const deptMap = {};
-         deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
-         const studentsByDept = {};
-         const facultyByDept = {};
-         const subjectDeptCounts = {};
-         stuSnap.forEach(doc => {
-           const d = doc.data();
-           const k = d.dept || '';
-           studentsByDept[k] = (studentsByDept[k] || []);
-           studentsByDept[k].push({ id: doc.id, name: d.name, email: d.email, deptName: deptMap[k] || k });
-         });
-         facSnap.forEach(doc => {
-           const d = doc.data();
-           const k = d.department || '';
-           facultyByDept[k] = (facultyByDept[k] || []);
-           facultyByDept[k].push({ id: doc.id, name: d.name, email: d.email, deptName: deptMap[k] || k });
-         });
-         subSnap.forEach(doc => {
-           const d = doc.data();
-           const k = d.departmentId || '';
-           subjectDeptCounts[k] = (subjectDeptCounts[k] || 0) + 1;
-         });
-         accordion.innerHTML = '';
-         deptSnap.forEach(doc => {
-           const d = doc.data();
-           const deptId = doc.id;
-           const students = studentsByDept[deptId] || [];
-           const faculty = facultyByDept[deptId] || [];
-           const subCount = subjectDeptCounts[deptId] || 0;
-           studentDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
-           facultyDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
-           filterDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
-           const item = document.createElement('div');
-           item.className = 'dept-item';
-           item.innerHTML = `
-             <div class="dept-header" onclick="toggleDept(this)">
-               <strong>${d.name}</strong>
-               <div class="badges">
-                 <span class="badge green">${students.length} Students</span>
-                 <span class="badge purple">${faculty.length} Faculty</span>
-                 <span class="badge">${subCount} Subjects</span>
-               </div>
-             </div>
-             <div class="dept-body">
-               <div style="margin-bottom:10px;"><strong>Students</strong>
-                 <table><thead><tr><th>Name</th><th>Email</th></tr></thead>
-                 <tbody>${students.length === 0 ? '<tr><td colspan="2" class="empty">None</td></tr>' : students.map(s => `<tr><td>${s.name}</td><td>${s.email}</td></tr>`).join('')}</tbody></table>
-               </div>
-               <div style="margin-bottom:10px;"><strong>Faculty</strong>
-                 <table><thead><tr><th>Name</th><th>Email</th></tr></thead>
-                 <tbody>${faculty.length === 0 ? '<tr><td colspan="2" class="empty">None</td></tr>' : faculty.map(f => `<tr><td>${f.name}</td><td>${f.email}</td></tr>`).join('')}</tbody></table>
-               </div>
-               <div><strong>Subjects</strong>
-                 <table><thead><tr><th>Total Subjects</th></tr></thead>
-                 <tbody><tr><td>${subCount}</td></tr></tbody></table>
-               </div>
-             </div>
-           `;
-           accordion.appendChild(item);
-         });
-       } catch (err) {
-         console.error(err);
-       }
-     }
+    async function loadDepartments() {
+      const studentDept = document.getElementById('studentDept');
+      const facultyDept = document.getElementById('facultyDept');
+      const filterDept = document.getElementById('filterDept');
+      const accordion = document.getElementById('deptAccordion');
+      try {
+        const deptSnap = await db.collection('departments').orderBy('name').get();
+        studentDept.innerHTML = '<option value="">Select Department</option>';
+        facultyDept.innerHTML = '<option value="">Select Department</option>';
+        filterDept.innerHTML = '<option value="">All Departments</option>';
+        
+        const [stuSnap, facSnap, subSnap] = await Promise.all([
+          db.collection('students').get(),
+          db.collection('faculty').get(),
+          db.collection('subjects').get()
+        ]);
 
-    function toggleDept(header) {
-      const body = header.nextElementSibling;
-      body.classList.toggle('open');
+        const deptMap = {};
+        deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
+        
+        // Reset cache
+        deptDataCache.studentsByDept = {};
+        deptDataCache.facultyByDept = {};
+        deptDataCache.subjectsByDept = {};
+
+        stuSnap.forEach(doc => {
+          const d = doc.data();
+          const k = d.dept || '';
+          deptDataCache.studentsByDept[k] = (deptDataCache.studentsByDept[k] || []);
+          deptDataCache.studentsByDept[k].push({ id: doc.id, name: d.name, email: d.email, faceRegistered: !!d.faceRegistered, deptName: deptMap[k] || k });
+        });
+
+        const facMap = {};
+        facSnap.forEach(doc => {
+          const d = doc.data();
+          facMap[doc.id] = d.name;
+          const k = d.department || '';
+          deptDataCache.facultyByDept[k] = (deptDataCache.facultyByDept[k] || []);
+          deptDataCache.facultyByDept[k].push({ id: doc.id, name: d.name, email: d.email, deptName: deptMap[k] || k });
+        });
+
+        subSnap.forEach(doc => {
+          const d = doc.data();
+          const k = d.departmentId || '';
+          deptDataCache.subjectsByDept[k] = (deptDataCache.subjectsByDept[k] || []);
+          deptDataCache.subjectsByDept[k].push({
+            id: doc.id,
+            subjectName: d.subjectName,
+            subjectCode: d.subjectCode,
+            facultyId: d.facultyId,
+            facultyName: facMap[d.facultyId] || '-',
+            studentIds: d.studentIds || [],
+            departmentId: k
+          });
+        });
+
+        accordion.innerHTML = '';
+        if (deptSnap.empty) {
+          accordion.innerHTML = '<p class="empty">No departments created yet.</p>';
+        }
+
+        deptSnap.forEach(doc => {
+          const d = doc.data();
+          const deptId = doc.id;
+          const students = deptDataCache.studentsByDept[deptId] || [];
+          const faculty = deptDataCache.facultyByDept[deptId] || [];
+          const subjects = deptDataCache.subjectsByDept[deptId] || [];
+          const subCount = subjects.length;
+
+          studentDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
+          facultyDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
+          filterDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
+
+          const escapedName = (d.name || '').replace(/'/g, "\\'");
+          const item = document.createElement('div');
+          item.className = 'dept-summary-card';
+          item.innerHTML = `
+            <div class="dept-summary-main">
+              <div class="dept-icon-box">🏛️</div>
+              <div class="dept-summary-info">
+                <h3>${d.name}</h3>
+                <div class="badges">
+                  <span class="badge green">👥 ${students.length} Students</span>
+                  <span class="badge purple">👩‍🏫 ${faculty.length} Faculty</span>
+                  <span class="badge blue">📚 ${subCount} Subjects</span>
+                </div>
+              </div>
+            </div>
+            <div class="dept-action-buttons">
+              <button type="button" class="btn-dept-action" onclick="openDeptDetail('${doc.id}', '${escapedName}', 'students')">👥 View Students</button>
+              <button type="button" class="btn-dept-action" onclick="openDeptDetail('${doc.id}', '${escapedName}', 'faculty')">👩‍🏫 View Faculty</button>
+              <button type="button" class="btn-dept-action" onclick="openDeptDetail('${doc.id}', '${escapedName}', 'subjects')">📚 View Subjects</button>
+            </div>
+          `;
+          accordion.appendChild(item);
+        });
+      } catch (err) {
+        console.error(err);
+      }
     }
+
+    // Modal Drawer Functions
+    function openDeptDetail(deptId, deptName, type) {
+      const modal = document.getElementById('deptDetailModal');
+      const searchInput = document.getElementById('deptModalSearch');
+      searchInput.value = '';
+      
+      let records = [];
+      let title = '';
+      let badgeText = '';
+      let badgeClass = 'badge';
+
+      if (type === 'students') {
+        records = deptDataCache.studentsByDept[deptId] || [];
+        title = `Students in ${deptName}`;
+        badgeText = `${records.length} Enrolled Students`;
+        badgeClass = 'badge green';
+        searchInput.placeholder = '🔍 Search student by name or email...';
+      } else if (type === 'faculty') {
+        records = deptDataCache.facultyByDept[deptId] || [];
+        title = `Faculty in ${deptName}`;
+        badgeText = `${records.length} Faculty Members`;
+        badgeClass = 'badge purple';
+        searchInput.placeholder = '🔍 Search faculty by name or email...';
+      } else {
+        records = deptDataCache.subjectsByDept[deptId] || [];
+        title = `Subjects in ${deptName}`;
+        badgeText = `${records.length} Course Subjects`;
+        badgeClass = 'badge blue';
+        searchInput.placeholder = '🔍 Search subject by name or code...';
+      }
+
+      currentModalState = {
+        deptId,
+        deptName,
+        type,
+        allRecords: records,
+        filteredRecords: records,
+        page: 1,
+        pageSize: 10
+      };
+
+      document.getElementById('deptModalTitle').textContent = title;
+      const badgeEl = document.getElementById('deptModalTypeBadge');
+      badgeEl.textContent = badgeText;
+      badgeEl.className = badgeClass;
+
+      renderDeptModalTable();
+      modal.style.display = 'flex';
+    }
+
+    function closeDeptModal() {
+      document.getElementById('deptDetailModal').style.display = 'none';
+    }
+
+    function closeDeptModalOnBackdrop(e) {
+      if (e.target.id === 'deptDetailModal') {
+        closeDeptModal();
+      }
+    }
+
+    function onDeptModalSearch() {
+      const q = document.getElementById('deptModalSearch').value.trim().toLowerCase();
+      if (!q) {
+        currentModalState.filteredRecords = currentModalState.allRecords;
+      } else {
+        currentModalState.filteredRecords = currentModalState.allRecords.filter(r => {
+          if (currentModalState.type === 'students') {
+            return (r.name && r.name.toLowerCase().includes(q)) || (r.email && r.email.toLowerCase().includes(q)) || (r.id && r.id.toLowerCase().includes(q));
+          } else if (currentModalState.type === 'faculty') {
+            return (r.name && r.name.toLowerCase().includes(q)) || (r.email && r.email.toLowerCase().includes(q));
+          } else {
+            return (r.subjectName && r.subjectName.toLowerCase().includes(q)) || (r.subjectCode && r.subjectCode.toLowerCase().includes(q)) || (r.facultyName && r.facultyName.toLowerCase().includes(q));
+          }
+        });
+      }
+      currentModalState.page = 1;
+      renderDeptModalTable();
+    }
+
+    function renderDeptModalTable() {
+      const thead = document.getElementById('deptModalThead');
+      const tbody = document.getElementById('deptModalTbody');
+      const pagination = document.getElementById('deptModalPagination');
+
+      const { type, filteredRecords, page, pageSize } = currentModalState;
+      const total = filteredRecords.length;
+      const totalPages = Math.ceil(total / pageSize) || 1;
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = Math.min(startIndex + pageSize, total);
+      const pagedRecords = filteredRecords.slice(startIndex, endIndex);
+
+      if (type === 'students') {
+        thead.innerHTML = '<tr><th>Student Name</th><th>Email</th><th>Biometric Face Status</th></tr>';
+        if (pagedRecords.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="empty">No students found matching query.</td></tr>';
+        } else {
+          tbody.innerHTML = pagedRecords.map(s => `
+            <tr>
+              <td><strong>${s.name || 'Unknown'}</strong></td>
+              <td>${s.email || '-'}</td>
+              <td>${s.faceRegistered ? '<span class="badge green">● Registered</span>' : '<span class="badge">Pending</span>'}</td>
+            </tr>
+          `).join('');
+        }
+      } else if (type === 'faculty') {
+        thead.innerHTML = '<tr><th>Faculty Name</th><th>Email</th></tr>';
+        if (pagedRecords.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="2" class="empty">No faculty found matching query.</td></tr>';
+        } else {
+          tbody.innerHTML = pagedRecords.map(f => `
+            <tr>
+              <td><strong>${f.name || 'Unknown'}</strong></td>
+              <td>${f.email || '-'}</td>
+            </tr>
+          `).join('');
+        }
+      } else {
+        thead.innerHTML = '<tr><th>Subject Name</th><th>Course Code</th><th>Assigned Faculty</th><th>Enrolled Students</th></tr>';
+        if (pagedRecords.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty">No subjects found matching query.</td></tr>';
+        } else {
+          tbody.innerHTML = pagedRecords.map(sub => `
+            <tr>
+              <td><strong>${sub.subjectName}</strong></td>
+              <td><span class="badge">${sub.subjectCode}</span></td>
+              <td>${sub.facultyName || '-'}</td>
+              <td><span class="badge blue">${(sub.studentIds || []).length} students</span></td>
+            </tr>
+          `).join('');
+        }
+      }
+
+      // Pagination controls
+      if (total > 0) {
+        pagination.innerHTML = `
+          <div>Showing <strong>${startIndex + 1} - ${endIndex}</strong> of <strong>${total}</strong> records</div>
+          <div class="pagination-btn-group">
+            <button type="button" class="btn-page" onclick="changeDeptModalPage(${page - 1})" ${page <= 1 ? 'disabled' : ''}>← Prev</button>
+            <span>Page ${page} of ${totalPages}</span>
+            <button type="button" class="btn-page" onclick="changeDeptModalPage(${page + 1})" ${page >= totalPages ? 'disabled' : ''}>Next →</button>
+          </div>
+        `;
+      } else {
+        pagination.innerHTML = '<div>No records found</div>';
+      }
+    }
+
+    function changeDeptModalPage(newPage) {
+      const totalPages = Math.ceil(currentModalState.filteredRecords.length / currentModalState.pageSize) || 1;
+      if (newPage >= 1 && newPage <= totalPages) {
+        currentModalState.page = newPage;
+        renderDeptModalTable();
+      }
+    }
+
+    // Compatibility shim
+    function toggleDept(header) {}
 
     async function updateStats() {
       try {
@@ -432,17 +680,19 @@ async function loadDepartments() {
       try {
         const snap = await db.collection('students').where('email', '==', student.email).get();
         if (!snap.empty) {
-          msg.textContent = 'Email already exists!';
+          msg.textContent = 'Student email already exists!';
           msg.className = 'msg error';
           msg.style.display = 'block';
           return;
         }
         await db.collection('students').add(student);
-        msg.textContent = 'Student added successfully!';
+        msg.textContent = 'Student onboarded successfully!';
         msg.className = 'msg success';
         msg.style.display = 'block';
         document.getElementById('addStudentForm').reset();
+        loadDepartments();
         updateStats();
+        renderListing();
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';
@@ -463,18 +713,20 @@ async function loadDepartments() {
       try {
         const snap = await db.collection('faculty').where('email', '==', faculty.email).get();
         if (!snap.empty) {
-          msg.textContent = 'Email already exists!';
+          msg.textContent = 'Faculty email already exists!';
           msg.className = 'msg error';
           msg.style.display = 'block';
           return;
         }
         await db.collection('faculty').add(faculty);
-        msg.textContent = 'Faculty added successfully!';
+        msg.textContent = 'Faculty member onboarded successfully!';
         msg.className = 'msg success';
         msg.style.display = 'block';
         document.getElementById('addFacultyForm').reset();
         loadDepartments();
+        loadFacultyOptions();
         updateStats();
+        renderListing();
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';
@@ -494,12 +746,14 @@ async function loadDepartments() {
       };
       try {
         await db.collection('subjects').add(subject);
-        msg.textContent = 'Subject created successfully!';
+        msg.textContent = 'Course subject created successfully!';
         msg.className = 'msg success';
         msg.style.display = 'block';
         document.getElementById('addSubjectForm').reset();
+        loadDepartments();
         loadFacultyOptions();
         updateStats();
+        renderListing();
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';
@@ -515,10 +769,12 @@ async function loadDepartments() {
       const studentIds = Array.from(checkboxes).map(cb => cb.value);
       try {
         await db.collection('subjects').doc(subjectId).update({ studentIds });
-        msg.textContent = 'Students assigned successfully!';
+        msg.textContent = 'Student enrollment saved successfully!';
         msg.className = 'msg success';
         msg.style.display = 'block';
+        loadDepartments();
         updateStats();
+        renderListing();
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';
@@ -529,13 +785,30 @@ async function loadDepartments() {
     async function saveSettings(e) {
       e.preventDefault();
       const msg = document.getElementById('settingsMsg');
-      const threshold = parseInt(document.getElementById('distanceThreshold').value);
+      const threshold = parseInt(document.getElementById('distanceThreshold').value, 10);
+      const gpsAccuracyThreshold = parseInt(document.getElementById('gpsAccuracyThreshold').value, 10);
+      if (!Number.isFinite(threshold) || threshold < 1) {
+        msg.textContent = 'Please enter a valid distance threshold.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+      if (!Number.isFinite(gpsAccuracyThreshold) || gpsAccuracyThreshold < 5) {
+        msg.textContent = 'Please enter a valid GPS accuracy threshold (minimum 5m).';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
       try {
-        await db.collection('settings').doc('attendance').set({ distanceThreshold: threshold, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-        msg.textContent = 'Settings saved!';
+        await db.collection('settings').doc('attendance').set({
+          distanceThreshold: threshold,
+          gpsAccuracyThreshold,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        msg.textContent = 'Geofencing settings saved successfully!';
         msg.className = 'msg success';
         msg.style.display = 'block';
-        setTimeout(() => { msg.style.display = 'none'; }, 2000);
+        setTimeout(() => { msg.style.display = 'none'; }, 2500);
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';
@@ -548,15 +821,16 @@ async function loadDepartments() {
         const snap = await db.collection('settings').doc('attendance').get();
         if (snap.exists) {
           document.getElementById('distanceThreshold').value = snap.data().distanceThreshold || 10;
+          document.getElementById('gpsAccuracyThreshold').value = snap.data().gpsAccuracyThreshold || 50;
         } else {
-        document.getElementById('distanceThreshold').value = 10;
+          document.getElementById('distanceThreshold').value = 10;
+          document.getElementById('gpsAccuracyThreshold').value = 50;
         }
       } catch (err) {
         document.getElementById('distanceThreshold').value = 10;
+        document.getElementById('gpsAccuracyThreshold').value = 50;
       }
     }
-
-    document.getElementById('settingsForm').addEventListener('submit', saveSettings);
 
     loadFacultyOptions();
     loadDepartments();

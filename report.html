@@ -1,74 +1,92 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Attendance Report - Face Attendance</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-  body { min-height: 100vh; background: #f5f5f7; color: #1d1d1f; padding: 30px; }
-  .header { text-align: center; margin-bottom: 28px; }
-  .header h1 { font-size: 1.75rem; font-weight: 600; }
-  .back-btn { display: inline-block; padding: 8px 16px; background: #f5f5f7; color: #1d1d1f; text-decoration: none; border-radius: 6px; margin-bottom: 12px; font-size: 13px; border: 1px solid #d2d2d7; }
-  .card { max-width: 1000px; margin: 0 auto; padding: 28px; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #e5e5e7; }
-  .card h2 { margin-bottom: 18px; color: #1d1d1f; font-size: 1.1rem; font-weight: 600; }
-  .stats { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 22px; }
-  .stat { background: #fafafa; padding: 16px 28px; border-radius: 8px; min-width: 150px; text-align: center; border: 1px solid #e5e5e7; }
-  .stat-num { font-size: 1.6rem; font-weight: 600; color: #0071e3; }
-  .stat-label { font-size: 12px; color: #6e6e73; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
-  .export-btn { padding: 8px 16px; background: #0071e3; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; margin-left: 10px; }
-  .export-btn:hover { background: #0077ed; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e5e7; font-size: 14px; }
-  th { color: #6e6e73; font-weight: 500; }
-  tr:hover td { background: #fafafa; }
-  .empty { text-align: center; color: #888; padding: 24px; }
-  .filter-row { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
-  .filter-row input, .filter-row select { padding: 9px 12px; border: 1px solid #d2d2d7; background: #fff; color: #1d1d1f; border-radius: 6px; font-size: 13px; outline: none; }
-  .filter-row button { padding: 9px 16px; background: #0071e3; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Institution Attendance Report - CIT Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <a href="index.html" class="back-btn">← Back to Home</a>
-  <div class="header">
-    <h1>Attendance Report</h1>
-    <p style="color:#6e6e73; font-size:14px;">Complete attendance overview for all students</p>
+  <!-- Mesh Background Scene -->
+  <div class="bg-scene">
+    <div class="overlay"></div>
   </div>
 
-  <div class="card">
+  <!-- App Header / Navbar -->
+  <header class="app-header">
+    <div class="header-container">
+      <a href="admin.html" class="brand-section">
+        <div class="brand-logo-wrap">
+          <img src="cit logo.jpg" alt="CIT Logo" class="cit-logo" />
+        </div>
+        <div class="brand-text">
+          <h1>CIT <span>PORTAL</span></h1>
+          <p>Institutional Attendance Reports</p>
+        </div>
+      </a>
+
+      <div class="header-actions">
+        <a href="admin.html" class="back-btn">← Back to Admin Panel</a>
+        <a href="index.html" class="back-btn">Portal Home</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-wrap">
+    <!-- Stat Counter Cards -->
     <div class="stats">
-      <div class="stat"><div class="stat-num" id="totalRecords">0</div><div class="stat-label">Total Records</div></div>
-      <div class="stat"><div class="stat-num" id="todayRecords">0</div><div class="stat-label">Today</div></div>
-      <div class="stat"><div class="stat-num" id="totalStudents">0</div><div class="stat-label">Students</div></div>
+      <div class="stat">
+        <div class="stat-num" id="totalRecords">0</div>
+        <div class="stat-label">Total Verified Records</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="todayRecords">0</div>
+        <div class="stat-label">Today's Attendance</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="totalStudents">0</div>
+        <div class="stat-label">Enrolled Students</div>
+      </div>
     </div>
 
-<div class="filter-row">
-       <input type="date" id="dateFilter" title="Filter by date">
-       <select id="subjectFilter"><option value="">All Subjects</option></select>
-       <select id="facultyFilter"><option value="">All Faculty</option></select>
-       <button onclick="filterRecords()">Filter</button>
-       <button class="export-btn" onclick="exportCSV()">Export CSV</button>
-     </div>
+    <!-- Main Report Card -->
+    <div class="card">
+      <div class="card-header">
+        <h2>📊 Global Attendance Records & Filters</h2>
+      </div>
+      <p class="card-desc">Filter records by date, subject, or faculty, and export institutional reports as CSV files.</p>
 
-    <div style="overflow-x:auto;">
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Department</th>
-            <th>Date</th>
-            <th>Time</th>
-            <th>Latitude</th>
-            <th>Longitude</th>
-            <th>Verified</th>
-          </tr>
-        </thead>
-        <tbody id="recordsTable">
-          <tr><td colspan="7" class="empty">Loading records...</td></tr>
-        </tbody>
-      </table>
+      <div class="filter-row">
+        <input type="date" id="dateFilter" title="Filter by date" />
+        <select id="subjectFilter"><option value="">All Subjects</option></select>
+        <select id="facultyFilter"><option value="">All Faculty</option></select>
+        <button type="button" class="btn btn-primary" onclick="filterRecords()">🔍 Filter Records</button>
+        <button type="button" class="btn export-btn" onclick="exportCSV()">📥 Export CSV</button>
+      </div>
+
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Student Name</th>
+              <th>Department</th>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Latitude</th>
+              <th>Longitude</th>
+              <th>Verification</th>
+            </tr>
+          </thead>
+          <tbody id="recordsTable">
+            <tr><td colspan="7" class="empty">Loading institutional attendance records...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
+  </main>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -118,7 +136,7 @@
         updateStats(allRecords);
         renderTable(allRecords);
       } catch (err) {
-        document.getElementById('recordsTable').innerHTML = `<tr><td colspan="7" class="empty" style="color:#c0392b;">Error loading records</td></tr>`;
+        document.getElementById('recordsTable').innerHTML = `<tr><td colspan="7" class="empty" style="color:var(--crimson-dark);">Error loading records</td></tr>`;
         console.error(err);
       }
     }
@@ -129,70 +147,78 @@
       document.getElementById('todayRecords').textContent = records.filter(r => r.date === today).length;
     }
 
-function renderTable(records) {
-        const tbody = document.getElementById('recordsTable');
-        if (records.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" class="empty">No attendance records found</td></tr>';
-          return;
-        }
-        tbody.innerHTML = '';
-        records.forEach(r => {
-          const verified = r.latitude !== 'N/A' && r.longitude !== 'N/A' ? '<span style="color:#0d7a3a;">Yes</span>' : '<span style="color:#6e6e73;">No GPS</span>';
-          const subjectName = r.subjectName || r.subjectId;
-          const facultyName = r.facultyName || 'N/A';
-          const deptName = deptMap[r.studentDept] || r.studentDept || '-';
-          tbody.innerHTML += `<tr><td>${r.studentName || 'Unknown'}</td><td>${deptName}</td><td>${r.date}</td><td>${r.time}</td><td>${r.latitude}</td><td>${r.longitude}</td><td>${verified}</td></tr>`;
-        });
+    function renderTable(records) {
+      const tbody = document.getElementById('recordsTable');
+      if (records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">No attendance records found matching filters.</td></tr>';
+        return;
       }
+      tbody.innerHTML = '';
+      records.forEach(r => {
+        const verified = r.latitude !== 'N/A' && r.longitude !== 'N/A' 
+          ? '<span class="badge green">● GPS & Face Verified</span>' 
+          : '<span class="badge">No GPS</span>';
+        const deptName = deptMap[r.studentDept] || r.studentDept || '-';
+        tbody.innerHTML += `<tr>
+          <td><strong>${r.studentName || 'Unknown'}</strong></td>
+          <td><span class="badge">${deptName}</span></td>
+          <td>${r.date}</td>
+          <td>${r.time}</td>
+          <td>${r.latitude}</td>
+          <td>${r.longitude}</td>
+          <td>${verified}</td>
+        </tr>`;
+      });
+    }
 
-function filterRecords() {
-       const dateVal = document.getElementById('dateFilter').value;
-       const subjectVal = document.getElementById('subjectFilter').value;
-       const facultyVal = document.getElementById('facultyFilter').value;
-       let filtered = [...allRecords];
-       if (dateVal) {
-         const parts = dateVal.split('-');
-         if (parts.length === 3) {
-           const formatted = `${parts[2]}-${parts[1]}-${parts[0]}`;
-           filtered = filtered.filter(r => r.date === formatted);
-         }
-       }
-       if (subjectVal) filtered = filtered.filter(r => r.subjectId === subjectVal);
-       if (facultyVal) filtered = filtered.filter(r => r.facultyId === facultyVal);
-       renderTable(filtered);
-       updateStats(filtered);
-     }
+    function filterRecords() {
+      const dateVal = document.getElementById('dateFilter').value;
+      const subjectVal = document.getElementById('subjectFilter').value;
+      const facultyVal = document.getElementById('facultyFilter').value;
+      let filtered = [...allRecords];
+      if (dateVal) {
+        const parts = dateVal.split('-');
+        if (parts.length === 3) {
+          const formatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          filtered = filtered.filter(r => r.date === formatted || r.date === `${parts[2]}-${parts[1]}-${parts[0]}`);
+        }
+      }
+      if (subjectVal) filtered = filtered.filter(r => r.subjectId === subjectVal);
+      if (facultyVal) filtered = filtered.filter(r => r.facultyId === facultyVal);
+      renderTable(filtered);
+      updateStats(filtered);
+    }
 
-     function exportCSV() {
-       let filtered = [...allRecords];
-       const dateVal = document.getElementById('dateFilter').value;
-       const subjectVal = document.getElementById('subjectFilter').value;
-       const facultyVal = document.getElementById('facultyFilter').value;
-       if (dateVal) {
-         const parts = dateVal.split('-');
-         if (parts.length === 3) {
-           const formatted = `${parts[2]}-${parts[1]}-${parts[0]}`;
-           filtered = filtered.filter(r => r.date === formatted);
-         }
-       }
-       if (subjectVal) filtered = filtered.filter(r => r.subjectId === subjectVal);
-       if (facultyVal) filtered = filtered.filter(r => r.facultyId === facultyVal);
-        let csv = 'Student,Department,Date,Time,Latitude,Longitude,Faculty\n';
-        filtered.forEach(r => csv += `${r.studentName},${deptMap[r.studentDept] || r.studentDept || '-'},${r.date},${r.time},${r.latitude},${r.longitude},${r.facultyName || '-'}\n`);
-       const blob = new Blob([csv], { type: 'text/csv' });
-       const url = URL.createObjectURL(blob);
-       const a = document.createElement('a');
-       a.href = url;
-       a.download = `attendance_${new Date().toISOString().split('T')[0]}.csv`;
-       a.click();
-       URL.revokeObjectURL(url);
-     }
+    function exportCSV() {
+      let filtered = [...allRecords];
+      const dateVal = document.getElementById('dateFilter').value;
+      const subjectVal = document.getElementById('subjectFilter').value;
+      const facultyVal = document.getElementById('facultyFilter').value;
+      if (dateVal) {
+        const parts = dateVal.split('-');
+        if (parts.length === 3) {
+          const formatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          filtered = filtered.filter(r => r.date === formatted || r.date === `${parts[2]}-${parts[1]}-${parts[0]}`);
+        }
+      }
+      if (subjectVal) filtered = filtered.filter(r => r.subjectId === subjectVal);
+      if (facultyVal) filtered = filtered.filter(r => r.facultyId === facultyVal);
+      let csv = 'Student,Department,Date,Time,Latitude,Longitude,Faculty\n';
+      filtered.forEach(r => csv += `${r.studentName},${deptMap[r.studentDept] || r.studentDept || '-'},${r.date},${r.time},${r.latitude},${r.longitude},${r.facultyName || '-'}\n`);
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
 
-     document.getElementById('dateFilter').addEventListener('change', filterRecords);
-     document.getElementById('subjectFilter').addEventListener('change', filterRecords);
-     document.getElementById('facultyFilter').addEventListener('change', filterRecords);
+    document.getElementById('dateFilter').addEventListener('change', filterRecords);
+    document.getElementById('subjectFilter').addEventListener('change', filterRecords);
+    document.getElementById('facultyFilter').addEventListener('change', filterRecords);
 
-     loadFilters().then(() => loadAttendance());
+    loadFilters().then(() => loadAttendance());
   </script>
 </body>
 </html>

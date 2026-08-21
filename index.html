@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CIT Portal Login</title>
+  <title>CIT Portal - Smart Attendance Portal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Background Layer -->
+  <!-- Mesh Background Scene -->
   <div class="bg-scene">
     <div class="overlay"></div>
   </div>
@@ -20,83 +20,217 @@
   <div class="floating-icon globe">🌐</div>
   <div class="floating-icon cap cap-2">🎓</div>
 
-  <main class="page-wrap">
+  <main class="page-wrap" style="display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 80px);">
     <section class="portal-card">
       <!-- Header -->
       <header class="portal-header">
         <div class="logo-placeholder">
           <img src="cit logo.jpg" alt="CIT Logo" class="cit-logo" />
         </div>
-        <h1>WELCOME TO <span>CIT PORTAL</span></h1>
+        <div>
+          <h1>WELCOME TO <span>CIT PORTAL</span></h1>
+          <p style="font-size: 0.88rem; color: var(--text-muted); margin-top: 2px;">Smart Biometric & Geolocation Attendance Management System</p>
+        </div>
       </header>
 
       <!-- Login Columns -->
       <section class="login-columns">
-        <!-- Student -->
+        <!-- Student Login -->
         <article class="login-panel student">
           <div class="panel-head">
             <div class="panel-icon">👨‍🎓</div>
-            <h2>STUDENT LOGIN</h2>
+            <div>
+              <h2>STUDENT LOGIN</h2>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Access your attendance & classes</span>
+            </div>
           </div>
 
           <label class="input-wrap">
             <span class="input-icon">👤</span>
-            <input type="text" id="studentEmail" placeholder="Student ID / Email" required />
+            <input type="text" id="studentEmail" placeholder="Student ID or Email" required autocomplete="username" />
           </label>
 
           <label class="input-wrap">
             <span class="input-icon">🔒</span>
-            <input type="password" id="studentPassword" placeholder="Password" required />
+            <input type="password" id="studentPassword" placeholder="Password" required autocomplete="current-password" />
           </label>
 
-          <a href="#" class="forgot">Forgot Password?</a>
+          <a href="#" class="forgot" onclick="alert('Please contact your department administrator to reset your password.'); return false;">Forgot Password?</a>
           <button type="button" class="btn btn-student" onclick="loginStudent()">LOGIN AS STUDENT</button>
           <div id="studentLoginMsg" class="login-msg" role="alert"></div>
         </article>
 
-        <!-- Teacher -->
+        <!-- Teacher Login -->
         <article class="login-panel teacher">
           <div class="panel-head">
             <div class="panel-icon">👩‍🏫</div>
-            <h2>TEACHER LOGIN</h2>
+            <div>
+              <h2>TEACHER LOGIN</h2>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Manage sessions & analytics</span>
+            </div>
           </div>
 
           <label class="input-wrap">
             <span class="input-icon">📧</span>
-            <input type="email" id="facultyEmail" placeholder="Teacher Email" required />
+            <input type="email" id="facultyEmail" placeholder="Teacher Institutional Email" required autocomplete="username" />
           </label>
 
           <label class="input-wrap">
             <span class="input-icon">🔒</span>
-            <input type="password" id="facultyPassword" placeholder="Password" required />
+            <input type="password" id="facultyPassword" placeholder="Password" required autocomplete="current-password" />
           </label>
 
-          <a href="#" class="forgot">Forgot Password?</a>
+          <a href="#" class="forgot" onclick="alert('Please contact your system administrator to reset your faculty credentials.'); return false;">Forgot Password?</a>
           <button type="button" class="btn btn-teacher" onclick="loginFaculty()">LOGIN AS TEACHER</button>
           <div id="facultyLoginMsg" class="login-msg" role="alert"></div>
         </article>
       </section>
 
-      <!-- Registration -->
+      <!-- Registration Callout -->
       <section class="register-section">
-        <h3>First Time Here?</h3>
-        <p>New to <strong>CIT</strong> Portal? Create your account today!</p>
+        <h3>New User Registration</h3>
+        <p>Register your student or faculty profile to get started with CIT Portal.</p>
 
         <div class="register-actions">
-          <button type="button" class="btn-register student-reg" onclick="window.location.href='admin.html'" aria-label="Register as a new student"><span>＋</span> REGISTER AS NEW STUDENT</button>
-          <button type="button" class="btn-register teacher-reg" onclick="window.location.href='admin.html'" aria-label="Register as a new teacher"><span>＋</span> REGISTER AS NEW TEACHER</button>
+          <button type="button" class="btn-register student-reg" onclick="openStudentRegisterModal()" aria-label="Register as a new student"><span>＋</span> REGISTER AS NEW STUDENT</button>
+          <button type="button" class="btn-register teacher-reg" onclick="openTeacherRegisterModal()" aria-label="Register as a new teacher"><span>＋</span> REGISTER AS NEW TEACHER</button>
         </div>
       </section>
     </section>
   </main>
 
+  <!-- Student Registration Modal -->
+  <div id="studentRegisterModal" class="modal-overlay" style="display:none;" onclick="closeModalOnBackdrop(event, 'studentRegisterModal')">
+    <div class="modal-card" style="max-width: 480px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="badge blue">👨‍🎓 New Student</span>
+          <h2 style="margin-top:4px;">Student Self-Registration</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeStudentRegisterModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.86rem; color: var(--text-muted); margin-bottom: 16px;">
+          Create your student attendance profile to access active classes and biometric verification.
+        </p>
+
+        <form id="studentSelfRegForm" onsubmit="handleStudentRegister(event)">
+          <div style="margin-bottom: 12px;">
+            <label class="form-label" for="regStudentName" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Full Student Name *</label>
+            <div class="input-wrap" style="margin-bottom: 0;">
+              <span class="input-icon">👤</span>
+              <input type="text" id="regStudentName" placeholder="e.g. Alex Johnson" required />
+            </div>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label class="form-label" for="regStudentEmail" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Student Email Address *</label>
+            <div class="input-wrap" style="margin-bottom: 0;">
+              <span class="input-icon">📧</span>
+              <input type="email" id="regStudentEmail" placeholder="student@cit.edu" required />
+            </div>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label class="form-label" for="regStudentDept" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Academic Department *</label>
+            <select id="regStudentDept" required>
+              <option value="">-- Select Department --</option>
+            </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+            <div>
+              <label class="form-label" for="regStudentPass" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Password *</label>
+              <div class="input-wrap" style="margin-bottom: 0;">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="regStudentPass" placeholder="Min 6 chars" required minlength="6" />
+              </div>
+            </div>
+            <div>
+              <label class="form-label" for="regStudentConfirmPass" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Confirm *</label>
+              <div class="input-wrap" style="margin-bottom: 0;">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="regStudentConfirmPass" placeholder="Repeat pass" required minlength="6" />
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" id="regStudentSubmitBtn" class="btn btn-student" style="width: 100%; height: 44px; margin-top: 4px;">Register Student Account</button>
+        </form>
+        <div id="studentRegMsg" class="msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Teacher Registration Modal -->
+  <div id="teacherRegisterModal" class="modal-overlay" style="display:none;" onclick="closeModalOnBackdrop(event, 'teacherRegisterModal')">
+    <div class="modal-card" style="max-width: 480px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="badge" style="background:var(--teacher-subtle); color:var(--teacher-dark); border-color:var(--teacher-border);">👩‍🏫 New Faculty</span>
+          <h2 style="margin-top:4px;">Faculty Self-Registration</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeTeacherRegisterModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.86rem; color: var(--text-muted); margin-bottom: 16px;">
+          Create your teacher account to start class sessions and manage attendance.
+        </p>
+
+        <form id="teacherSelfRegForm" onsubmit="handleTeacherRegister(event)">
+          <div style="margin-bottom: 12px;">
+            <label class="form-label" for="regTeacherName" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Faculty Name & Title *</label>
+            <div class="input-wrap" style="margin-bottom: 0;">
+              <span class="input-icon">👤</span>
+              <input type="text" id="regTeacherName" placeholder="e.g. Prof. Alan Smith" required />
+            </div>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label class="form-label" for="regTeacherEmail" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Teacher Institutional Email *</label>
+            <div class="input-wrap" style="margin-bottom: 0;">
+              <span class="input-icon">📧</span>
+              <input type="email" id="regTeacherEmail" placeholder="faculty@cit.edu" required />
+            </div>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label class="form-label" for="regTeacherDept" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Academic Department *</label>
+            <select id="regTeacherDept" required>
+              <option value="">-- Select Department --</option>
+            </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+            <div>
+              <label class="form-label" for="regTeacherPass" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Password *</label>
+              <div class="input-wrap" style="margin-bottom: 0;">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="regTeacherPass" placeholder="Min 6 chars" required minlength="6" />
+              </div>
+            </div>
+            <div>
+              <label class="form-label" for="regTeacherConfirmPass" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Confirm *</label>
+              <div class="input-wrap" style="margin-bottom: 0;">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="regTeacherConfirmPass" placeholder="Repeat pass" required minlength="6" />
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" id="regTeacherSubmitBtn" class="btn btn-teacher" style="width: 100%; height: 44px; margin-top: 4px;">Register Faculty Account</button>
+        </form>
+        <div id="teacherRegMsg" class="msg"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Footer -->
   <footer class="portal-footer">
-    <a href="#">About Us</a>
-    <a href="#">Contact Support</a>
-    <a href="#">Privacy Policy</a>
-    <a href="#">Terms of Service</a>
-    <a href="admin.html">Admin</a>
+    <a href="#" onclick="alert('CIT Smart Attendance Portal v2.0\nPowered by Face-API Biometrics & GPS Verification'); return false;">About Portal</a>
+    <a href="#" onclick="alert('Support: ithelpdesk@cit.edu\nOffice Hours: 9:00 AM - 5:00 PM'); return false;">Contact Support</a>
+    <a href="#" onclick="alert('Biometric facial descriptors and GPS coordinates are processed exclusively for institutional attendance verification.'); return false;">Privacy Policy</a>
+    <a href="admin.html" style="font-weight: 700; color: #93c5fd;">⚙️ Admin Access</a>
   </footer>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -171,6 +305,207 @@
         console.error(error);
       }
     }
+
+    // Modal helpers
+    async function loadDepartmentOptionsForRegistration() {
+      const studentSelect = document.getElementById('regStudentDept');
+      const teacherSelect = document.getElementById('regTeacherDept');
+      try {
+        const snap = await db.collection('departments').orderBy('name').get();
+        let options = '<option value="">-- Select Department --</option>';
+        snap.forEach(doc => {
+          options += `<option value="${doc.id}">${doc.data().name}</option>`;
+        });
+        if (studentSelect) studentSelect.innerHTML = options;
+        if (teacherSelect) teacherSelect.innerHTML = options;
+      } catch (err) {
+        console.error('Error loading departments for registration:', err);
+      }
+    }
+
+    function openStudentRegisterModal() {
+      loadDepartmentOptionsForRegistration();
+      const msg = document.getElementById('studentRegMsg');
+      if (msg) msg.style.display = 'none';
+      document.getElementById('studentRegisterModal').style.display = 'flex';
+    }
+
+    function closeStudentRegisterModal() {
+      document.getElementById('studentRegisterModal').style.display = 'none';
+    }
+
+    function openTeacherRegisterModal() {
+      loadDepartmentOptionsForRegistration();
+      const msg = document.getElementById('teacherRegMsg');
+      if (msg) msg.style.display = 'none';
+      document.getElementById('teacherRegisterModal').style.display = 'flex';
+    }
+
+    function closeTeacherRegisterModal() {
+      document.getElementById('teacherRegisterModal').style.display = 'none';
+    }
+
+    function closeModalOnBackdrop(event, modalId) {
+      if (event.target.id === modalId) {
+        document.getElementById(modalId).style.display = 'none';
+      }
+    }
+
+    // Student Self-Registration Handler (Direct to 'students' collection)
+    async function handleStudentRegister(e) {
+      e.preventDefault();
+      const msg = document.getElementById('studentRegMsg');
+      const submitBtn = document.getElementById('regStudentSubmitBtn');
+
+      const name = document.getElementById('regStudentName').value.trim();
+      const email = document.getElementById('regStudentEmail').value.trim().toLowerCase();
+      const dept = document.getElementById('regStudentDept').value;
+      const pass = document.getElementById('regStudentPass').value;
+      const confirmPass = document.getElementById('regStudentConfirmPass').value;
+
+      if (pass !== confirmPass) {
+        msg.textContent = 'Passwords do not match. Please re-enter.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (pass.length < 6) {
+        msg.textContent = 'Password must be at least 6 characters long.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Registering Student...';
+      msg.textContent = 'Checking email uniqueness...';
+      msg.className = 'msg info';
+      msg.style.display = 'block';
+
+      try {
+        const snap = await db.collection('students').where('email', '==', email).get();
+        if (!snap.empty) {
+          msg.textContent = 'A student account with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Register Student Account';
+          return;
+        }
+
+        const newStudent = {
+          name: name,
+          email: email,
+          password: pass,
+          dept: dept,
+          faceRegistered: false,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        const docRef = await db.collection('students').add(newStudent);
+
+        msg.textContent = '🎉 Student registration successful! You can now login.';
+        msg.className = 'msg success';
+        msg.style.display = 'block';
+
+        // Pre-fill login input on index.html
+        document.getElementById('studentEmail').value = email;
+        document.getElementById('studentPassword').value = '';
+        document.getElementById('studentSelfRegForm').reset();
+
+        setTimeout(() => {
+          closeStudentRegisterModal();
+          showLoginMessage('studentLoginMsg', 'Account registered! Enter your password to login.', false);
+        }, 1800);
+      } catch (err) {
+        msg.textContent = 'Error: ' + err.message;
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Register Student Account';
+      }
+    }
+
+    // Teacher Self-Registration Handler (Direct to 'faculty' collection)
+    async function handleTeacherRegister(e) {
+      e.preventDefault();
+      const msg = document.getElementById('teacherRegMsg');
+      const submitBtn = document.getElementById('regTeacherSubmitBtn');
+
+      const name = document.getElementById('regTeacherName').value.trim();
+      const email = document.getElementById('regTeacherEmail').value.trim().toLowerCase();
+      const dept = document.getElementById('regTeacherDept').value;
+      const pass = document.getElementById('regTeacherPass').value;
+      const confirmPass = document.getElementById('regTeacherConfirmPass').value;
+
+      if (pass !== confirmPass) {
+        msg.textContent = 'Passwords do not match. Please re-enter.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (pass.length < 6) {
+        msg.textContent = 'Password must be at least 6 characters long.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Registering Faculty...';
+      msg.textContent = 'Checking email uniqueness...';
+      msg.className = 'msg info';
+      msg.style.display = 'block';
+
+      try {
+        const snap = await db.collection('faculty').where('email', '==', email).get();
+        if (!snap.empty) {
+          msg.textContent = 'A faculty account with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Register Faculty Account';
+          return;
+        }
+
+        const newFaculty = {
+          name: name,
+          email: email,
+          password: pass,
+          department: dept,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        const docRef = await db.collection('faculty').add(newFaculty);
+
+        msg.textContent = '🎉 Faculty account created successfully! You can now login.';
+        msg.className = 'msg success';
+        msg.style.display = 'block';
+
+        // Pre-fill login input on index.html
+        document.getElementById('facultyEmail').value = email;
+        document.getElementById('facultyPassword').value = '';
+        document.getElementById('teacherSelfRegForm').reset();
+
+        setTimeout(() => {
+          closeTeacherRegisterModal();
+          showLoginMessage('facultyLoginMsg', 'Account registered! Enter your password to login.', false);
+        }, 1800);
+      } catch (err) {
+        msg.textContent = 'Error: ' + err.message;
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Register Faculty Account';
+      }
+    }
+
+    // Pre-fetch departments
+    loadDepartmentOptionsForRegistration();
   </script>
 </body>
 </html>

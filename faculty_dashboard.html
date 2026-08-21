@@ -1,83 +1,100 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Faculty Dashboard - Face Attendance</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-  body { min-height: 100vh; background: #f5f5f7; color: #1d1d1f; padding: 24px; }
-  .header { display: flex; justify-content: space-between; align-items: center; max-width: 900px; margin: 0 auto 24px; }
-  .header h1 { font-size: 1.4rem; font-weight: 600; }
-  .logout-btn { padding: 8px 16px; background: #f5f5f7; color: #1d1d1f; border: 1px solid #d2d2d7; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
-  .card { max-width: 900px; margin: 0 auto 20px; padding: 24px; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #e5e5e7; }
-  .card h2 { margin-bottom: 14px; color: #1d1d1f; font-size: 1.1rem; font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e5e7; font-size: 14px; }
-  th { color: #6e6e73; font-weight: 500; }
-  tr:hover td { background: #fafafa; }
-  .btn { padding: 8px 16px; font-size: 13px; font-weight: 500; border: none; border-radius: 6px; cursor: pointer; transition: 0.2s; }
-  .start-btn { background: #34c759; color: #fff; }
-  .start-btn:hover { background: #30b350; }
-  .stop-btn { background: #ff3b30; color: #fff; }
-  .stop-btn:hover { background: #ff2d20; }
-  .view-btn { background: #0071e3; color: #fff; }
-  .view-btn:hover { background: #0077ed; }
-  .select { padding: 8px 12px; border: 1px solid #d2d2d7; background: #fff; border-radius: 6px; font-size: 14px; outline: none; margin-right: 10px; }
-  .msg { padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 14px; display: none; }
-  .success { background: #e6f9ef; color: #0d7a3a; }
-  .error { background: #ffe6e6; color: #c0392b; }
-  .info { background: #e6f0fa; color: #0058b3; }
-  .session-info { background: #fafafa; padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
-  .session-info span { display: inline-block; margin-right: 20px; }
-    .duration-select { padding: 6px 10px; border: 1px solid #d2d2d7; background: #fff; border-radius: 6px; font-size: 13px; }
-    .analytics-select { padding: 8px 12px; border: 1px solid #d2d2d7; background: #fff; border-radius: 6px; font-size: 14px; outline: none; width: 100%; max-width: 300px; }
-    .att-matrix { overflow-x: auto; margin-top: 12px; }
-    .att-matrix table { min-width: 600px; }
-    .att-matrix th, .att-matrix td { text-align: center; padding: 8px; font-size: 13px; }
-    .att-matrix th:first-child, .att-matrix td:first-child { text-align: left; position: sticky; left: 0; background: #fff; z-index: 1; }
-    .present { color: #0d7a3a; font-weight: 600; }
-    .absent { color: #c0392b; }
-    .percent { font-weight: 600; }
-    .percent.high { color: #0d7a3a; }
-    .percent.low { color: #c0392b; }
-    .empty { text-align: center; color: #888; padding: 16px; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Faculty Dashboard - CIT Smart Attendance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="header">
-    <h1 id="welcome">Welcome</h1>
-    <button class="logout-btn" onclick="logout()">Logout</button>
+  <!-- Mesh Background Scene -->
+  <div class="bg-scene">
+    <div class="overlay"></div>
   </div>
 
-  <div class="card">
-    <h2>My Subjects</h2>
-    <div style="overflow-x:auto;">
-      <table>
-        <thead>
-          <tr><th>Subject</th><th>Code</th><th>Students</th><th>Action</th></tr>
-        </thead>
-        <tbody id="subjectsTable">
-          <tr><td colspan="4" style="color:#888;">Loading...</td></tr>
-        </tbody>
-      </table>
+  <!-- App Header / Navbar -->
+  <header class="app-header">
+    <div class="header-container">
+      <a href="#" class="brand-section">
+        <div class="brand-logo-wrap">
+          <img src="cit logo.jpg" alt="CIT Logo" class="cit-logo" />
+        </div>
+        <div class="brand-text">
+          <h1>CIT <span>PORTAL</span></h1>
+          <p>Faculty Attendance Suite</p>
+        </div>
+      </a>
+
+      <div class="header-actions">
+        <div class="user-badge">
+          <div class="user-avatar" style="background: var(--teacher-orange);">👩‍🏫</div>
+          <div class="user-info">
+            <div class="user-name" id="welcome">Welcome</div>
+            <div class="user-role">Faculty Member</div>
+          </div>
+        </div>
+        <button class="logout-btn" onclick="logout()" title="Sign out of faculty dashboard">Logout</button>
+      </div>
     </div>
-  </div>
+  </header>
 
-  <div class="card">
-    <h2>Subject Attendance Analytics</h2>
-    <select id="analyticsSubject" class="analytics-select" onchange="loadAnalytics()">
-      <option value="">Select Subject</option>
-    </select>
-    <div id="analyticsContainer" style="margin-top:14px;">
-      <p class="empty">Select a subject to view attendance</p>
+  <main class="page-wrap">
+    <!-- Main Subject Control Card -->
+    <div class="card">
+      <div class="card-header">
+        <h2>📚 My Assigned Subjects & Session Control</h2>
+      </div>
+      <p class="card-desc">Initiate a live GPS-verified attendance window for any of your assigned course subjects.</p>
+      
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Subject</th>
+              <th>Code</th>
+              <th>Enrolled Students</th>
+              <th>Session Actions</th>
+            </tr>
+          </thead>
+          <tbody id="subjectsTable">
+            <tr><td colspan="4" class="empty">Loading your assigned subjects...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
 
-  <div class="card">
-    <h2>Active Sessions</h2>
-    <div id="activeSessions"></div>
-  </div>
+    <!-- Active Sessions Live Monitor -->
+    <div class="card">
+      <div class="card-header">
+        <h2>🟢 Live Attendance Sessions Monitor</h2>
+      </div>
+      <div id="activeSessions">
+        <p class="empty">Checking for active attendance sessions...</p>
+      </div>
+    </div>
+
+    <!-- Attendance Analytics Card -->
+    <div class="card">
+      <div class="card-header">
+        <h2>📊 Subject Attendance Analytics Matrix</h2>
+      </div>
+      <p class="card-desc">View class-by-class attendance records, student percentages, and attendance health for each subject.</p>
+      
+      <div style="margin-bottom: 16px;">
+        <label class="form-label" for="analyticsSubject">Select Course Subject:</label>
+        <select id="analyticsSubject" class="analytics-select" onchange="loadAnalytics()">
+          <option value="">Select Subject</option>
+        </select>
+      </div>
+
+      <div id="analyticsContainer">
+        <p class="empty">Select a subject above to render the attendance matrix.</p>
+      </div>
+    </div>
+  </main>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -87,16 +104,30 @@
 
     const facultyId = localStorage.getItem('facultyId');
     const facultyName = localStorage.getItem('facultyName');
+    let gpsAccuracyThreshold = 50;
     if (!facultyId) { window.location.href = 'faculty.html'; }
 
-    document.getElementById('welcome').textContent = `Welcome, ${facultyName}`;
+    document.getElementById('welcome').textContent = `${facultyName || 'Faculty'}`;
+
+    async function loadSettings() {
+      try {
+        const snap = await db.collection('settings').doc('attendance').get();
+        if (snap.exists) {
+          gpsAccuracyThreshold = snap.data().gpsAccuracyThreshold || 50;
+        } else {
+          gpsAccuracyThreshold = 50;
+        }
+      } catch (err) {
+        gpsAccuracyThreshold = 50;
+      }
+    }
 
     async function loadSubjects() {
       const tbody = document.getElementById('subjectsTable');
       try {
         const snapshot = await db.collection('subjects').where('facultyId', '==', facultyId).get();
         if (snapshot.empty) {
-          tbody.innerHTML = '<tr><td colspan="4" style="color:#888;">No subjects assigned</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="4" class="empty">No subjects assigned yet. Please contact admin.</td></tr>';
           return;
         }
         tbody.innerHTML = '';
@@ -115,22 +146,29 @@
             }
           }
           const btn = hasActive 
-            ? `<button class="btn stop-btn" onclick="stopAttendance('${doc.id}', this)">Stop Attendance</button>`
-            : `<select class="duration-select" id="duration-${doc.id}"><option value="5">5 Min</option><option value="10" selected>10 Min</option><option value="15">15 Min</option></select>
-              <button class="btn start-btn" onclick="startAttendance('${doc.id}', '${s.subjectName}', this)">Start Attendance</button>`;
+            ? `<button class="btn stop-btn" onclick="stopAttendance('${doc.id}', this)">⏹ Stop Attendance</button>`
+            : `<div style="display:inline-flex; align-items:center; gap:8px;">
+                <select class="duration-select" id="duration-${doc.id}">
+                  <option value="1">1 Min</option>
+                  <option value="5">5 Min</option>
+                  <option value="10" selected>10 Min</option>
+                  <option value="15">15 Min</option>
+                </select>
+                <button class="btn start-btn" onclick="startAttendance('${doc.id}', '${s.subjectName}', this)">▶ Start Attendance</button>
+              </div>`;
           tbody.innerHTML += `<tr>
-            <td>${s.subjectName}</td>
-            <td>${s.subjectCode}</td>
-            <td>${s.studentIds?.length || 0} students</td>
+            <td><strong>${s.subjectName}</strong></td>
+            <td><span class="badge">${s.subjectCode}</span></td>
+            <td><span class="badge blue">${s.studentIds?.length || 0} students</span></td>
             <td>${btn}</td>
           </tr>`;
         }
-        document.getElementById('analyticsSubject').innerHTML = '';
+        document.getElementById('analyticsSubject').innerHTML = '<option value="">-- Select Subject --</option>';
         for (const doc of snapshot.docs) {
-          document.getElementById('analyticsSubject').innerHTML += `<option value="${doc.id}">${doc.data().subjectName}</option>`;
+          document.getElementById('analyticsSubject').innerHTML += `<option value="${doc.id}">${doc.data().subjectName} (${doc.data().subjectCode})</option>`;
         }
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="4" style="color:#e74c3c;">Error loading subjects</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="empty" style="color:var(--crimson-dark);">Error loading subjects</td></tr>';
         console.error(err);
       }
     }
@@ -150,7 +188,7 @@
           }
         }
         if (activeDocs.length === 0) {
-          container.innerHTML = '<p style="color:#888;">No active sessions</p>';
+          container.innerHTML = '<p class="empty">No active attendance sessions in progress.</p>';
           return;
         }
         container.innerHTML = '';
@@ -160,19 +198,32 @@
           const subject = subjectDoc.data();
           container.innerHTML += `
             <div class="session-info">
-              <span><strong>${subject?.subjectName || 'Unknown'}</strong></span>
-              <span>Started: ${s.startTime}</span>
-              <span>Duration: ${s.duration} min</span>
-              <span>Location: ${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)}</span>
-              <button class="btn view-btn" style="margin-left:20px;" onclick="viewAttendance('${s.subjectId}')">View Attendance</button>
+              <div>
+                <span style="font-size:1rem; font-weight:700; color:var(--primary-navy);">📖 ${subject?.subjectName || 'Unknown'}</span>
+                <span class="badge green" style="margin-left:8px;">Class ${s.classNumber || 1}</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; font-size:0.84rem; color:var(--text-muted);">
+                <span>⏰ Started: <strong>${s.startTime}</strong></span>
+                <span>⏳ Duration: <strong>${s.duration} min</strong></span>
+                <span>📍 GPS: <strong>${Number(s.latitude).toFixed(4)}, ${Number(s.longitude).toFixed(4)}</strong></span>
+              </div>
+              <button class="btn view-btn" onclick="viewAttendance('${s.subjectId}')">📊 View Attendance Log</button>
             </div>`;
         }
       } catch (err) {
-        container.innerHTML = '<p style="color:#e74c3c;">Error loading sessions</p>';
+        container.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Error loading sessions</p>';
       }
     }
 
-  async function getNextClassNumber(subjectId) {
+    async function refreshSessionsAndCleanup() {
+      try {
+        await Promise.all([loadSubjects(), loadActiveSessions()]);
+      } catch (err) {
+        console.error('Auto refresh error:', err);
+      }
+    }
+
+    async function getNextClassNumber(subjectId) {
       const snap = await db.collection('attendanceSessions')
         .where('subjectId', '==', subjectId)
         .get();
@@ -181,58 +232,107 @@
       return numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
     }
 
-     async function startAttendance(subjectId, subjectName, button) {
-       const duration = document.getElementById(`duration-${subjectId}`).value;
-       const statusMsg = document.createElement('div');
-       statusMsg.className = 'msg info';
-       statusMsg.textContent = 'Capturing location...';
-       statusMsg.style.display = 'block';
-       button.closest('td').appendChild(statusMsg);
+    async function startAttendance(subjectId, subjectName, button) {
+      await loadSettings();
+      const duration = document.getElementById(`duration-${subjectId}`).value;
+      const existingStatus = button.closest('td').querySelector('.start-status-msg');
+      if (existingStatus) existingStatus.remove();
+      const statusMsg = document.createElement('div');
+      statusMsg.classList.add('start-status-msg');
+      statusMsg.className = 'msg info';
+      statusMsg.textContent = 'Capturing GPS location...';
+      statusMsg.style.display = 'block';
+      button.closest('td').appendChild(statusMsg);
 
-       if (!navigator.geolocation) {
-         statusMsg.className = 'msg error';
-         statusMsg.textContent = 'Geolocation not supported';
-         return;
-       }
+      if (!navigator.geolocation) {
+        statusMsg.className = 'msg error';
+        statusMsg.textContent = 'Geolocation not supported by this browser.';
+        return;
+      }
+      const maxAttempts = 3;
+      const retryDelayMs = 1200;
+      const getPosition = () => new Promise((resolvePos, rejectPos) => {
+        navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, { enableHighAccuracy: true, timeout: 30000, maximumAge: 15000 });
+      });
+      try {
+        let selectedPos = null;
+        let selectedAccuracyMeters = null;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          statusMsg.className = 'msg info';
+          statusMsg.textContent = `Capturing GPS location (attempt ${attempt}/${maxAttempts})...`;
+          try {
+            const pos = await getPosition();
+            const accuracyMeters = typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null;
+            if (accuracyMeters !== null && accuracyMeters > gpsAccuracyThreshold) {
+              if (attempt < maxAttempts) {
+                statusMsg.className = 'msg info';
+                statusMsg.textContent = `GPS accuracy ${accuracyMeters.toFixed(1)}m is too low. Retrying...`;
+                await new Promise(r => setTimeout(r, retryDelayMs));
+                continue;
+              }
+              statusMsg.className = 'msg error';
+              statusMsg.textContent = `GPS accuracy is too low (${accuracyMeters.toFixed(1)}m). Required: ≤ ${gpsAccuracyThreshold}m. Move closer to an open window or increase threshold in settings.`;
+              return;
+            }
+            selectedPos = pos;
+            selectedAccuracyMeters = accuracyMeters;
+            break;
+          } catch (err) {
+            if (err?.code === 1) {
+              statusMsg.className = 'msg error';
+              statusMsg.textContent = 'Location access denied. Please allow location permissions.';
+              return;
+            }
+            if (attempt < maxAttempts) {
+              statusMsg.className = 'msg info';
+              statusMsg.textContent = `GPS unavailable (attempt ${attempt}/${maxAttempts}). Retrying...`;
+              await new Promise(r => setTimeout(r, retryDelayMs));
+              continue;
+            }
+            statusMsg.className = 'msg error';
+            statusMsg.textContent = 'Unable to capture GPS location.';
+            return;
+          }
+        }
 
-       navigator.geolocation.getCurrentPosition(async (pos) => {
-           const now = new Date();
-           const durationMinutes = parseInt(duration, 10);
-         const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-         const dateStr = now.toLocaleDateString('en-GB');
-         try {
-           const classNumber = await getNextClassNumber(subjectId);
-           await db.collection('attendanceSessions').add({
-             subjectId,
-             facultyId,
-             facultyName,
-             active: true,
-             latitude: pos.coords.latitude,
-             longitude: pos.coords.longitude,
-             startTime: timeStr,
-             classNumber,
-             date: dateStr,
-             duration: durationMinutes,
-             expiresAt: new Date(now.getTime() + durationMinutes * 60 * 1000),
-             createdAt: firebase.firestore.FieldValue.serverTimestamp()
-           });
-           statusMsg.className = 'msg success';
-           statusMsg.textContent = `Attendance started! Class ${classNumber}`;
-           setTimeout(() => { loadSubjects(); loadActiveSessions(); }, 1000);
-         } catch (err) {
-           statusMsg.className = 'msg error';
-           statusMsg.textContent = 'Error: ' + err.message;
-         }
-       }, (err) => {
-         statusMsg.className = 'msg error';
-         statusMsg.textContent = 'Location access denied';
-       }, { enableHighAccuracy: true, timeout: 10000 });
-     }
+        if (!selectedPos) {
+          statusMsg.className = 'msg error';
+          statusMsg.textContent = 'Unable to capture GPS location.';
+          return;
+        }
+
+        const now = new Date();
+        const durationMinutes = parseInt(duration, 10);
+        const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = now.toLocaleDateString('en-GB');
+        const classNumber = await getNextClassNumber(subjectId);
+        await db.collection('attendanceSessions').add({
+          subjectId,
+          facultyId,
+          facultyName,
+          active: true,
+          latitude: selectedPos.coords.latitude,
+          longitude: selectedPos.coords.longitude,
+          startTime: timeStr,
+          classNumber,
+          date: dateStr,
+          duration: durationMinutes,
+          expiresAt: new Date(now.getTime() + durationMinutes * 60 * 1000),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        statusMsg.className = 'msg success';
+        statusMsg.textContent = `Attendance started! Class ${classNumber} (GPS: ${selectedAccuracyMeters !== null ? `${selectedAccuracyMeters.toFixed(1)}m` : 'OK'})`;
+        setTimeout(() => { loadSubjects(); loadActiveSessions(); }, 1000);
+      } catch (err) {
+        statusMsg.className = 'msg error';
+        statusMsg.textContent = 'Error: ' + err.message;
+      }
+    }
 
     async function stopAttendance(subjectId, button) {
       const statusMsg = document.createElement('div');
       statusMsg.className = 'msg info';
-      statusMsg.textContent = 'Stopping...';
+      statusMsg.textContent = 'Stopping session...';
       statusMsg.style.display = 'block';
       button.closest('tr').cells[3].appendChild(statusMsg);
 
@@ -242,7 +342,7 @@
           await db.collection('attendanceSessions').doc(doc.id).update({ active: false });
         }
         statusMsg.className = 'msg success';
-        statusMsg.textContent = 'Stopped!';
+        statusMsg.textContent = 'Session stopped successfully!';
         loadSubjects();
         loadActiveSessions();
       } catch (err) {
@@ -255,7 +355,7 @@
       const subjectId = document.getElementById('analyticsSubject').value;
       const container = document.getElementById('analyticsContainer');
       if (!subjectId) {
-        container.innerHTML = '<p class="empty">Select a subject to view attendance</p>';
+        container.innerHTML = '<p class="empty">Select a subject above to view attendance matrix.</p>';
         return;
       }
       try {
@@ -279,7 +379,7 @@
         });
         sessions.sort((a, b) => (a.classNumber || 0) - (b.classNumber || 0));
         if (sessions.length === 0) {
-          container.innerHTML = '<p class="empty">No attendance sessions yet. Start a session first.</p>';
+          container.innerHTML = '<p class="empty">No completed attendance sessions found for this subject yet.</p>';
           return;
         }
         const attendanceBySession = {};
@@ -289,11 +389,11 @@
           if (!attendanceBySession[sid]) attendanceBySession[sid] = {};
           attendanceBySession[sid][a.studentId] = true;
         });
-        let html = '<div class="att-matrix"><table><thead><tr><th>Student</th>';
+        let html = '<div class="att-matrix"><table><thead><tr><th>Enrolled Student</th>';
         sessions.forEach(s => {
-          html += `<th>Class ${s.classNumber}<br><span style="font-size:11px;color:#6e6e73;font-weight:400;">${s.date || ''}</span></th>`;
+          html += `<th>Class ${s.classNumber}<br><span style="font-size:11px;color:var(--text-muted);font-weight:400;">${s.date || ''}</span></th>`;
         });
-        html += '<th>Attendance %</th></tr></thead><tbody>';
+        html += '<th>Overall %</th></tr></thead><tbody>';
         students.forEach(stu => {
           html += `<tr><td>${stu.name}</td>`;
           let presentCount = 0;
@@ -301,17 +401,17 @@
             const isPresent = attendanceBySession[s.id]?.[stu.id];
             if (isPresent) presentCount++;
             const displayClass = isPresent ? 'present' : 'absent';
-            html += `<td class="${displayClass}">${isPresent ? 'P' : 'A'}</td>`;
+            html += `<td><span class="${displayClass}">${isPresent ? 'P' : 'A'}</span></td>`;
           });
           const pct = sessions.length > 0 ? Math.round((presentCount / sessions.length) * 100) : 0;
           const pctClass = pct >= 75 ? 'high' : 'low';
           html += `<td class="percent ${pctClass}">${pct}%</td></tr>`;
         });
         html += '</tbody></table></div>';
-        html += `<p style="margin-top:10px;font-size:12px;color:#6e6e73;">Total sessions: ${sessions.length} | Students: ${students.length}</p>`;
+        html += `<p style="margin-top:12px; font-size:0.82rem; color:var(--text-muted); font-weight:500;">Summary: ${sessions.length} total sessions conducted | ${students.length} enrolled students</p>`;
         container.innerHTML = html;
       } catch (err) {
-        container.innerHTML = `<p class="empty" style="color:#c0392b;">Error loading: ${err.message}</p>`;
+        container.innerHTML = `<p class="empty" style="color:var(--crimson-dark);">Error loading analytics: ${err.message}</p>`;
         console.error(err);
       }
     }
@@ -328,6 +428,8 @@
 
     loadSubjects();
     loadActiveSessions();
+    loadSettings();
+    setInterval(refreshSessionsAndCleanup, 15000);
   </script>
 </body>
 </html>
