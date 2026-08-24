@@ -290,6 +290,49 @@
         </table>
       </div>
     </div>
+
+    <!-- Attendance Correction Requests Audit Card -->
+    <div class="card" style="margin-top: 24px;">
+      <div class="card-header">
+        <h2>📝 Attendance Correction Requests Audit Log</h2>
+        <span class="badge amber" id="adminPendingCorrectionsBadge">0 Pending</span>
+      </div>
+      <p class="card-desc">Institution-wide audit log of student attendance regularisation requests and faculty review decisions.</p>
+
+      <!-- Filters & Search Toolbar -->
+      <div class="filter-row">
+        <input type="text" id="adminCorrectionSearch" placeholder="🔍 Search by student name, USN, faculty, or subject..." oninput="renderAdminCorrectionsTable()" style="flex: 2 1 200px;" />
+        <select id="adminCorrectionStatusFilter" onchange="renderAdminCorrectionsTable()" style="flex: 1 1 140px;">
+          <option value="all">All Statuses</option>
+          <option value="pending" selected>🟡 Pending Review</option>
+          <option value="approved">🟢 Approved</option>
+          <option value="rejected">🔴 Rejected</option>
+        </select>
+        <button type="button" class="btn btn-primary" onclick="loadAdminCorrectionRequests()">🔄 Refresh Audit Log</button>
+      </div>
+
+      <!-- Table -->
+      <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>USN</th>
+              <th>Subject</th>
+              <th>Faculty</th>
+              <th>Date / Class</th>
+              <th>Reason</th>
+              <th>Status</th>
+              <th>Created At</th>
+              <th>Reviewed At / Decision</th>
+            </tr>
+          </thead>
+          <tbody id="adminCorrectionsTableBody">
+            <tr><td colspan="9" class="empty">Loading attendance correction audit log...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </main>
 
   <!-- Department Detail Modal (Students, Faculty, Subjects) -->
@@ -1662,10 +1705,127 @@
       }
     }
 
+    // =========================================================================
+    // ATTENDANCE CORRECTION REQUESTS AUDIT LOG
+    // =========================================================================
+    let allAdminCorrectionRequests = [];
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    async function loadAdminCorrectionRequests() {
+      const tbody = document.getElementById('adminCorrectionsTableBody');
+      const badge = document.getElementById('adminPendingCorrectionsBadge');
+      try {
+        const snap = await db.collection('attendanceCorrectionRequests').get();
+        allAdminCorrectionRequests = [];
+        snap.forEach(doc => {
+          allAdminCorrectionRequests.push({ id: doc.id, ...doc.data() });
+        });
+
+        allAdminCorrectionRequests.sort((a, b) => {
+          const tB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+          const tA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+          return tB - tA;
+        });
+
+        const pendingCount = allAdminCorrectionRequests.filter(r => r.status === 'pending').length;
+        if (badge) {
+          badge.textContent = `${pendingCount} Pending`;
+          badge.className = pendingCount > 0 ? 'badge amber' : 'badge';
+        }
+
+        renderAdminCorrectionsTable();
+      } catch (err) {
+        console.error('loadAdminCorrectionRequests error:', err);
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="9" class="empty" style="color:var(--crimson-dark);">Error loading audit log: ' + err.message + '</td></tr>';
+        }
+      }
+    }
+
+    function renderAdminCorrectionsTable() {
+      const tbody = document.getElementById('adminCorrectionsTableBody');
+      if (!tbody) return;
+
+      const query = (document.getElementById('adminCorrectionSearch')?.value || '').trim().toLowerCase();
+      const statusFilter = document.getElementById('adminCorrectionStatusFilter')?.value || 'pending';
+
+      let filtered = allAdminCorrectionRequests;
+
+      if (statusFilter !== 'all') {
+        filtered = filtered.filter(r => r.status === statusFilter);
+      }
+
+      if (query) {
+        filtered = filtered.filter(r => {
+          const stu = (r.studentName || '').toLowerCase();
+          const usn = (r.studentUsn || '').toLowerCase();
+          const sub = (r.subjectName || '').toLowerCase();
+          const fac = (r.facultyName || '').toLowerCase();
+          return stu.includes(query) || usn.includes(query) || sub.includes(query) || fac.includes(query);
+        });
+      }
+
+      if (filtered.length === 0) {
+        const filterName = statusFilter === 'all' ? '' : statusFilter + ' ';
+        tbody.innerHTML = `<tr><td colspan="9" class="empty">No ${filterName}attendance correction requests found.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(r => {
+        let statusBadge = '';
+        if (r.status === 'pending') {
+          statusBadge = '<span class="badge amber" style="font-weight:700;">🟡 Pending</span>';
+        } else if (r.status === 'approved') {
+          statusBadge = '<span class="badge green" style="font-weight:700;">🟢 Approved</span>';
+        } else if (r.status === 'rejected') {
+          statusBadge = '<span class="badge red" style="font-weight:700;">🔴 Rejected</span>';
+        } else {
+          statusBadge = `<span class="badge">${r.status || 'Unknown'}</span>`;
+        }
+
+        const dateClassStr = `${r.date || '-'}${r.classNumber ? ' (Class ' + r.classNumber + ')' : ''}`;
+        const subDisplay = `${r.subjectName || '-'}${r.subjectCode ? ' (' + r.subjectCode + ')' : ''}`;
+        const createdDisplay = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+        
+        let decisionHtml = '-';
+        if (r.status === 'approved') {
+          const revTime = r.reviewedAt?.toDate ? r.reviewedAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+          decisionHtml = `<span style="color:var(--emerald-dark); font-weight:600;">Approved ${revTime}</span>`;
+        } else if (r.status === 'rejected') {
+          const revTime = r.reviewedAt?.toDate ? r.reviewedAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+          decisionHtml = `<span style="color:#ef4444; font-weight:600;">Rejected ${revTime}</span><br><span style="font-size:0.75rem; color:var(--text-muted);">Note: "${escapeHtml(r.reviewReason || '-')}"</span>`;
+        }
+
+        return `
+          <tr>
+            <td><strong>${escapeHtml(r.studentName || '-')}</strong></td>
+            <td><strong>${escapeHtml(r.studentUsn || '-')}</strong></td>
+            <td><span class="badge blue">${escapeHtml(subDisplay)}</span></td>
+            <td>${escapeHtml(r.facultyName || '-')}</td>
+            <td>${escapeHtml(dateClassStr)}</td>
+            <td style="max-width:220px; word-break:break-word; font-size:0.82rem; font-style:italic;">"${escapeHtml(r.reason || '-')}"</td>
+            <td>${statusBadge}</td>
+            <td style="font-size:0.8rem; color:var(--text-muted);">${createdDisplay}</td>
+            <td style="font-size:0.8rem;">${decisionHtml}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
     function initAdminDashboard() {
       loadFacultyOptions();
       loadDepartments();
       loadRegistrationRequests();
+      loadAdminCorrectionRequests();
       loadSettings();
       updateStats();
       renderListing();

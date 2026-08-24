@@ -228,6 +228,11 @@
             </div>
           </div>
           <div id="attMsg" class="msg"></div>
+          <div id="faceFailCorrectionWrap" style="display:none; margin-top:12px; text-align:center;">
+            <button type="button" class="btn btn-primary" id="requestLiveCorrectionBtn" style="font-size:0.85rem; padding:8px 18px;" onclick="openCorrectionModalForLiveSession()">
+              📝 Request Attendance Correction
+            </button>
+          </div>
           <div id="gpsInfo" class="info-box" style="display:none; margin-top:12px;"></div>
         </div>
 
@@ -255,9 +260,86 @@
             </table>
           </div>
         </div>
+
+        <!-- Attendance Correction / Regularisation Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <h2>📝 Attendance Correction Requests</h2>
+            <span class="badge amber" id="myPendingReqBadge">0 Pending</span>
+          </div>
+          <p class="card-desc">View submitted regularisation requests or request attendance correction for unrecorded class sessions.</p>
+          
+          <!-- Tabs: Submitted Requests & Missed/Conducted Classes -->
+          <div class="tabs" style="margin-bottom: 14px;">
+            <div class="tab active" id="tabMyRequests" onclick="switchStudentCorrectionTab('requests')">Submitted Requests (<span id="myRequestsCount">0</span>)</div>
+            <div class="tab" id="tabMissedClasses" onclick="switchStudentCorrectionTab('missed')">Missed / Unrecorded Classes (<span id="missedClassesCount">0</span>)</div>
+          </div>
+
+          <div id="correctionRequestsList" style="display: flex; flex-direction: column; gap: 10px;">
+            <p class="empty">Loading attendance correction requests...</p>
+          </div>
+
+          <div id="missedClassesList" style="display: none; flex-direction: column; gap: 10px;">
+            <p class="empty">Checking for missed class sessions...</p>
+          </div>
+        </div>
       </div>
     </div>
   </main>
+
+  <!-- Attendance Correction Request Modal -->
+  <div id="correctionModal" class="modal-overlay" style="display:none;" onclick="closeCorrectionModalOnBackdrop(event)">
+    <div class="modal-card" style="max-width: 540px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="badge blue">Attendance Regularisation</span>
+          <h2 style="margin-top:4px;">Request Attendance Correction</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeCorrectionModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Inherited Session Details Summary Box -->
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.86rem;">
+            <div>
+              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; display:block; margin-bottom:2px;">Subject</span>
+              <strong id="modalCorrectionSubject" style="color: var(--text-color);">-</strong>
+            </div>
+            <div>
+              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; display:block; margin-bottom:2px;">Faculty</span>
+              <strong id="modalCorrectionFaculty" style="color: var(--text-color);">-</strong>
+            </div>
+            <div>
+              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; display:block; margin-bottom:2px;">Date</span>
+              <strong id="modalCorrectionDate" style="color: var(--text-color);">-</strong>
+            </div>
+            <div>
+              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; display:block; margin-bottom:2px;">Class</span>
+              <strong id="modalCorrectionClass" style="color: var(--text-color);">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Request Submission Form -->
+        <form id="correctionRequestForm" onsubmit="submitCorrectionRequest(event)">
+          <div style="margin-bottom: 14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <label for="correctionReasonInput" class="form-label" style="margin:0; font-size:0.85rem; font-weight:600;">Reason for Correction *</label>
+              <span id="correctionCharCount" style="font-size:0.75rem; color:var(--text-muted);">0 / 500</span>
+            </div>
+            <textarea id="correctionReasonInput" rows="4" maxlength="500" required placeholder="I was present in class but my attendance was not recorded." oninput="updateCorrectionCharCount()" style="width:100%; box-sizing:border-box; resize:vertical;"></textarea>
+          </div>
+
+          <div id="correctionModalMsg" class="msg" style="display:none; margin-bottom:12px;"></div>
+
+          <div class="btn-row" style="justify-content:flex-end; gap:10px;">
+            <button type="button" class="btn" style="background:rgba(255,255,255,0.06); color:var(--text-color);" onclick="closeCorrectionModal()">Cancel</button>
+            <button type="submit" id="submitCorrectionBtn" class="btn btn-primary">Submit Correction Request</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -801,6 +883,9 @@
       const infoBox = document.getElementById('selectedSubjectInfo');
       const subjectId = selectEl.value;
 
+      const failWrap = document.getElementById('faceFailCorrectionWrap');
+      if (failWrap) failWrap.style.display = 'none';
+
       if (!subjectId) {
         if (infoBox) infoBox.style.display = 'none';
         return;
@@ -939,6 +1024,9 @@
       const ok = await loadModels();
       if (!ok) return;
       try {
+        const failWrap = document.getElementById('faceFailCorrectionWrap');
+        if (failWrap) failWrap.style.display = 'none';
+
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         const video = document.getElementById('attVideo');
         video.srcObject = stream;
@@ -958,6 +1046,9 @@
 
     async function markAttendance() {
       const selectedSubject = document.getElementById('subjectSelect').value;
+      const failWrap = document.getElementById('faceFailCorrectionWrap');
+      if (failWrap) failWrap.style.display = 'none';
+
       if (!selectedSubject) {
         showMsg('attMsg', 'error', 'Please select a subject from the active class list first.');
         return;
@@ -994,6 +1085,7 @@
           showMsg('attMsg', 'error', 'Face Verification Failed - No face detected in frame.');
           const reticle = document.getElementById('attReticle');
           if (reticle) reticle.className = 'hud-reticle error';
+          showFaceFailCorrectionOption(latestSession, selectedSubject, 'Face verification failed, but I was present in the class.');
           return;
         }
         const doc = await db.collection('students').doc(studentId).get();
@@ -1010,8 +1102,11 @@
           showMsg('attMsg', 'error', `Face Verification Failed (${faceMatchPercent}% confidence match). Please look directly at the camera.`);
           const reticle = document.getElementById('attReticle');
           if (reticle) reticle.className = 'hud-reticle error';
+          showFaceFailCorrectionOption(latestSession, selectedSubject, 'Face verification failed, but I was present in the class.');
           return;
         }
+
+        if (failWrap) failWrap.style.display = 'none';
 
         if (faceDot) faceDot.className = 'status-chip-dot active';
         if (faceText) faceText.textContent = `Face: ${faceMatchPercent}% Match`;
@@ -1168,8 +1263,579 @@
     }
 
     // =========================================================================
-    // ATTENDANCE HISTORY & ANALYTICS LOADER
+    // ATTENDANCE CORRECTION & HISTORY LOGIC
     // =========================================================================
+    let studentCorrectionRequests = [];
+    let conductedSessionsList = [];
+    let attendanceRecordsBySessionId = {};
+    let correctionRequestsBySessionId = {};
+    let selectedCorrectionSession = null;
+    let currentStudentCorrectionTab = 'requests';
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function switchStudentCorrectionTab(tab) {
+      currentStudentCorrectionTab = tab;
+      const tabReq = document.getElementById('tabMyRequests');
+      const tabMiss = document.getElementById('tabMissedClasses');
+      const listReq = document.getElementById('correctionRequestsList');
+      const listMiss = document.getElementById('missedClassesList');
+
+      if (tab === 'requests') {
+        if (tabReq) tabReq.classList.add('active');
+        if (tabMiss) tabMiss.classList.remove('active');
+        if (listReq) listReq.style.display = 'flex';
+        if (listMiss) listMiss.style.display = 'none';
+      } else {
+        if (tabReq) tabReq.classList.remove('active');
+        if (tabMiss) tabMiss.classList.add('active');
+        if (listReq) listReq.style.display = 'none';
+        if (listMiss) listMiss.style.display = 'flex';
+      }
+    }
+
+    async function loadSubjectSessions() {
+      try {
+        if (!studentSubjectDocs || studentSubjectDocs.length === 0) {
+          conductedSessionsList = [];
+          renderMissedClassesUI();
+          return;
+        }
+
+        const sessionQueries = studentSubjectDocs.map(s =>
+          db.collection('attendanceSessions')
+            .where('subjectId', '==', s.id)
+            .get()
+            .catch(err => {
+              console.warn('Could not load sessions for subject', s.id, err);
+              return null;
+            })
+        );
+        const sessionSnapshots = await Promise.all(sessionQueries);
+
+        const seenSessionIds = new Set();
+        conductedSessionsList = [];
+
+        sessionSnapshots.forEach(snap => {
+          if (!snap) return;
+          snap.forEach(doc => {
+            if (!seenSessionIds.has(doc.id)) {
+              seenSessionIds.add(doc.id);
+              conductedSessionsList.push({ id: doc.id, ...doc.data() });
+            }
+          });
+        });
+
+        conductedSessionsList.sort((a, b) => {
+          const tB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.classNumber || 0);
+          const tA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.classNumber || 0);
+          return tB - tA;
+        });
+
+        renderMissedClassesUI();
+      } catch (err) {
+        console.error('loadSubjectSessions error:', err);
+      }
+    }
+
+    async function loadMyCorrectionRequests() {
+      const listEl = document.getElementById('correctionRequestsList');
+      const badgeEl = document.getElementById('myPendingReqBadge');
+      const reqCountEl = document.getElementById('myRequestsCount');
+
+      try {
+        const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        if (!authUid) return;
+
+        const queries = [
+          db.collection('attendanceCorrectionRequests')
+            .where('studentUid', '==', authUid)
+            .get()
+            .catch(() => null)
+        ];
+        if (studentId && studentId !== authUid) {
+          queries.push(
+            db.collection('attendanceCorrectionRequests')
+              .where('studentId', '==', studentId)
+              .get()
+              .catch(() => null)
+          );
+        }
+
+        const snapshots = await Promise.all(queries);
+        const seenReqIds = new Set();
+        studentCorrectionRequests = [];
+        correctionRequestsBySessionId = {};
+
+        snapshots.forEach(snap => {
+          if (!snap) return;
+          snap.forEach(doc => {
+            if (!seenReqIds.has(doc.id)) {
+              seenReqIds.add(doc.id);
+              const data = { id: doc.id, ...doc.data() };
+              studentCorrectionRequests.push(data);
+              if (data.sessionId) {
+                if (!correctionRequestsBySessionId[data.sessionId] || data.status === 'pending') {
+                  correctionRequestsBySessionId[data.sessionId] = data;
+                }
+              }
+            }
+          });
+        });
+
+        studentCorrectionRequests.sort((a, b) => {
+          const tB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+          const tA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+          return tB - tA;
+        });
+
+        const pendingCount = studentCorrectionRequests.filter(r => r.status === 'pending').length;
+        if (badgeEl) {
+          badgeEl.textContent = `${pendingCount} Pending`;
+          badgeEl.className = pendingCount > 0 ? 'badge amber' : 'badge';
+        }
+        if (reqCountEl) {
+          reqCountEl.textContent = studentCorrectionRequests.length;
+        }
+
+        renderCorrectionRequestsUI();
+        renderMissedClassesUI();
+      } catch (err) {
+        console.error('loadMyCorrectionRequests error:', err);
+        if (listEl) {
+          listEl.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Error loading correction requests.</p>';
+        }
+      }
+    }
+
+    function renderCorrectionRequestsUI() {
+      const listEl = document.getElementById('correctionRequestsList');
+      if (!listEl) return;
+
+      if (studentCorrectionRequests.length === 0) {
+        listEl.innerHTML = `
+          <div class="empty" style="padding:20px; background:rgba(255,255,255,0.02); border:1px dashed var(--border-color); border-radius:10px; text-align:center;">
+            <div style="font-size:1.6rem; margin-bottom:6px;">📝</div>
+            <strong style="color:var(--text-color); font-size:0.9rem;">No Attendance Correction Requests</strong>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">
+              If you attended a class but your attendance was not recorded, switch to the "Missed / Unrecorded Classes" tab to submit a correction request.
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      listEl.innerHTML = studentCorrectionRequests.map(r => {
+        let statusBadge = '';
+        if (r.status === 'pending') {
+          statusBadge = '<span class="badge amber" style="font-weight:700;">🟡 Pending</span>';
+        } else if (r.status === 'approved') {
+          statusBadge = '<span class="badge green" style="font-weight:700;">🟢 Approved</span>';
+        } else if (r.status === 'rejected') {
+          statusBadge = '<span class="badge red" style="font-weight:700;">🔴 Rejected</span>';
+        } else {
+          statusBadge = `<span class="badge">${r.status || 'Unknown'}</span>`;
+        }
+
+        const dateStr = r.date || '-';
+        const classNum = r.classNumber ? `Class ${r.classNumber}` : 'Session';
+        const subjectCodeStr = r.subjectCode ? ` (${r.subjectCode})` : '';
+        const createdDisplay = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+        
+        let reviewInfoHtml = '';
+        if (r.status === 'rejected' && r.reviewReason) {
+          reviewInfoHtml = `
+            <div style="margin-top:8px; padding:8px 10px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); border-radius:6px; font-size:0.82rem; color:#fca5a5;">
+              <strong style="color:#ef4444;">Reason:</strong> "${escapeHtml(r.reviewReason)}"
+            </div>
+          `;
+        } else if (r.status === 'approved') {
+          reviewInfoHtml = `
+            <div style="margin-top:8px; padding:6px 10px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:6px; font-size:0.8rem; color:var(--emerald-dark); font-weight:600;">
+              ✓ Attendance approved and successfully recorded by faculty instructor.
+            </div>
+          `;
+        }
+
+        return `
+          <div style="padding:14px; border:1px solid var(--border-color); border-radius:10px; background:rgba(255,255,255,0.02); display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:6px;">
+              <div>
+                <strong style="font-size:0.96rem; color:var(--text-color);">${escapeHtml(r.subjectName)}${escapeHtml(subjectCodeStr)}</strong>
+                <div style="font-size:0.82rem; color:var(--text-muted); margin-top:2px;">
+                  📅 <strong>${escapeHtml(dateStr)}</strong> • <strong>${escapeHtml(classNum)}</strong> • 👨‍🏫 Faculty: <strong>${escapeHtml(r.facultyName || 'Faculty')}</strong>
+                </div>
+              </div>
+              <div>${statusBadge}</div>
+            </div>
+
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border-color); border-radius:6px; padding:8px 10px; font-size:0.84rem; color:var(--text-color);">
+              <span style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:2px;">Reason for Correction:</span>
+              "${escapeHtml(r.reason)}"
+            </div>
+
+            ${reviewInfoHtml}
+
+            <div style="font-size:0.74rem; color:var(--text-muted); text-align:right;">
+              Submitted on ${createdDisplay}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderMissedClassesUI() {
+      const listEl = document.getElementById('missedClassesList');
+      const countEl = document.getElementById('missedClassesCount');
+      if (!listEl) return;
+
+      const missedSessions = conductedSessionsList.filter(s => {
+        return !attendanceRecordsBySessionId[s.id];
+      });
+
+      if (countEl) countEl.textContent = missedSessions.length;
+
+      if (missedSessions.length === 0) {
+        listEl.innerHTML = `
+          <div class="empty" style="padding:20px; background:rgba(255,255,255,0.02); border:1px dashed var(--border-color); border-radius:10px; text-align:center;">
+            <div style="font-size:1.6rem; margin-bottom:6px;">🎉</div>
+            <strong style="color:var(--emerald-dark); font-size:0.9rem;">No Missed Class Sessions</strong>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">
+              You have verified attendance records for all recorded sessions in your enrolled subjects!
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      listEl.innerHTML = missedSessions.map(session => {
+        const subjectObj = studentSubjectDocs.find(s => s.id === session.subjectId);
+        const subjectName = subjectObj?.subjectName || studentSubjectsMap[session.subjectId] || 'Course';
+        const subjectCode = subjectObj?.subjectCode || '';
+        const dateStr = session.date || '-';
+        const classNum = session.classNumber ? `Class ${session.classNumber}` : 'Session';
+        const facName = session.facultyName || subjectObj?.facultyName || 'Faculty';
+
+        const existingReq = correctionRequestsBySessionId[session.id];
+        let actionHtml = '';
+
+        if (existingReq) {
+          if (existingReq.status === 'pending') {
+            actionHtml = `
+              <div style="text-align:right;">
+                <span class="badge amber" style="font-weight:700;">🟡 Pending</span>
+                <div style="font-size:0.72rem; color:var(--text-muted); margin-top:3px;">Correction request under review</div>
+              </div>
+            `;
+          } else if (existingReq.status === 'rejected') {
+            actionHtml = `
+              <div style="text-align:right;">
+                <span class="badge red" style="font-weight:700;">🔴 Rejected</span>
+                <div style="font-size:0.72rem; color:#f87171; margin-top:3px;">${escapeHtml(existingReq.reviewReason || 'Not approved')}</div>
+              </div>
+            `;
+          } else {
+            actionHtml = `<span class="badge green">🟢 Approved</span>`;
+          }
+        } else {
+          actionHtml = `
+            <button type="button" class="btn btn-primary" style="padding:6px 14px; font-size:0.82rem; white-space:nowrap;" onclick="openCorrectionModal('${session.id}')">
+              Request Correction
+            </button>
+          `;
+        }
+
+        return `
+          <div style="padding:12px 14px; border:1px solid var(--border-color); border-radius:10px; background:rgba(255,255,255,0.02); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <strong style="font-size:0.95rem; color:var(--text-color);">${escapeHtml(subjectName)}</strong>
+                ${subjectCode ? `<span class="badge blue" style="font-size:0.72rem;">${escapeHtml(subjectCode)}</span>` : ''}
+              </div>
+              <div style="font-size:0.82rem; color:var(--text-muted); margin-top:4px;">
+                📅 <strong>${escapeHtml(dateStr)}</strong> • <strong>${escapeHtml(classNum)}</strong> • 👨‍🏫 <strong>${escapeHtml(facName)}</strong>
+              </div>
+              <div style="margin-top:5px;">
+                <span class="badge" style="background:rgba(239,68,68,0.12); color:#ef4444; border:1px solid rgba(239,68,68,0.25); font-size:0.72rem; font-weight:700;">
+                  Status: Absent / Attendance Missing
+                </span>
+              </div>
+            </div>
+            <div>
+              ${actionHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function openCorrectionModal(sessionId, prefillReason = '') {
+      let session = conductedSessionsList.find(s => s.id === sessionId);
+      if (!session && currentFailedLiveSession && currentFailedLiveSession.id === sessionId) {
+        session = currentFailedLiveSession;
+      }
+      if (!session) {
+        try {
+          const sDoc = await db.collection('attendanceSessions').doc(sessionId).get();
+          if (sDoc.exists) {
+            session = { id: sDoc.id, ...sDoc.data() };
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      if (!session) {
+        alert('Class session information could not be found.');
+        return;
+      }
+
+      const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+
+      // Duplicate check: verified attendance
+      if (attendanceRecordsBySessionId[session.id]) {
+        alert('Attendance has already been recorded and verified for this class session.');
+        return;
+      }
+
+      // Duplicate check: pending request
+      const existingReq = correctionRequestsBySessionId[session.id] || studentCorrectionRequests.find(r => r.sessionId === session.id && r.status === 'pending');
+      if (existingReq && existingReq.status === 'pending') {
+        alert('Correction request already submitted for this class.');
+        return;
+      }
+
+      selectedCorrectionSession = session;
+      const subjectObj = studentSubjectDocs.find(s => s.id === session.subjectId);
+      const subjectName = subjectObj?.subjectName || session.subjectName || studentSubjectsMap[session.subjectId] || 'Course';
+      const facultyName = session.facultyName || subjectObj?.facultyName || 'Faculty Name';
+      const dateStr = session.date || '-';
+      const classNum = session.classNumber ? String(session.classNumber) : '1';
+
+      document.getElementById('modalCorrectionSubject').textContent = subjectName;
+      document.getElementById('modalCorrectionFaculty').textContent = facultyName;
+      document.getElementById('modalCorrectionDate').textContent = dateStr;
+      document.getElementById('modalCorrectionClass').textContent = classNum;
+
+      const reasonInput = document.getElementById('correctionReasonInput');
+      if (reasonInput) {
+        reasonInput.value = prefillReason || 'Face verification failed, but I was present in the class.';
+      }
+      updateCorrectionCharCount();
+
+      const modalMsg = document.getElementById('correctionModalMsg');
+      if (modalMsg) {
+        modalMsg.style.display = 'none';
+        modalMsg.textContent = '';
+      }
+
+      const submitBtn = document.getElementById('submitCorrectionBtn');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Correction Request';
+      }
+
+      const modal = document.getElementById('correctionModal');
+      if (modal) modal.style.display = 'flex';
+    }
+
+    let currentFailedLiveSession = null;
+    let currentFailedLiveReason = '';
+
+    function showFaceFailCorrectionOption(session, subjectId, defaultReason) {
+      currentFailedLiveSession = session;
+      currentFailedLiveReason = defaultReason || 'Face verification failed, but I was present in the class.';
+      const wrap = document.getElementById('faceFailCorrectionWrap');
+      if (wrap) {
+        wrap.style.display = 'block';
+      }
+    }
+
+    function openCorrectionModalForLiveSession() {
+      if (!currentFailedLiveSession) {
+        const selectedSubject = document.getElementById('subjectSelect')?.value;
+        if (selectedSubject && activeSessions[selectedSubject]) {
+          currentFailedLiveSession = { id: activeSessions[selectedSubject].id || activeSessions[selectedSubject].sessionId, ...activeSessions[selectedSubject], subjectId: selectedSubject };
+        }
+      }
+      if (!currentFailedLiveSession) {
+        alert('No active attendance session found.');
+        return;
+      }
+      openCorrectionModal(currentFailedLiveSession.id, currentFailedLiveReason || 'Face verification failed, but I was present in the class.');
+    }
+
+    window.openCorrectionModal = openCorrectionModal;
+    window.openCorrectionModalForLiveSession = openCorrectionModalForLiveSession;
+
+    function closeCorrectionModal() {
+      const modal = document.getElementById('correctionModal');
+      if (modal) modal.style.display = 'none';
+      selectedCorrectionSession = null;
+    }
+
+    function closeCorrectionModalOnBackdrop(e) {
+      if (e.target.id === 'correctionModal') {
+        closeCorrectionModal();
+      }
+    }
+
+    function updateCorrectionCharCount() {
+      const reasonInput = document.getElementById('correctionReasonInput');
+      const countEl = document.getElementById('correctionCharCount');
+      if (reasonInput && countEl) {
+        const len = reasonInput.value.length;
+        countEl.textContent = `${len} / 500`;
+        if (len >= 480) {
+          countEl.style.color = '#ef4444';
+        } else {
+          countEl.style.color = 'var(--text-muted)';
+        }
+      }
+    }
+
+    async function submitCorrectionRequest(e) {
+      if (e) e.preventDefault();
+      const reasonInput = document.getElementById('correctionReasonInput');
+      const submitBtn = document.getElementById('submitCorrectionBtn');
+
+      const reason = (reasonInput?.value || '').trim();
+      if (!reason) {
+        showCorrectionModalMsg('error', 'Reason for correction is required.');
+        return;
+      }
+
+      if (reason.length > 500) {
+        showCorrectionModalMsg('error', 'Reason must be at most 500 characters.');
+        return;
+      }
+
+      if (!selectedCorrectionSession) {
+        showCorrectionModalMsg('error', 'Session information missing. Please close and try again.');
+        return;
+      }
+
+      try {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+        showCorrectionModalMsg('info', 'Submitting attendance correction request...');
+
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        if (!currentAuthUid) {
+          throw new Error('You must be signed in to submit a request.');
+        }
+
+        // 1. Check duplicate verified attendance in Firestore
+        const attSnap = await db.collection('attendance')
+          .where('sessionId', '==', selectedCorrectionSession.id)
+          .where('studentUid', '==', currentAuthUid)
+          .get();
+        if (!attSnap.empty) {
+          showCorrectionModalMsg('error', 'Attendance has already been recorded for this class.');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Correction Request';
+          return;
+        }
+
+        // 2. Check duplicate pending request in Firestore
+        const dupReqSnap = await db.collection('attendanceCorrectionRequests')
+          .where('sessionId', '==', selectedCorrectionSession.id)
+          .where('studentUid', '==', currentAuthUid)
+          .where('status', '==', 'pending')
+          .get();
+        if (!dupReqSnap.empty) {
+          showCorrectionModalMsg('error', 'Correction request already submitted for this class.');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Correction Request';
+          return;
+        }
+
+        const subjectObj = studentSubjectDocs.find(s => s.id === selectedCorrectionSession.subjectId);
+        const subjectName = subjectObj?.subjectName || selectedCorrectionSession.subjectName || studentSubjectsMap[selectedCorrectionSession.subjectId] || 'Course';
+        const subjectCode = subjectObj?.subjectCode || selectedCorrectionSession.subjectCode || '';
+        const facultyName = selectedCorrectionSession.facultyName || subjectObj?.facultyName || 'Faculty';
+
+        const newRequest = {
+          studentId: studentId || currentAuthUid,
+          studentUid: currentAuthUid,
+          studentName: studentName,
+          studentUsn: studentUsn,
+          studentDept: studentDept,
+          studentSemester: parseInt(studentSemester, 10) || 1,
+          studentSection: studentSection || 'A',
+
+          subjectId: selectedCorrectionSession.subjectId,
+          subjectName: subjectName,
+          subjectCode: subjectCode,
+
+          sessionId: selectedCorrectionSession.id,
+          classNumber: selectedCorrectionSession.classNumber || 1,
+
+          facultyId: selectedCorrectionSession.facultyId || selectedCorrectionSession.facultyUid || '',
+          facultyUid: selectedCorrectionSession.facultyUid || selectedCorrectionSession.facultyId || '',
+          facultyName: facultyName,
+
+          date: selectedCorrectionSession.date || '',
+
+          reason: reason,
+
+          status: 'pending',
+
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+
+          reviewedAt: null,
+          reviewedBy: null,
+          reviewReason: null
+        };
+
+        await db.collection('attendanceCorrectionRequests').add(newRequest);
+
+        showCorrectionModalMsg('success', '✓ Correction request submitted successfully! Your instructor will review it.');
+        
+        // Immediately show "🟡 Correction Request Pending" on Live Attendance HUD if submitted for live attempt
+        const failWrap = document.getElementById('faceFailCorrectionWrap');
+        if (failWrap) failWrap.style.display = 'none';
+
+        const attMsgEl = document.getElementById('attMsg');
+        if (attMsgEl) {
+          attMsgEl.className = 'msg info';
+          attMsgEl.innerHTML = `
+            <div style="font-weight:700; color:var(--amber-dark); margin-bottom:4px;">🟡 Correction Request Pending</div>
+            <div style="font-size:0.84rem; color:var(--text-color);">Your attendance correction request has been sent to <strong>${escapeHtml(facultyName)}</strong>.</div>
+          `;
+          attMsgEl.style.display = 'block';
+        }
+
+        setTimeout(async () => {
+          closeCorrectionModal();
+          await loadMyCorrectionRequests();
+          await loadSubjectSessions();
+        }, 1200);
+
+      } catch (err) {
+        console.error('submitCorrectionRequest error:', err);
+        showCorrectionModalMsg('error', 'Failed to submit request: ' + err.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Correction Request';
+      }
+    }
+
+    function showCorrectionModalMsg(type, text) {
+      const msg = document.getElementById('correctionModalMsg');
+      if (!msg) return;
+      msg.textContent = text;
+      msg.className = 'msg ' + type;
+      msg.style.display = 'block';
+    }
+
     async function loadMyAttendance() {
       const tbody = document.getElementById('recordsTable');
       try {
@@ -1179,8 +1845,10 @@
         const queries = [
           db.collection('attendance').where('studentUid', '==', authUid).get().catch(() => null)
         ];
-        if (studentId && studentId === authUid) {
-          // covered by studentUid == authUid
+        if (studentId && studentId !== authUid) {
+          queries.push(
+            db.collection('attendance').where('studentId', '==', studentId).get().catch(() => null)
+          );
         }
 
         const [deptSnap, ...attSnapshots] = await Promise.all([
@@ -1197,8 +1865,10 @@
         const seenAttIds = new Set();
         const records = [];
         studentSubjectsAttendance = {};
+        attendanceRecordsBySessionId = {};
 
         attSnapshots.forEach(snap => {
+          if (!snap) return;
           snap.forEach((doc) => {
             if (!seenAttIds.has(doc.id)) {
               seenAttIds.add(doc.id);
@@ -1206,6 +1876,10 @@
               records.push(r);
               total++;
               if (r.date === todayDate) today++;
+
+              if (r.sessionId) {
+                attendanceRecordsBySessionId[r.sessionId] = r;
+              }
 
               // Track counts per subject
               if (r.subjectId) {
@@ -1221,12 +1895,16 @@
         records.sort((a, b) => (b.timestamp?.toDate?.() || 0) - (a.timestamp?.toDate?.() || 0));
         
         records.forEach(r => {
-          const distDisplay = r.distance ? `${r.distance.toFixed(1)} m` : 'N/A';
+          const distDisplay = r.distance ? `${r.distance.toFixed(1)} m` : (r.attendanceMethod === 'correction' || r.source === 'faculty_correction' ? 'Manual Correction' : 'N/A');
           const subjectName = studentSubjectsMap[r.subjectId] || r.subjectName || r.subjectId;
           const facName = r.facultyName || '-';
+          const methodBadge = (r.attendanceMethod === 'correction' || r.source === 'faculty_correction')
+            ? '<span class="badge blue" style="font-size:0.7rem; margin-left:4px;">Correction</span>'
+            : '';
+
           tbody.innerHTML += `<tr>
             <td><strong>${r.date}</strong></td>
-            <td><span style="font-weight:600; color:var(--primary-navy);">${subjectName}</span></td>
+            <td><span style="font-weight:600; color:var(--primary-navy);">${subjectName}</span>${methodBadge}</td>
             <td>${facName}</td>
             <td>${r.time}</td>
             <td><span class="badge green">● ${distDisplay}</span></td>
@@ -1279,6 +1957,8 @@
 
         // Re-render subject cards with updated attendance count
         renderSubjectsUI();
+        await loadSubjectSessions();
+        await loadMyCorrectionRequests();
       } catch (err) {
         console.error('Attendance history error:', err);
       }

@@ -56,7 +56,7 @@
           </label>
 
           <a href="#" class="forgot" onclick="alert('Please contact your department administrator to reset your password.'); return false;">Forgot Password?</a>
-          <button type="button" class="btn btn-student" onclick="loginStudent()">LOGIN AS STUDENT</button>
+          <button type="button" id="studentLoginBtn" class="btn btn-student" onclick="loginStudent()">LOGIN AS STUDENT</button>
           <div id="studentLoginMsg" class="login-msg" role="alert"></div>
         </article>
 
@@ -81,7 +81,7 @@
           </label>
 
           <a href="#" class="forgot" onclick="alert('Please contact your system administrator to reset your faculty credentials.'); return false;">Forgot Password?</a>
-          <button type="button" class="btn btn-teacher" onclick="loginFaculty()">LOGIN AS TEACHER</button>
+          <button type="button" id="facultyLoginBtn" class="btn btn-teacher" onclick="loginFaculty()">LOGIN AS TEACHER</button>
           <div id="facultyLoginMsg" class="login-msg" role="alert"></div>
         </article>
       </section>
@@ -330,6 +330,8 @@
       window.location.replace('faculty_dashboard.html');
     }
 
+    let cachedDeptOptionsHtml = null;
+
     function showLoginMessage(elementId, message, isError = true) {
       const element = document.getElementById(elementId);
       element.textContent = message;
@@ -339,10 +341,18 @@
     async function loginStudent() {
       const identifier = document.getElementById('studentEmail').value.trim().toLowerCase();
       const password = document.getElementById('studentPassword').value.trim();
+      const btn = document.getElementById('studentLoginBtn');
+
       if (!identifier || !password) {
         showLoginMessage('studentLoginMsg', 'Enter your student email and password.');
         return;
       }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'LOGGING IN...';
+      }
+
       try {
         // 1. Authenticate with Firebase Authentication
         let user = null;
@@ -409,16 +419,29 @@
       } catch (error) {
         showLoginMessage('studentLoginMsg', 'Unable to sign in. Check your Firebase connection.');
         console.error(error);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'LOGIN AS STUDENT';
+        }
       }
     }
 
     async function loginFaculty() {
       const email = document.getElementById('facultyEmail').value.trim().toLowerCase();
       const password = document.getElementById('facultyPassword').value.trim();
+      const btn = document.getElementById('facultyLoginBtn');
+
       if (!email || !password) {
         showLoginMessage('facultyLoginMsg', 'Enter your teacher email and password.');
         return;
       }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'LOGGING IN...';
+      }
+
       try {
         // 1. Authenticate with Firebase Authentication
         let user = null;
@@ -481,6 +504,11 @@
       } catch (error) {
         showLoginMessage('facultyLoginMsg', 'Unable to sign in. Check your Firebase connection.');
         console.error(error);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'LOGIN AS TEACHER';
+        }
       }
     }
 
@@ -488,12 +516,18 @@
     async function loadDepartmentOptionsForRegistration() {
       const studentSelect = document.getElementById('regStudentDept');
       const teacherSelect = document.getElementById('regTeacherDept');
+      if (cachedDeptOptionsHtml) {
+        if (studentSelect) studentSelect.innerHTML = cachedDeptOptionsHtml;
+        if (teacherSelect) teacherSelect.innerHTML = cachedDeptOptionsHtml;
+        return;
+      }
       try {
         const snap = await db.collection('departments').orderBy('name').get();
         let options = '<option value="">-- Select Department --</option>';
         snap.forEach(doc => {
           options += `<option value="${doc.id}">${doc.data().name}</option>`;
         });
+        cachedDeptOptionsHtml = options;
         if (studentSelect) studentSelect.innerHTML = options;
         if (teacherSelect) teacherSelect.innerHTML = options;
       } catch (err) {

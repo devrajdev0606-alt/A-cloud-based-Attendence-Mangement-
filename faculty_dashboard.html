@@ -96,7 +96,67 @@
         <p class="empty">Select a subject above to render the attendance matrix.</p>
       </div>
     </div>
+
+    <!-- Attendance Correction Requests Card -->
+    <div class="card">
+      <div class="card-header">
+        <h2>📝 Attendance Correction Requests</h2>
+        <span class="badge amber" id="facultyPendingBadge">0 Pending</span>
+      </div>
+      <p class="card-desc">Review and approve or reject attendance regularisation requests submitted by students for your class sessions.</p>
+      
+      <!-- Filter Toolbar -->
+      <div class="filter-row" style="margin-bottom: 16px;">
+        <input type="text" id="facultyReqSearch" placeholder="🔍 Search requests by student name, USN, or subject..." oninput="renderFacultyCorrectionRequests()" style="flex: 2 1 200px;" />
+        <select id="facultyReqFilter" onchange="renderFacultyCorrectionRequests()" style="flex: 1 1 140px;">
+          <option value="all">All Statuses</option>
+          <option value="pending" selected>🟡 Pending Review</option>
+          <option value="approved">🟢 Approved</option>
+          <option value="rejected">🔴 Rejected</option>
+        </select>
+        <button type="button" class="btn btn-primary" onclick="loadFacultyCorrectionRequests()">🔄 Refresh Requests</button>
+      </div>
+
+      <!-- Correction Requests List Container -->
+      <div id="facultyRequestsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
+        <p class="empty">Loading attendance correction requests...</p>
+      </div>
+    </div>
   </main>
+
+  <!-- Faculty Reject Reason Modal -->
+  <div id="facultyRejectModal" class="modal-overlay" style="display:none;" onclick="closeFacultyRejectModalOnBackdrop(event)">
+    <div class="modal-card" style="max-width: 500px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="badge red">Correction Review</span>
+          <h2 style="margin-top:4px;">Reject Attendance Request</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeFacultyRejectModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; font-size: 0.86rem;">
+          <div style="margin-bottom: 4px;">Student: <strong id="rejectModalStudentName">-</strong> (<span id="rejectModalStudentUsn">-</span>)</div>
+          <div style="margin-bottom: 4px;">Subject: <strong id="rejectModalSubject">-</strong></div>
+          <div>Session: <strong id="rejectModalSession">-</strong></div>
+        </div>
+
+        <form id="facultyRejectForm" onsubmit="confirmFacultyReject(event)">
+          <div style="margin-bottom: 14px;">
+            <label for="facultyRejectReason" class="form-label" style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Reason for rejection (Optional)</label>
+            <textarea id="facultyRejectReason" rows="3" placeholder="e.g. Attendance records show you were not present." style="width:100%; box-sizing:border-box; resize:vertical;"></textarea>
+          </div>
+
+          <div id="rejectModalMsg" class="msg" style="display:none; margin-bottom:12px;"></div>
+
+          <div class="btn-row" style="justify-content:flex-end; gap:10px;">
+            <button type="button" class="btn" style="background:rgba(255,255,255,0.06); color:var(--text-color);" onclick="closeFacultyRejectModal()">Cancel</button>
+            <button type="submit" id="confirmRejectBtn" class="btn btn-reject">Reject Request</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -164,6 +224,7 @@
         loadSettings();
         loadSubjects();
         loadActiveSessions();
+        loadFacultyCorrectionRequests();
         setInterval(refreshSessionsAndCleanup, 15000);
       }
     });
@@ -337,7 +398,7 @@
 
     async function refreshSessionsAndCleanup() {
       try {
-        await Promise.all([loadSubjects(), loadActiveSessions()]);
+        await Promise.all([loadSubjects(), loadActiveSessions(), loadFacultyCorrectionRequests()]);
       } catch (err) {
         console.error('Auto refresh error:', err);
       }
@@ -690,6 +751,513 @@
       } catch (err) {
         container.innerHTML = `<p class="empty" style="color:var(--crimson-dark);">Error loading analytics: ${err.message}</p>`;
         console.error('loadAnalytics error:', err);
+      }
+    }
+
+    // =========================================================================
+    // ATTENDANCE CORRECTION REQUESTS MANAGEMENT
+    // =========================================================================
+    let facultyCorrectionRequests = [];
+    let pendingRejectRequestId = null;
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    async function loadFacultyCorrectionRequests() {
+      const container = document.getElementById('facultyRequestsContainer');
+      const badge = document.getElementById('facultyPendingBadge');
+      try {
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+        if (!currentAuthUid) return;
+
+        const queries = [
+          db.collection('attendanceCorrectionRequests')
+            .where('facultyUid', '==', currentAuthUid)
+            .get()
+            .catch(() => null)
+        ];
+        if (facultyId && facultyId !== currentAuthUid) {
+          queries.push(
+            db.collection('attendanceCorrectionRequests')
+              .where('facultyId', '==', facultyId)
+              .get()
+              .catch(() => null)
+          );
+        }
+
+        const snapshots = await Promise.all(queries);
+        const seenDocIds = new Set();
+        facultyCorrectionRequests = [];
+
+        snapshots.forEach(snap => {
+          if (!snap) return;
+          snap.forEach(doc => {
+            if (!seenDocIds.has(doc.id)) {
+              seenDocIds.add(doc.id);
+              facultyCorrectionRequests.push({ id: doc.id, ...doc.data() });
+            }
+          });
+        });
+
+        // Sort: pending first, then newest first
+        facultyCorrectionRequests.sort((a, b) => {
+          if (a.status === 'pending' && b.status !== 'pending') return -1;
+          if (a.status !== 'pending' && b.status === 'pending') return 1;
+          const tB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+          const tA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+          return tB - tA;
+        });
+
+        const pendingCount = facultyCorrectionRequests.filter(r => r.status === 'pending').length;
+        if (badge) {
+          badge.textContent = `${pendingCount} Pending`;
+          badge.className = pendingCount > 0 ? 'badge amber' : 'badge';
+        }
+
+        renderFacultyCorrectionRequests();
+      } catch (err) {
+        console.error('loadFacultyCorrectionRequests error:', err);
+        if (container) {
+          container.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Error loading correction requests: ' + err.message + '</p>';
+        }
+      }
+    }
+
+    function renderFacultyCorrectionRequests() {
+      const container = document.getElementById('facultyRequestsContainer');
+      if (!container) return;
+
+      const query = (document.getElementById('facultyReqSearch')?.value || '').trim().toLowerCase();
+      const statusFilter = document.getElementById('facultyReqFilter')?.value || 'pending';
+
+      let filtered = facultyCorrectionRequests;
+
+      if (statusFilter !== 'all') {
+        filtered = filtered.filter(r => r.status === statusFilter);
+      }
+
+      if (query) {
+        filtered = filtered.filter(r => {
+          const studentName = (r.studentName || '').toLowerCase();
+          const studentUsn = (r.studentUsn || '').toLowerCase();
+          const subjectName = (r.subjectName || '').toLowerCase();
+          const subjectCode = (r.subjectCode || '').toLowerCase();
+          return studentName.includes(query) || studentUsn.includes(query) || subjectName.includes(query) || subjectCode.includes(query);
+        });
+      }
+
+      if (filtered.length === 0) {
+        const filterName = statusFilter === 'all' ? '' : (statusFilter === 'pending' ? 'pending ' : (statusFilter === 'approved' ? 'approved ' : 'rejected '));
+        container.innerHTML = `
+          <div class="empty" style="grid-column: 1 / -1; padding: 24px; text-align: center; background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: 12px;">
+            <div style="font-size: 1.8rem; margin-bottom: 6px;">📝</div>
+            <strong style="color: var(--text-color); font-size: 0.95rem;">No ${filterName}Attendance Correction Requests</strong>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
+              When students submit regularisation requests for sessions you conducted, they will appear here for your review.
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(req => {
+        let statusBadge = '';
+        let actionButtonsHtml = '';
+        let decisionNoteHtml = '';
+
+        if (req.status === 'pending') {
+          statusBadge = '<span class="badge amber" style="font-weight:700;">🟡 Pending</span>';
+          actionButtonsHtml = `
+            <div class="btn-row" style="gap: 10px; justify-content: flex-end;">
+              <button type="button" class="btn btn-approve" style="padding: 7px 16px; font-size: 0.84rem;" onclick="approveCorrectionRequest('${req.id}')">
+                ✓ Approve
+              </button>
+              <button type="button" class="btn btn-reject" style="padding: 7px 16px; font-size: 0.84rem;" onclick="openFacultyRejectModal('${req.id}')">
+                ✕ Reject
+              </button>
+            </div>
+          `;
+        } else if (req.status === 'approved') {
+          statusBadge = '<span class="badge green" style="font-weight:700;">🟢 Approved</span>';
+          const revTime = req.reviewedAt?.toDate ? req.reviewedAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+          decisionNoteHtml = `
+            <div style="margin-top: 8px; padding: 6px 10px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 6px; font-size: 0.8rem; color: var(--emerald-dark); font-weight: 600;">
+              ✓ Attendance record created (${revTime || 'Approved'})
+            </div>
+          `;
+          actionButtonsHtml = `
+            <div style="font-size: 0.76rem; color: var(--text-muted); text-align: right;">
+              Approved by instructor
+            </div>
+          `;
+        } else if (req.status === 'rejected') {
+          statusBadge = '<span class="badge red" style="font-weight:700;">🔴 Rejected</span>';
+          const revTime = req.reviewedAt?.toDate ? req.reviewedAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+          decisionNoteHtml = `
+            <div style="margin-top: 8px; padding: 8px 10px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 6px; font-size: 0.82rem; color: #fca5a5;">
+              <strong style="color:#ef4444;">Rejection Reason:</strong> "${escapeHtml(req.reviewReason || 'Not approved')}"
+            </div>
+          `;
+          actionButtonsHtml = `
+            <div style="font-size: 0.76rem; color: #ef4444; text-align: right;">
+              Rejected (${revTime || 'Final'})
+            </div>
+          `;
+        }
+
+        const dateStr = req.date || '-';
+        const classNum = req.classNumber ? `Class ${req.classNumber}` : 'Session';
+        const subjectCodeStr = req.subjectCode ? ` — ${req.subjectCode}` : '';
+        const createdDisplay = req.createdAt?.toDate ? req.createdAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+
+        return `
+          <div class="card" style="margin-bottom: 0; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: space-between; gap: 12px; padding: 16px;">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                <div>
+                  <strong style="font-size: 1.05rem; color: var(--text-color);">${escapeHtml(req.studentName)}</strong>
+                  <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; margin-top: 2px;">
+                    USN: <span style="color:var(--text-color);">${escapeHtml(req.studentUsn || 'N/A')}</span>
+                  </div>
+                </div>
+                <div>${statusBadge}</div>
+              </div>
+
+              <div style="margin-top: 10px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px;">
+                <div style="font-size: 0.88rem; font-weight: 700; color: var(--text-color);">
+                  ${escapeHtml(req.subjectName)}${escapeHtml(subjectCodeStr)}
+                </div>
+                <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 3px;">
+                  📅 <strong>${escapeHtml(dateStr)}</strong> • <strong>${escapeHtml(classNum)}</strong>
+                </div>
+              </div>
+
+              <div style="margin-top: 10px;">
+                <span style="font-size: 0.74rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 3px;">Reason:</span>
+                <div style="font-size: 0.85rem; color: var(--text-color); font-style: italic; background: rgba(255,255,255,0.02); padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-color);">
+                  "${escapeHtml(req.reason)}"
+                </div>
+              </div>
+
+              ${decisionNoteHtml}
+
+              <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 10px;">
+                Requested on ${createdDisplay}
+              </div>
+            </div>
+
+            <div style="margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--border-color);">
+              ${actionButtonsHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function approveCorrectionRequest(requestId) {
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+      if (!currentAuthUid) {
+        alert('Authentication error: Please log in again.');
+        return;
+      }
+
+      console.log('=== APPROVAL INITIATED ===', { requestId, currentAuthUid, facultyId });
+
+      // Step 1: Fetch latest request document
+      console.log('APPROVAL STEP 1: Reading correction request attendanceCorrectionRequests/' + requestId);
+      let reqDoc;
+      try {
+        const reqRef = db.collection('attendanceCorrectionRequests').doc(requestId);
+        reqDoc = await reqRef.get();
+      } catch (err) {
+        console.error('APPROVAL STEP 1 FAILED (Read request):', err);
+        alert('Failed to read request: ' + err.message);
+        return;
+      }
+
+      if (!reqDoc.exists) {
+        alert('Request document not found.');
+        return;
+      }
+      const req = reqDoc.data();
+      console.log('APPROVAL STEP 1 SUCCEEDED. Request data:', req);
+
+      if (req.status !== 'pending') {
+        alert('This request has already been processed (' + req.status + ') and cannot be modified again.');
+        await loadFacultyCorrectionRequests();
+        return;
+      }
+
+      // Step 2: Verify current faculty authorization for the request
+      const isAuthFaculty = (req.facultyUid === currentAuthUid || req.facultyId === currentAuthUid || req.facultyId === facultyId || (facultyUid && req.facultyUid === facultyUid));
+      if (!isAuthFaculty) {
+        alert('Unauthorized: You are not authorized to approve this request.');
+        return;
+      }
+
+      if (!confirm(`Approve attendance correction for ${req.studentName} (${req.studentUsn || 'Student'}) in ${req.subjectName} (Class ${req.classNumber || 1})?`)) {
+        return;
+      }
+
+      try {
+        // Step 3: Fetch attendanceSessions/{sessionId}
+        console.log('APPROVAL STEP 3: Reading attendance session attendanceSessions/' + req.sessionId);
+        let sessionDoc;
+        try {
+          sessionDoc = await db.collection('attendanceSessions').doc(req.sessionId).get();
+        } catch (err) {
+          console.error('APPROVAL STEP 3 FAILED (Read session):', err);
+          throw new Error('Failed to read session: ' + err.message);
+        }
+
+        if (!sessionDoc.exists) {
+          alert('Error: The attendance session record for this class was not found.');
+          return;
+        }
+        const sessionData = sessionDoc.data();
+        console.log('APPROVAL STEP 3 SUCCEEDED. Session data:', sessionData);
+
+        // Step 4: Verify session ownership
+        const isSessionOwner = (sessionData.facultyUid === currentAuthUid || sessionData.facultyId === currentAuthUid || sessionData.facultyId === facultyId || (facultyUid && sessionData.facultyUid === facultyUid));
+        if (!isSessionOwner) {
+          alert('Error: This attendance session does not belong to your faculty account.');
+          return;
+        }
+
+        // Step 5: Fetch subjects/{subjectId}
+        console.log('APPROVAL STEP 5: Reading subject subjects/' + req.subjectId);
+        let subjectDoc;
+        try {
+          subjectDoc = await db.collection('subjects').doc(req.subjectId).get();
+        } catch (err) {
+          console.error('APPROVAL STEP 5 FAILED (Read subject):', err);
+          throw new Error('Failed to read subject: ' + err.message);
+        }
+
+        if (!subjectDoc.exists) {
+          alert('Error: The subject record was not found.');
+          return;
+        }
+        const subjectData = subjectDoc.data();
+        console.log('APPROVAL STEP 5 SUCCEEDED. Subject studentIds:', subjectData.studentIds);
+
+        // Step 6: Verify student enrollment & resolve profile metadata
+        const targetStudentUid = req.studentUid;
+        const targetStudentId = req.studentId;
+
+        let studentDoc = await db.collection('students').doc(targetStudentUid).get().catch(() => null);
+        if ((!studentDoc || !studentDoc.exists) && targetStudentId && targetStudentId !== targetStudentUid) {
+          studentDoc = await db.collection('students').doc(targetStudentId).get().catch(() => null);
+        }
+        const studentData = (studentDoc && studentDoc.exists) ? studentDoc.data() : null;
+
+        const enrolledIds = subjectData.studentIds || [];
+        const isEnrolled = enrolledIds.includes(targetStudentUid) || (targetStudentId && enrolledIds.includes(targetStudentId));
+        if (!isEnrolled) {
+          alert('Error: The student is not enrolled in this course subject.');
+          return;
+        }
+
+        const rosterEntry = (subjectData.enrolledRoster || []).find(r => r && (r.id === targetStudentUid || (targetStudentId && r.id === targetStudentId)));
+        const finalStudentName = req.studentName || studentData?.name || rosterEntry?.name || 'Student';
+        const finalStudentUsn = req.studentUsn || studentData?.usn || rosterEntry?.usn || '';
+        const finalStudentDept = req.studentDept || studentData?.dept || studentData?.department || '';
+        const finalStudentSemester = req.studentSemester || (studentData?.semester ? parseInt(studentData.semester, 10) : 1);
+        const finalStudentSection = req.studentSection || studentData?.section || 'A';
+
+        // Step 7: Duplicate attendance check with faculty-authorized query
+        console.log('APPROVAL STEP 7: Checking for duplicate attendance in attendance collection');
+        try {
+          const dupQueries = [
+            db.collection('attendance')
+              .where('facultyUid', '==', currentAuthUid)
+              .where('sessionId', '==', req.sessionId)
+              .where('studentUid', '==', targetStudentUid)
+              .get()
+          ];
+          if (facultyId && facultyId !== currentAuthUid) {
+            dupQueries.push(
+              db.collection('attendance')
+                .where('facultyId', '==', facultyId)
+                .where('sessionId', '==', req.sessionId)
+                .where('studentUid', '==', targetStudentUid)
+                .get()
+            );
+          }
+          const dupSnaps = await Promise.all(dupQueries);
+          const hasDuplicate = dupSnaps.some(s => s && !s.empty);
+          if (hasDuplicate) {
+            alert('Error: Student already has a verified attendance record for this class session.');
+            return;
+          }
+        } catch (err) {
+          console.error('APPROVAL STEP 7 FAILED (Duplicate check):', err);
+          throw new Error('Duplicate check query failed: ' + err.message);
+        }
+        console.log('APPROVAL STEP 7 SUCCEEDED: No duplicate attendance found.');
+
+        // Step 8: Create attendance record
+        console.log('APPROVAL STEP 8: Creating attendance record in attendance collection');
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = req.date || sessionData.date || now.toLocaleDateString('en-GB');
+
+        const attendancePayload = {
+          studentId: req.studentId || targetStudentUid,
+          studentUid: targetStudentUid,
+          studentName: finalStudentName,
+          studentUsn: finalStudentUsn ? finalStudentUsn.toUpperCase() : '',
+          studentDept: finalStudentDept,
+          studentSemester: finalStudentSemester,
+          studentSection: finalStudentSection,
+          subjectId: req.subjectId,
+          sessionId: req.sessionId,
+          classNumber: req.classNumber || sessionData.classNumber || 1,
+          facultyId: sessionData.facultyId || req.facultyId || facultyId || currentAuthUid,
+          facultyUid: sessionData.facultyUid || currentAuthUid,
+          facultyName: sessionData.facultyName || req.facultyName || facultyName,
+          date: dateStr,
+          time: timeStr,
+          latitude: 'N/A',
+          longitude: 'N/A',
+          distance: null,
+          attendanceMethod: 'correction',
+          source: 'faculty_correction',
+          correctionRequestId: requestId,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        console.log('APPROVAL STEP 8 PAYLOAD:', attendancePayload);
+
+        try {
+          await db.collection('attendance').add(attendancePayload);
+        } catch (err) {
+          console.error('APPROVAL STEP 8 FAILED (Attendance creation):', err);
+          throw new Error('Attendance creation failed: ' + err.message);
+        }
+        console.log('APPROVAL STEP 8 SUCCEEDED: Attendance record created.');
+
+        // Step 9: Update correction request status to 'approved'
+        console.log('APPROVAL STEP 9: Updating request status in attendanceCorrectionRequests/' + requestId);
+        const reqRef = db.collection('attendanceCorrectionRequests').doc(requestId);
+        try {
+          await reqRef.update({
+            status: 'approved',
+            reviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            reviewedBy: currentAuthUid,
+            reviewReason: null
+          });
+        } catch (err) {
+          console.error('APPROVAL STEP 9 FAILED (Request update):', err);
+          throw new Error('Request status update failed: ' + err.message);
+        }
+        console.log('APPROVAL STEP 9 SUCCEEDED: Request status updated to approved.');
+
+        alert('✓ Attendance correction approved successfully! Attendance record created.');
+        await loadFacultyCorrectionRequests();
+        loadAnalytics();
+      } catch (err) {
+        console.error('approveCorrectionRequest overall error:', err);
+        alert('Failed to approve request: ' + err.message);
+      }
+    }
+
+    function openFacultyRejectModal(requestId) {
+      const req = facultyCorrectionRequests.find(r => r.id === requestId);
+      if (!req) return;
+
+      if (req.status !== 'pending') {
+        alert('This request has already been processed (' + req.status + ') and cannot be modified.');
+        return;
+      }
+
+      pendingRejectRequestId = requestId;
+      document.getElementById('rejectModalStudentName').textContent = req.studentName;
+      document.getElementById('rejectModalStudentUsn').textContent = req.studentUsn ? `USN: ${req.studentUsn}` : 'Student';
+      document.getElementById('rejectModalSubject').textContent = `${req.subjectName}${req.subjectCode ? ' (' + req.subjectCode + ')' : ''}`;
+      document.getElementById('rejectModalSession').textContent = `📅 ${req.date} • Class ${req.classNumber || 1}`;
+
+      const reasonInput = document.getElementById('facultyRejectReason');
+      if (reasonInput) reasonInput.value = '';
+
+      const msgEl = document.getElementById('rejectModalMsg');
+      if (msgEl) {
+        msgEl.style.display = 'none';
+        msgEl.textContent = '';
+      }
+
+      const btn = document.getElementById('confirmRejectBtn');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Reject Request';
+      }
+
+      document.getElementById('facultyRejectModal').style.display = 'flex';
+    }
+
+    function closeFacultyRejectModal() {
+      document.getElementById('facultyRejectModal').style.display = 'none';
+      pendingRejectRequestId = null;
+    }
+
+    function closeFacultyRejectModalOnBackdrop(e) {
+      if (e.target.id === 'facultyRejectModal') {
+        closeFacultyRejectModal();
+      }
+    }
+
+    async function confirmFacultyReject(e) {
+      if (e) e.preventDefault();
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+      const reason = document.getElementById('facultyRejectReason')?.value?.trim() || null;
+      const msgEl = document.getElementById('rejectModalMsg');
+      const btn = document.getElementById('confirmRejectBtn');
+
+      if (!pendingRejectRequestId) return;
+
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Rejecting...';
+
+        const reqRef = db.collection('attendanceCorrectionRequests').doc(pendingRejectRequestId);
+        const reqDoc = await reqRef.get();
+        if (!reqDoc.exists) {
+          alert('Request document not found.');
+          closeFacultyRejectModal();
+          return;
+        }
+        const req = reqDoc.data();
+        if (req.status !== 'pending') {
+          alert('This request has already been processed (' + req.status + ') and cannot be modified.');
+          closeFacultyRejectModal();
+          await loadFacultyCorrectionRequests();
+          return;
+        }
+
+        await reqRef.update({
+          status: 'rejected',
+          reviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          reviewedBy: currentAuthUid,
+          reviewReason: reason
+        });
+
+        closeFacultyRejectModal();
+        await loadFacultyCorrectionRequests();
+      } catch (err) {
+        console.error('confirmFacultyReject error:', err);
+        if (msgEl) {
+          msgEl.textContent = 'Error: ' + err.message;
+          msgEl.className = 'msg error';
+          msgEl.style.display = 'block';
+        }
+        btn.disabled = false;
+        btn.textContent = 'Reject Request';
       }
     }
 
