@@ -179,16 +179,26 @@
         
         let subjectSelect = document.getElementById('subjectFilter');
         subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+        const seenSub = new Set();
         subjectSnap.forEach(doc => {
           const s = doc.data();
-          subjectSelect.innerHTML += `<option value="${doc.id}">${s.subjectName}</option>`;
+          const key = (s.subjectName || '').trim().toLowerCase();
+          if (!seenSub.has(key)) {
+            seenSub.add(key);
+            subjectSelect.innerHTML += `<option value="${doc.id}">${s.subjectName}${s.subjectCode ? ` (${s.subjectCode})` : ''}</option>`;
+          }
         });
         
         let facultySelect = document.getElementById('facultyFilter');
         facultySelect.innerHTML = '<option value="">All Faculty</option>';
+        const seenFac = new Set();
         facultySnap.forEach(doc => {
           const f = doc.data();
-          facultySelect.innerHTML += `<option value="${doc.id}">${f.name}</option>`;
+          const key = (f.name || '').trim().toLowerCase();
+          if (!seenFac.has(key)) {
+            seenFac.add(key);
+            facultySelect.innerHTML += `<option value="${doc.id}">${f.name}</option>`;
+          }
         });
       } catch (err) {
         console.error(err);
@@ -223,14 +233,18 @@
       }
       tbody.innerHTML = '';
       records.forEach(r => {
-        const verified = r.latitude !== 'N/A' && r.longitude !== 'N/A' 
-          ? '<span class="badge green">● GPS & Face Verified</span>' 
-          : '<span class="badge">No GPS</span>';
+        let verified = '<span class="badge green">● GPS & Face Verified</span>';
+        if (r.attendanceMethod === 'correction' || r.source === 'faculty_correction') {
+          verified = '<span class="badge blue">● Faculty Correction</span>';
+        } else if (r.latitude === 'N/A' || r.longitude === 'N/A') {
+          verified = '<span class="badge">Verified</span>';
+        }
         const deptName = deptMap[r.studentDept] || r.studentDept || '-';
-        const distDisplay = r.distance ? `${Number(r.distance).toFixed(1)} m` : 'Verified';
+        const distDisplay = r.distance ? `${Number(r.distance).toFixed(1)} m` : (r.attendanceMethod === 'correction' ? 'Correction' : 'Verified');
+        const usnDisplay = r.studentUsn || r.usn || '-';
         tbody.innerHTML += `<tr>
           <td><strong>${r.studentName || 'Unknown'}</strong></td>
-          <td><strong>${r.studentUsn || '-'}</strong></td>
+          <td><strong>${usnDisplay}</strong></td>
           <td><span class="badge">${deptName}</span></td>
           <td>${r.date}</td>
           <td>${r.time}</td>
@@ -253,7 +267,7 @@
         }
       }
       if (subjectVal) filtered = filtered.filter(r => r.subjectId === subjectVal);
-      if (facultyVal) filtered = filtered.filter(r => r.facultyId === facultyVal);
+      if (facultyVal) filtered = filtered.filter(r => r.facultyId === facultyVal || r.facultyUid === facultyVal);
       renderTable(filtered);
       updateStats(filtered);
     }
@@ -271,7 +285,7 @@
         }
       }
       if (subjectVal) filtered = filtered.filter(r => r.subjectId === subjectVal);
-      if (facultyVal) filtered = filtered.filter(r => r.facultyId === facultyVal);
+      if (facultyVal) filtered = filtered.filter(r => r.facultyId === facultyVal || r.facultyUid === facultyVal);
       let csv = 'Student,USN,Department,Date,Time,Distance(m),Latitude,Longitude,Faculty\n';
       filtered.forEach(r => csv += `"${r.studentName || ''}","${r.studentUsn || ''}","${deptMap[r.studentDept] || r.studentDept || '-'}","${r.date}","${r.time}","${r.distance || ''}","${r.latitude || ''}","${r.longitude || ''}","${r.facultyName || '-'}"\n`);
       const blob = new Blob([csv], { type: 'text/csv' });

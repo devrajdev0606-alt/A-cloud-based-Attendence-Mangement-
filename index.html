@@ -9,18 +9,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <!-- Mesh Background Scene -->
-  <div class="bg-scene">
-    <div class="overlay"></div>
+<body class="login-page">
+  <!-- Soft Blurred Decorative Glass Blobs -->
+  <div class="glass-bg-blobs" aria-hidden="true">
+    <div class="glass-blob blob-top-left"></div>
+    <div class="glass-blob blob-top-right"></div>
+    <div class="glass-blob blob-bottom"></div>
   </div>
 
-  <!-- Floating decorative icons -->
-  <div class="floating-icon cap">🎓</div>
-  <div class="floating-icon globe">🌐</div>
-  <div class="floating-icon cap cap-2">🎓</div>
-
-  <main class="page-wrap" style="display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 80px);">
+  <main class="page-wrap login-page-wrap">
     <section class="portal-card">
       <!-- Header -->
       <header class="portal-header">
@@ -28,8 +25,8 @@
           <img src="cit logo.jpg" alt="CIT Logo" class="cit-logo" />
         </div>
         <div>
-          <h1>WELCOME TO <span>CIT PORTAL</span></h1>
-          <p style="font-size: 0.88rem; color: var(--text-muted); margin-top: 2px;">Smart Biometric & Geolocation Attendance Management System</p>
+          <h1>WELCOME TO <span class="cit-brand-navy">CIT</span> <span class="cit-brand-blue">PORTAL</span></h1>
+          <p class="portal-subtitle">Smart Biometric & Geolocation Attendance Management System</p>
         </div>
       </header>
 
@@ -41,7 +38,7 @@
             <div class="panel-icon">👨‍🎓</div>
             <div>
               <h2>STUDENT LOGIN</h2>
-              <span style="font-size: 0.75rem; color: var(--text-muted);">Access your attendance & classes</span>
+              <span class="panel-subtitle">Access your attendance & classes</span>
             </div>
           </div>
 
@@ -66,7 +63,7 @@
             <div class="panel-icon">👩‍🏫</div>
             <div>
               <h2>TEACHER LOGIN</h2>
-              <span style="font-size: 0.75rem; color: var(--text-muted);">Manage sessions & analytics</span>
+              <span class="panel-subtitle">Manage sessions & analytics</span>
             </div>
           </div>
 
@@ -469,6 +466,12 @@
           }
         }
 
+        if (email === 'admin@cit.edu') {
+          localStorage.setItem('adminEmail', email);
+          window.location.href = 'admin.html';
+          return;
+        }
+
         if (faculty) {
           localStorage.setItem('facultyId', facultyId);
           localStorage.setItem('facultyUid', user.uid);
@@ -512,27 +515,71 @@
       }
     }
 
-    // Modal helpers
-    async function loadDepartmentOptionsForRegistration() {
+    // Centralized Department Management Module
+    let cachedDepartmentsList = null;
+    let departmentsFetchPromise = null;
+
+    async function fetchDepartmentsOnce(forceRefresh = false) {
+      if (!forceRefresh && cachedDepartmentsList !== null) {
+        return cachedDepartmentsList;
+      }
+      if (departmentsFetchPromise) {
+        return departmentsFetchPromise;
+      }
+      departmentsFetchPromise = (async () => {
+        try {
+          const snap = await db.collection('departments').orderBy('name').get();
+          console.log(`[Departments] Firestore records received: ${snap.size}`);
+          const uniqueMap = new Map();
+          snap.forEach(doc => {
+            const data = doc.data();
+            const rawName = (data.name || '').trim();
+            if (!rawName) return;
+            const normalizedKey = (data.normalizedName || rawName).toLowerCase();
+            if (!uniqueMap.has(normalizedKey)) {
+              uniqueMap.set(normalizedKey, {
+                id: doc.id,
+                name: rawName,
+                normalizedName: normalizedKey
+              });
+            }
+          });
+          cachedDepartmentsList = Array.from(uniqueMap.values());
+          console.log(`[Departments] Unique departments: ${cachedDepartmentsList.length}`);
+          return cachedDepartmentsList;
+        } catch (err) {
+          console.error('[Departments] Error fetching departments:', err);
+          return cachedDepartmentsList || [];
+        } finally {
+          departmentsFetchPromise = null;
+        }
+      })();
+      return departmentsFetchPromise;
+    }
+
+    async function loadDepartmentOptionsForRegistration(forceRefresh = false) {
+      console.log('[Departments] loadDepartments called');
+      const depts = await fetchDepartmentsOnce(forceRefresh);
       const studentSelect = document.getElementById('regStudentDept');
       const teacherSelect = document.getElementById('regTeacherDept');
-      if (cachedDeptOptionsHtml) {
-        if (studentSelect) studentSelect.innerHTML = cachedDeptOptionsHtml;
-        if (teacherSelect) teacherSelect.innerHTML = cachedDeptOptionsHtml;
-        return;
-      }
-      try {
-        const snap = await db.collection('departments').orderBy('name').get();
-        let options = '<option value="">-- Select Department --</option>';
-        snap.forEach(doc => {
-          options += `<option value="${doc.id}">${doc.data().name}</option>`;
+
+      const populateSelect = (selectEl, label) => {
+        if (!selectEl) return;
+        const currentVal = selectEl.value;
+        // Completely clear existing options and retain single placeholder
+        selectEl.innerHTML = '<option value="">-- Select Department --</option>';
+        depts.forEach(d => {
+          const opt = document.createElement('option');
+          opt.value = d.id;
+          opt.textContent = d.name;
+          selectEl.appendChild(opt);
         });
-        cachedDeptOptionsHtml = options;
-        if (studentSelect) studentSelect.innerHTML = options;
-        if (teacherSelect) teacherSelect.innerHTML = options;
-      } catch (err) {
-        console.error('Error loading departments for registration:', err);
-      }
+        if (currentVal) selectEl.value = currentVal;
+        console.log(`[Departments] Populating dropdown: ${label} (total options: ${selectEl.options.length})`);
+      };
+
+      populateSelect(studentSelect, 'regStudentDept');
+      populateSelect(teacherSelect, 'regTeacherDept');
     }
 
     function openStudentRegisterModal() {
@@ -586,6 +633,13 @@
         return;
       }
 
+      if (!email) {
+        msg.textContent = 'Please enter a valid Email.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
       if (!semester || semester < 1 || semester > 8) {
         msg.textContent = 'Please select a valid Semester (1-8).';
         msg.className = 'msg error';
@@ -622,12 +676,62 @@
 
       let createdAuthUser = null;
       try {
-        // 1. Create Firebase Authentication account securely
+        // 1. Check unique email in uniqueEmails, students, and pending registrationRequests
+        const emailDoc = await db.collection('uniqueEmails').doc(email).get().catch(() => null);
+        if (emailDoc && emailDoc.exists) {
+          msg.textContent = 'An account with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        const emailSnap = await db.collection('students').where('email', '==', email).get().catch(() => null);
+        if (emailSnap && !emailSnap.empty) {
+          msg.textContent = 'An account with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        const pendingEmailSnap = await db.collection('registrationRequests').where('email', '==', email).where('status', '==', 'pending').get().catch(() => null);
+        if (pendingEmailSnap && !pendingEmailSnap.empty) {
+          msg.textContent = 'An account with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // 2. Check unique USN in uniqueUSNs, students, and pending registrationRequests
+        const usnDoc = await db.collection('uniqueUSNs').doc(usn).get().catch(() => null);
+        if (usnDoc && usnDoc.exists) {
+          msg.textContent = 'Student with this USN already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        const usnSnap = await db.collection('students').where('usn', '==', usn).get().catch(() => null);
+        if (usnSnap && !usnSnap.empty) {
+          msg.textContent = 'Student with this USN already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        const pendingUsnSnap = await db.collection('registrationRequests').where('usn', '==', usn).where('status', '==', 'pending').get().catch(() => null);
+        if (pendingUsnSnap && !pendingUsnSnap.empty) {
+          msg.textContent = 'Student with this USN already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // 3. Create Firebase Authentication account securely
         const userCred = await auth.createUserWithEmailAndPassword(email, pass);
         createdAuthUser = userCred.user;
         const uid = createdAuthUser.uid;
 
-        // 2. Create registration request in Firestore keyed by UID (NO password stored)
+        // 4. Create registration request in Firestore keyed by UID (NO password stored)
         const newRequest = {
           uid: uid,
           role: 'student',
@@ -645,7 +749,7 @@
 
         await db.collection('registrationRequests').doc(uid).set(newRequest);
 
-        // 3. Sign out immediately so pending applicant is not signed in
+        // 5. Sign out immediately so pending applicant is not signed in
         await auth.signOut();
 
         msg.textContent = 'Registration submitted successfully. Your account is waiting for administrator approval.';
@@ -664,7 +768,7 @@
         }
         let errorMsg = err.message;
         if (err.code === 'auth/email-already-in-use') {
-          errorMsg = 'An account or registration request with this email already exists.';
+          errorMsg = 'An account with this email already exists.';
         }
         msg.textContent = errorMsg;
         msg.className = 'msg error';
@@ -686,6 +790,13 @@
       const dept = document.getElementById('regTeacherDept').value;
       const pass = document.getElementById('regTeacherPass').value;
       const confirmPass = document.getElementById('regTeacherConfirmPass').value;
+
+      if (!email) {
+        msg.textContent = 'Please enter a valid Teacher Institutional Email.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
 
       if (pass !== confirmPass) {
         msg.textContent = 'Passwords do not match. Please re-enter.';
@@ -709,12 +820,37 @@
 
       let createdAuthUser = null;
       try {
-        // 1. Create Firebase Authentication account securely
+        // 1. Check unique email in uniqueEmails, faculty, and pending registrationRequests
+        const emailDoc = await db.collection('uniqueEmails').doc(email).get().catch(() => null);
+        if (emailDoc && emailDoc.exists) {
+          msg.textContent = 'Faculty with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        const emailSnap = await db.collection('faculty').where('email', '==', email).get().catch(() => null);
+        if (emailSnap && !emailSnap.empty) {
+          msg.textContent = 'Faculty with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        const pendingEmailSnap = await db.collection('registrationRequests').where('email', '==', email).where('status', '==', 'pending').get().catch(() => null);
+        if (pendingEmailSnap && !pendingEmailSnap.empty) {
+          msg.textContent = 'Faculty with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // 2. Create Firebase Authentication account securely
         const userCred = await auth.createUserWithEmailAndPassword(email, pass);
         createdAuthUser = userCred.user;
         const uid = createdAuthUser.uid;
 
-        // 2. Create registration request in Firestore keyed by UID (NO password stored)
+        // 3. Create registration request in Firestore keyed by UID (NO password stored)
         const newRequest = {
           uid: uid,
           role: 'faculty',
@@ -727,7 +863,7 @@
 
         await db.collection('registrationRequests').doc(uid).set(newRequest);
 
-        // 3. Sign out immediately so pending applicant is not signed in
+        // 4. Sign out immediately so pending applicant is not signed in
         await auth.signOut();
 
         msg.textContent = 'Registration submitted successfully. Your account is waiting for administrator approval.';
@@ -746,7 +882,7 @@
         }
         let errorMsg = err.message;
         if (err.code === 'auth/email-already-in-use') {
-          errorMsg = 'An account or registration request with this email already exists.';
+          errorMsg = 'Faculty with this email already exists.';
         }
         msg.textContent = errorMsg;
         msg.className = 'msg error';

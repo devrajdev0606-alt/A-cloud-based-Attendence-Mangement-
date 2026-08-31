@@ -223,7 +223,11 @@
         }
       }
       let csv = 'Student,Date,Time,Distance,Status\n';
-      filtered.forEach(r => csv += `${r.studentName},${r.date},${r.time},${r.distance || '-'},Present\n`);
+      filtered.forEach(r => {
+        const sName = (r.studentName || 'Student').replace(/"/g, '""');
+        const dist = r.distance ? r.distance.toFixed(1) : '-';
+        csv += `"${sName}","${r.date || ''}","${r.time || ''}","${dist}","Present"\n`;
+      });
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

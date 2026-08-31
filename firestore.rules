@@ -12,7 +12,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email != null && request.auth.token.email.lower() == 'admin@cit.edu') ||
+        ('email' in request.auth.token && (request.auth.token.email == 'admin@cit.edu' || request.auth.token.email.lower() == 'admin@cit.edu')) ||
+        request.auth.token.get('email', '') == 'admin@cit.edu' ||
+        request.auth.token.get('email', '').lower() == 'admin@cit.edu' ||
         ('admin' in request.auth.token && request.auth.token.admin == true) ||
         request.auth.token.get('admin', false) == true
       );
@@ -155,6 +157,14 @@ service cloud.firestore {
           ('facultyUid' in resource.data && resource.data.facultyUid == request.auth.uid) ||
           ('facultyId' in resource.data && resource.data.facultyId == request.auth.uid) ||
           (
+            'facultyId' in resource.data &&
+            resource.data.facultyId is string &&
+            resource.data.facultyId != '' &&
+            exists(/databases/$(database)/documents/faculty/$(resource.data.facultyId)) &&
+            'email' in get(/databases/$(database)/documents/faculty/$(resource.data.facultyId)).data &&
+            get(/databases/$(database)/documents/faculty/$(resource.data.facultyId)).data.email == request.auth.token.email
+          ) ||
+          (
             'subjectId' in resource.data &&
             resource.data.subjectId is string &&
             resource.data.subjectId != '' &&
@@ -224,7 +234,15 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         isSignedIn() && (
           ('facultyUid' in resource.data && resource.data.facultyUid == request.auth.uid) ||
-          ('facultyId' in resource.data && resource.data.facultyId == request.auth.uid)
+          ('facultyId' in resource.data && resource.data.facultyId == request.auth.uid) ||
+          (
+            'facultyId' in resource.data &&
+            resource.data.facultyId is string &&
+            resource.data.facultyId != '' &&
+            exists(/databases/$(database)/documents/faculty/$(resource.data.facultyId)) &&
+            'email' in get(/databases/$(database)/documents/faculty/$(resource.data.facultyId)).data &&
+            get(/databases/$(database)/documents/faculty/$(resource.data.facultyId)).data.email == request.auth.token.email
+          )
         )
       );
       allow delete: if isAdmin();
@@ -252,6 +270,7 @@ service cloud.firestore {
           && request.resource.data.subjectId != ''
           && 'date' in request.resource.data
           && request.resource.data.date is string
+          && recordId == request.resource.data.sessionId + '_' + request.auth.uid
           && exists(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId))
           && exists(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId))
           && get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.active == true
@@ -287,6 +306,10 @@ service cloud.firestore {
           && 'date' in request.resource.data
           && request.resource.data.date is string
           && (
+            ('studentUid' in request.resource.data && recordId == request.resource.data.sessionId + '_' + request.resource.data.studentUid) ||
+            ('studentId' in request.resource.data && recordId == request.resource.data.sessionId + '_' + request.resource.data.studentId)
+          )
+          && (
             ('attendanceMethod' in request.resource.data && request.resource.data.attendanceMethod == 'correction') ||
             ('source' in request.resource.data && request.resource.data.source == 'faculty_correction')
           )
@@ -316,7 +339,15 @@ service cloud.firestore {
           ('studentUid' in resource.data && resource.data.studentUid == request.auth.uid) ||
           ('studentId' in resource.data && resource.data.studentId == request.auth.uid) ||
           ('facultyUid' in resource.data && resource.data.facultyUid == request.auth.uid) ||
-          ('facultyId' in resource.data && resource.data.facultyId == request.auth.uid)
+          ('facultyId' in resource.data && resource.data.facultyId == request.auth.uid) ||
+          (
+            'facultyId' in resource.data &&
+            resource.data.facultyId is string &&
+            resource.data.facultyId != '' &&
+            exists(/databases/$(database)/documents/faculty/$(resource.data.facultyId)) &&
+            'email' in get(/databases/$(database)/documents/faculty/$(resource.data.facultyId)).data &&
+            get(/databases/$(database)/documents/faculty/$(resource.data.facultyId)).data.email == request.auth.token.email
+          )
         )
       );
       allow update, delete: if isAdmin();
@@ -442,6 +473,45 @@ service cloud.firestore {
     // =========================================================================
     match /settings/{settingId} {
       allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // TIMETABLE COLLECTION
+    // =========================================================================
+    // Institutional 6-day academic schedule entries.
+    // Read: authenticated users (Admin, Faculty, Student).
+    // Write: strictly admin only.
+    // =========================================================================
+    match /timetable/{timetableId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // UNIQUENESS INDEX COLLECTIONS (Global uniqueness & atomic write protection)
+    // =========================================================================
+    // Stores normalized keys to prevent duplicate USNs, Emails, and Subject Codes.
+    // Read: Allowed for registration/login checks.
+    // Write: strictly admin only.
+    // =========================================================================
+    match /uniqueUSNs/{usn} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /uniqueEmails/{email} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /uniqueSubjectCodes/{code} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /uniqueOfferings/{offeringKey} {
+      allow read: if true;
       allow write: if isAdmin();
     }
   }

@@ -180,14 +180,12 @@
             </select>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
               <div>
-                <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">Total Subject Hours *</label>
-                <input type="number" id="subjectTotalHours" placeholder="e.g. 45" min="1" step="1" required style="width:100%;" />
+                <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">Total Planned Classes *</label>
+                <input type="number" id="subjectPlannedClasses" placeholder="e.g. 60" min="1" step="1" required style="width:100%;" />
               </div>
               <div>
-                <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">Attendance Requirement</label>
-                <div style="padding: 10px 12px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); border-radius: var(--radius-md, 8px); font-size: 0.88rem; font-weight: 600; color: var(--emerald-dark);">
-                  ✓ 75% Required
-                </div>
+                <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">Minimum Attendance % *</label>
+                <input type="number" id="subjectMinAttendance" value="75" min="1" max="100" step="1" required style="width:100%;" />
               </div>
             </div>
             <p style="font-size:0.8rem; color:var(--text-muted); margin:0;">
@@ -291,44 +289,68 @@
       </div>
     </div>
 
-    <!-- Attendance Correction Requests Audit Card -->
+    <!-- Timetable Management Card -->
     <div class="card" style="margin-top: 24px;">
       <div class="card-header">
-        <h2>📝 Attendance Correction Requests Audit Log</h2>
-        <span class="badge amber" id="adminPendingCorrectionsBadge">0 Pending</span>
+        <h2>📅 Institutional Timetable Management</h2>
+        <button type="button" id="btnAddTimetableEntry" class="btn btn-primary" onclick="openTimetableModal()">+ Add Timetable Entry</button>
       </div>
-      <p class="card-desc">Institution-wide audit log of student attendance regularisation requests and faculty review decisions.</p>
+      <p class="card-desc">Configure weekly timetable schedules across departments, semesters, and sections. Subjects, faculty, and timings are synchronized automatically with student & faculty dashboards.</p>
+
+      <!-- Day Tabs [ ALL ] [ MON ] [ TUE ] [ WED ] [ THU ] [ FRI ] [ SAT ] -->
+      <div class="day-tabs-nav" id="adminTimetableDayTabs">
+        <button type="button" class="day-tab-btn active" data-day="all" onclick="switchAdminTimetableDay(this)">ALL DAYS</button>
+        <button type="button" class="day-tab-btn" data-day="Monday" onclick="switchAdminTimetableDay(this)">MON</button>
+        <button type="button" class="day-tab-btn" data-day="Tuesday" onclick="switchAdminTimetableDay(this)">TUE</button>
+        <button type="button" class="day-tab-btn" data-day="Wednesday" onclick="switchAdminTimetableDay(this)">WED</button>
+        <button type="button" class="day-tab-btn" data-day="Thursday" onclick="switchAdminTimetableDay(this)">THU</button>
+        <button type="button" class="day-tab-btn" data-day="Friday" onclick="switchAdminTimetableDay(this)">FRI</button>
+        <button type="button" class="day-tab-btn" data-day="Saturday" onclick="switchAdminTimetableDay(this)">SAT</button>
+      </div>
 
       <!-- Filters & Search Toolbar -->
       <div class="filter-row">
-        <input type="text" id="adminCorrectionSearch" placeholder="🔍 Search by student name, USN, faculty, or subject..." oninput="renderAdminCorrectionsTable()" style="flex: 2 1 200px;" />
-        <select id="adminCorrectionStatusFilter" onchange="renderAdminCorrectionsTable()" style="flex: 1 1 140px;">
-          <option value="all">All Statuses</option>
-          <option value="pending" selected>🟡 Pending Review</option>
-          <option value="approved">🟢 Approved</option>
-          <option value="rejected">🔴 Rejected</option>
+        <select id="ttFilterDept" onchange="renderAdminTimetableTable()" style="flex: 1 1 160px;">
+          <option value="">All Departments</option>
         </select>
-        <button type="button" class="btn btn-primary" onclick="loadAdminCorrectionRequests()">🔄 Refresh Audit Log</button>
+        <select id="ttFilterSem" onchange="renderAdminTimetableTable()" style="flex: 1 1 120px;">
+          <option value="">All Semesters</option>
+          <option value="1">Semester 1</option>
+          <option value="2">Semester 2</option>
+          <option value="3">Semester 3</option>
+          <option value="4">Semester 4</option>
+          <option value="5">Semester 5</option>
+          <option value="6">Semester 6</option>
+          <option value="7">Semester 7</option>
+          <option value="8">Semester 8</option>
+        </select>
+        <select id="ttFilterSec" onchange="renderAdminTimetableTable()" style="flex: 1 1 100px;">
+          <option value="">All Sections</option>
+          <option value="A">Section A</option>
+          <option value="B">Section B</option>
+          <option value="C">Section C</option>
+          <option value="D">Section D</option>
+        </select>
+        <button type="button" class="btn" style="background:rgba(255,255,255,0.06); color:var(--text-color);" onclick="loadAdminTimetable()">🔄 Refresh</button>
       </div>
 
-      <!-- Table -->
+      <!-- Timetable Table -->
       <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
         <table>
           <thead>
             <tr>
-              <th>Student</th>
-              <th>USN</th>
-              <th>Subject</th>
-              <th>Faculty</th>
-              <th>Date / Class</th>
-              <th>Reason</th>
-              <th>Status</th>
-              <th>Created At</th>
-              <th>Reviewed At / Decision</th>
+              <th>Day</th>
+              <th>Time</th>
+              <th>Type</th>
+              <th>Subject / Activity</th>
+              <th>Dept / Sem / Sec</th>
+              <th>Assigned Faculty</th>
+              <th>Room</th>
+              <th>Actions</th>
             </tr>
           </thead>
-          <tbody id="adminCorrectionsTableBody">
-            <tr><td colspan="9" class="empty">Loading attendance correction audit log...</td></tr>
+          <tbody id="adminTimetableTbody">
+            <tr><td colspan="8" class="empty">Loading institutional timetable...</td></tr>
           </tbody>
         </table>
       </div>
@@ -380,6 +402,7 @@
           <button type="button" id="confirmModalSubmitBtn" class="btn btn-approve" onclick="executePendingAction()">✓ Confirm</button>
         </div>
       </div>
+    </div>
   </div>
 
   <!-- Enrolled Roster Modal -->
@@ -411,6 +434,126 @@
         <div class="btn-row" style="justify-content: flex-end; width: 100%; margin-top: 14px;">
           <button type="button" class="btn back-btn" onclick="closeRosterModal()">Close</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Edit Timetable Entry Modal -->
+  <div id="timetableModal" class="modal-overlay" style="display:none;" onclick="closeTimetableModalOnBackdrop(event)">
+    <div class="modal-card" style="max-width: 580px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span id="ttModalBadge" class="badge blue">Schedule Configuration</span>
+          <h2 id="ttModalTitle" style="margin-top:4px;">Add Timetable Entry</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeTimetableModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="timetableForm" onsubmit="saveTimetableEntry(event)" style="display:flex; flex-direction:column; gap:12px;">
+          <input type="hidden" id="ttEntryId" value="" />
+          
+          <div style="display:grid; grid-template-columns: 1.2fr 1fr 1fr; gap:10px;">
+            <div>
+              <label class="form-label" for="ttDay" style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px;">Day *</label>
+              <select id="ttDay" required style="width:100%;">
+                <option value="Monday">Monday</option>
+                <option value="Tuesday">Tuesday</option>
+                <option value="Wednesday">Wednesday</option>
+                <option value="Thursday">Thursday</option>
+                <option value="Friday">Friday</option>
+                <option value="Saturday">Saturday</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label" for="ttStartTime" style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px;">Start Time *</label>
+              <input type="time" id="ttStartTime" required style="width:100%;" />
+            </div>
+            <div>
+              <label class="form-label" for="ttEndTime" style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px;">End Time *</label>
+              <input type="time" id="ttEndTime" required style="width:100%;" />
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label" for="ttType" style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px;">Entry Type *</label>
+            <select id="ttType" onchange="onTimetableTypeChange()" required style="width:100%;">
+              <option value="subject">📚 Course Subject</option>
+              <option value="lab">🔬 Laboratory / Practical</option>
+              <option value="break">☕ Short Break</option>
+              <option value="lunch">🍴 Lunch Break</option>
+              <option value="forum">🗣️ Forum Hour</option>
+              <option value="sports">🏃 Sports / PT</option>
+              <option value="activity">📢 Activity / Extra-Curricular</option>
+            </select>
+          </div>
+
+          <!-- Non-subject title (Break, Lunch, Forum, Sports, Activity) -->
+          <div id="ttNonSubjectFields" style="display:none;">
+            <label class="form-label" for="ttTitle" style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px;">Title / Label *</label>
+            <input type="text" id="ttTitle" placeholder="e.g. Short Break, Lunch, Forum Hour, Sports" style="width:100%;" />
+          </div>
+
+          <!-- Department, Semester, Section -->
+          <div id="ttAcademicFields" style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:10px;">
+            <div>
+              <label class="form-label" for="ttDept" style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px;">Department *</label>
+              <select id="ttDept" onchange="onTimetableDeptSemSecChange()" style="width:100%;">
+                <option value="">Select Department</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label" for="ttSem" style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px;">Semester *</label>
+              <select id="ttSem" onchange="onTimetableDeptSemSecChange()" style="width:100%;">
+                <option value="1">Sem 1</option>
+                <option value="2">Sem 2</option>
+                <option value="3">Sem 3</option>
+                <option value="4">Sem 4</option>
+                <option value="5">Sem 5</option>
+                <option value="6">Sem 6</option>
+                <option value="7">Sem 7</option>
+                <option value="8">Sem 8</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label" for="ttSec" style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px;">Section *</label>
+              <select id="ttSec" onchange="onTimetableDeptSemSecChange()" style="width:100%;">
+                <option value="A">Sec A</option>
+                <option value="B">Sec B</option>
+                <option value="C">Sec C</option>
+                <option value="D">Sec D</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Course Subject Field -->
+          <div id="ttSubjectFieldWrap">
+            <label class="form-label" for="ttSubjectSelect" style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px;">Course Subject *</label>
+            <select id="ttSubjectSelect" onchange="onTimetableSubjectSelectChange()" style="width:100%;">
+              <option value="">-- Select Matching Subject --</option>
+            </select>
+          </div>
+
+          <!-- Faculty & Room Fields -->
+          <div id="ttFacultyRoomWrap" style="display:grid; grid-template-columns: 2fr 1fr; gap:10px;">
+            <div id="ttFacultyFieldWrap">
+              <label class="form-label" for="ttFacultySelect" style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px;">Assigned Faculty *</label>
+              <select id="ttFacultySelect" style="width:100%;">
+                <option value="">Select Faculty</option>
+              </select>
+            </div>
+            <div id="ttRoomFieldWrap">
+              <label class="form-label" for="ttRoom" style="font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px;">Room / Venue</label>
+              <input type="text" id="ttRoom" placeholder="e.g. 301" style="width:100%;" />
+            </div>
+          </div>
+
+          <div id="ttMsg" class="msg" style="display:none; margin-top:4px;"></div>
+
+          <div class="btn-row" style="justify-content:flex-end; gap:10px; margin-top:8px;">
+            <button type="button" class="btn" style="background:rgba(255,255,255,0.06); color:var(--text-color);" onclick="closeTimetableModal()">Cancel</button>
+            <button type="submit" id="ttSubmitBtn" class="btn btn-primary">Save Timetable Entry</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
@@ -650,7 +793,7 @@
             rows.push(`<tr><td><strong>${f.name}</strong></td><td>${f.email}</td><td><span class="badge blue">${deptName}</span></td></tr>`);
           });
         } else {
-          thead.innerHTML = '<tr><th>Subject Name</th><th>Code</th><th>Department</th><th>Sem / Sec</th><th>Total Hours</th><th>Assigned Faculty</th><th>Enrolled Students</th></tr>';
+          thead.innerHTML = '<tr><th>Subject Name</th><th>Code</th><th>Department</th><th>Sem / Sec</th><th>Planned Classes</th><th>Assigned Faculty</th><th>Enrolled Students</th></tr>';
           const facMap = {};
           facSnap.forEach(doc => { facMap[doc.id] = doc.data().name; });
           subSnap.forEach(doc => {
@@ -660,8 +803,10 @@
             const semSecBadge = s.semester 
               ? `<span class="badge blue">Sem ${s.semester} • Sec ${s.section || 'A'}</span>` 
               : '<span class="badge">-</span>';
-            const hoursBadge = s.totalHours
-              ? `<span class="badge" style="font-weight:600;">${s.totalHours} hrs <span style="font-size:10px; color:var(--emerald-dark);">(75% req)</span></span>`
+            const plannedNum = s.plannedClasses || s.totalPlannedClasses || s.totalHours;
+            const minReq = s.minAttendancePercentage || s.attendanceRequiredPercentage || 75;
+            const hoursBadge = plannedNum
+              ? `<span class="badge" style="font-weight:600;">${plannedNum} classes <span style="font-size:10px; color:var(--emerald-dark);">(${minReq}% min)</span></span>`
               : '<span class="badge" style="opacity:0.6;">Not configured</span>';
             const enrolledCount = (s.studentIds || []).length;
             rows.push(`<tr><td><strong>${s.subjectName}</strong></td><td><span class="badge">${s.subjectCode}</span></td><td>${deptName}</td><td>${semSecBadge}</td><td>${hoursBadge}</td><td>${facName}</td><td><button type="button" class="badge green" style="cursor:pointer; border:none; font-weight:600;" onclick="viewSubjectRoster('${doc.id}')" title="Click to view enrolled roster">👥 ${enrolledCount} students</button></td></tr>`);
@@ -673,46 +818,115 @@
       }
     }
 
+    // Centralized Department Management Module in Admin
+    let cachedAdminDepartments = null;
+    let adminDepartmentsFetchPromise = null;
+
+    function invalidateDepartmentCache() {
+      cachedAdminDepartments = null;
+      adminDepartmentsFetchPromise = null;
+    }
+
+    async function fetchDepartmentsOnce(forceRefresh = false) {
+      if (!forceRefresh && cachedAdminDepartments !== null) {
+        return cachedAdminDepartments;
+      }
+      if (adminDepartmentsFetchPromise) {
+        return adminDepartmentsFetchPromise;
+      }
+      adminDepartmentsFetchPromise = (async () => {
+        try {
+          const snap = await db.collection('departments').orderBy('name').get();
+          console.log(`[Departments] Firestore records received: ${snap.size}`);
+          const uniqueMap = new Map();
+          snap.forEach(doc => {
+            const data = doc.data();
+            const rawName = (data.name || '').trim();
+            if (!rawName) return;
+            const normalizedKey = (data.normalizedName || rawName).toLowerCase();
+            if (!uniqueMap.has(normalizedKey)) {
+              uniqueMap.set(normalizedKey, {
+                id: doc.id,
+                name: rawName,
+                normalizedName: normalizedKey
+              });
+            }
+          });
+          cachedAdminDepartments = Array.from(uniqueMap.values());
+          console.log(`[Departments] Unique departments: ${cachedAdminDepartments.length}`);
+          return cachedAdminDepartments;
+        } catch (err) {
+          console.error('[Departments] Error fetching departments:', err);
+          return cachedAdminDepartments || [];
+        } finally {
+          adminDepartmentsFetchPromise = null;
+        }
+      })();
+      return adminDepartmentsFetchPromise;
+    }
+
     async function loadFacultyOptions() {
       const subjectFaculty = document.getElementById('subjectFaculty');
-      const subjectDept = document.getElementById('subjectDept');
+      const ttFacultySelect = document.getElementById('ttFacultySelect');
       try {
         const facultySnap = await db.collection('faculty').orderBy('name').get();
-        subjectFaculty.innerHTML = '<option value="">Select Faculty</option>';
+        if (subjectFaculty) subjectFaculty.innerHTML = '<option value="">Select Faculty</option>';
+        if (ttFacultySelect) ttFacultySelect.innerHTML = '<option value="">Select Faculty</option>';
+        const seenFac = new Set();
         facultySnap.forEach(doc => {
           const f = doc.data();
-          subjectFaculty.innerHTML += `<option value="${doc.id}">${f.name}</option>`;
-        });
-        const deptSnap = await db.collection('departments').orderBy('name').get();
-        subjectDept.innerHTML = '<option value="">Select Department</option>';
-        deptSnap.forEach(doc => {
-          const d = doc.data();
-          deptMap[doc.id] = d.name;
-          subjectDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
+          const key = (f.name || '').trim().toLowerCase();
+          if (!seenFac.has(key)) {
+            seenFac.add(key);
+            if (subjectFaculty) subjectFaculty.innerHTML += `<option value="${doc.id}">${f.name}</option>`;
+            if (ttFacultySelect) ttFacultySelect.innerHTML += `<option value="${doc.id}">${f.name}</option>`;
+          }
         });
       } catch (err) {
-        console.error(err);
+        console.error('Error loading faculty options:', err);
       }
     }
 
-    async function loadDepartments() {
+    async function loadDepartments(forceRefresh = false) {
+      console.log('[Departments] loadDepartments called');
       const studentDept = document.getElementById('studentDept');
       const facultyDept = document.getElementById('facultyDept');
+      const subjectDept = document.getElementById('subjectDept');
       const filterDept = document.getElementById('filterDept');
+      const ttFilterDept = document.getElementById('ttFilterDept');
+      const ttDept = document.getElementById('ttDept');
       const accordion = document.getElementById('deptAccordion');
+
       try {
-        const deptSnap = await db.collection('departments').orderBy('name').get();
-        studentDept.innerHTML = '<option value="">Select Department</option>';
-        facultyDept.innerHTML = '<option value="">Select Department</option>';
-        filterDept.innerHTML = '<option value="">All Departments</option>';
-        
-        deptSnap.forEach(doc => {
-          const d = doc.data();
-          deptMap[doc.id] = d.name;
-          studentDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
-          facultyDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
-          filterDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
+        const depts = await fetchDepartmentsOnce(forceRefresh);
+
+        // Update global deptMap
+        depts.forEach(d => {
+          deptMap[d.id] = d.name;
+          deptMap[d.normalizedName] = d.name;
         });
+
+        const populateSelect = (selectEl, defaultLabel, allOption = false) => {
+          if (!selectEl) return;
+          const currentVal = selectEl.value;
+          selectEl.innerHTML = `<option value="">${allOption ? 'All Departments' : defaultLabel}</option>`;
+          depts.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.id;
+            opt.textContent = d.name;
+            selectEl.appendChild(opt);
+          });
+          if (currentVal) selectEl.value = currentVal;
+        };
+
+        populateSelect(studentDept, 'Select Department');
+        populateSelect(facultyDept, 'Select Department');
+        populateSelect(subjectDept, 'Select Department');
+        populateSelect(filterDept, 'All Departments', true);
+        populateSelect(ttFilterDept, 'All Departments', true);
+        populateSelect(ttDept, 'Select Department');
+
+        console.log(`[Departments] Populated all 6 admin department dropdowns with ${depts.length} unique items`);
 
         const [stuSnap, facSnap, subSnap] = await Promise.all([
           db.collection('students').get(),
@@ -1229,29 +1443,69 @@
         }
 
         if (type === 'approve') {
+          const email = (currentReq.email || '').trim().toLowerCase();
+          const emailDocRef = db.collection('uniqueEmails').doc(email);
+
           if (currentReq.role === 'faculty') {
+            // Check email uniqueness
+            const emailDoc = await emailDocRef.get();
+            if (emailDoc.exists && emailDoc.data().uid !== uid) {
+              throw new Error('Faculty with this email already exists.');
+            }
+
             const newFaculty = {
               uid: uid,
-              name: currentReq.name || '',
-              email: currentReq.email,
+              name: (currentReq.name || '').trim(),
+              email: email,
               department: currentReq.department || currentReq.dept || '',
               createdAt: currentReq.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
               approvedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
-            await db.collection('faculty').doc(uid).set(newFaculty, { merge: true });
+
+            const batch = db.batch();
+            batch.set(emailDocRef, {
+              email: email,
+              uid: uid,
+              role: 'faculty',
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            batch.set(db.collection('faculty').doc(uid), newFaculty, { merge: true });
+            batch.update(reqRef, {
+              status: 'approved',
+              approvedAccountId: uid,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            await batch.commit();
           } else {
-            const studentName = currentReq.name || '';
-            const studentUsn = (currentReq.usn || '').toUpperCase();
+            const studentName = (currentReq.name || '').trim();
+            const studentUsn = (currentReq.usn || '').trim().toUpperCase();
             const studentDept = currentReq.dept || currentReq.department || '';
             const studentSem = parseInt(currentReq.semester, 10) || 1;
-            const studentSec = (currentReq.section || 'A').toUpperCase();
-            const studentPhone = currentReq.phone || '';
+            const studentSec = (currentReq.section || 'A').trim().toUpperCase();
+            const studentPhone = (currentReq.phone || '').trim();
+
+            if (!studentUsn) {
+              throw new Error('Student USN is required.');
+            }
+
+            // Check email uniqueness
+            const emailDoc = await emailDocRef.get();
+            if (emailDoc.exists && emailDoc.data().uid !== uid) {
+              throw new Error('An account with this email already exists.');
+            }
+
+            // Check USN uniqueness
+            const usnDocRef = db.collection('uniqueUSNs').doc(studentUsn);
+            const usnDoc = await usnDocRef.get();
+            if (usnDoc.exists && usnDoc.data().uid !== uid) {
+              throw new Error('Student with this USN already exists.');
+            }
 
             const newStudent = {
               uid: uid,
               name: studentName,
               usn: studentUsn,
-              email: currentReq.email,
+              email: email,
               dept: studentDept,
               department: studentDept,
               semester: studentSem,
@@ -1261,12 +1515,32 @@
               createdAt: currentReq.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
               approvedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
-            await db.collection('students').doc(uid).set(newStudent, { merge: true });
+
+            const batch = db.batch();
+            batch.set(emailDocRef, {
+              email: email,
+              uid: uid,
+              role: 'student',
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            batch.set(usnDocRef, {
+              usn: studentUsn,
+              uid: uid,
+              role: 'student',
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            batch.set(db.collection('students').doc(uid), newStudent, { merge: true });
+            batch.update(reqRef, {
+              status: 'approved',
+              approvedAccountId: uid,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            await batch.commit();
 
             // Direction A: Auto-Enroll Student into all existing subjects matching Dept + Semester + Section
             try {
               const subSnap = await db.collection('subjects').get();
-              const batch = db.batch();
+              const enrollBatch = db.batch();
               let matchedCount = 0;
 
               subSnap.forEach(subDoc => {
@@ -1285,7 +1559,7 @@
                     ? currentRoster 
                     : [...currentRoster, { id: uid, name: studentName, usn: studentUsn }];
 
-                  batch.update(subRef, {
+                  enrollBatch.update(subRef, {
                     studentIds: firebase.firestore.FieldValue.arrayUnion(uid),
                     enrolledRoster: updatedRoster
                   });
@@ -1294,28 +1568,21 @@
               });
 
               if (matchedCount > 0) {
-                await batch.commit();
+                await enrollBatch.commit();
               }
             } catch (enrollErr) {
               console.warn('Auto-enrollment error during approval:', enrollErr);
             }
           }
 
-          // Mark request as approved
-          await reqRef.update({
-            status: 'approved',
-            approvedAccountId: uid,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
-
           if (actionMsg) {
-            actionMsg.textContent = `✓ Successfully approved registration for ${currentReq.name}. Active profile activated and subjects auto-assigned!`;
+            actionMsg.textContent = `✓ Successfully approved registration for ${currentReq.name}. Profile activated!`;
             actionMsg.className = 'msg success';
             actionMsg.style.display = 'block';
             setTimeout(() => { actionMsg.style.display = 'none'; }, 4000);
           }
         } else if (type === 'reject') {
-          // Mark request as rejected (do NOT create active profile, do NOT delete Firebase Auth)
+          // Mark request as rejected
           await reqRef.update({
             status: 'rejected',
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1361,26 +1628,60 @@
     document.getElementById('addDepartmentForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const msg = document.getElementById('deptMsg');
+      const submitBtn = e.target.querySelector('button[type="submit"]');
       const name = document.getElementById('deptName').value.trim();
+      const normalizedName = name.toLowerCase();
+
+      if (!name) {
+        msg.textContent = 'Please enter a valid Department Name.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Adding Dept...';
+      msg.style.display = 'none';
+
       try {
-        const snap = await db.collection('departments').where('name', '==', name).get();
-        if (!snap.empty) {
-          msg.textContent = 'Department already exists!';
+        const deptRef = db.collection('departments').doc(normalizedName);
+        const deptDoc = await deptRef.get();
+        if (deptDoc.exists) {
+          msg.textContent = 'Department already exists.';
           msg.className = 'msg error';
           msg.style.display = 'block';
           return;
         }
-        await db.collection('departments').add({ name, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+
+        // Secondary check by normalizedName field
+        const querySnap = await db.collection('departments').where('normalizedName', '==', normalizedName).get();
+        if (!querySnap.empty) {
+          msg.textContent = 'Department already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        await deptRef.set({
+          name: name,
+          normalizedName: normalizedName,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
         msg.textContent = 'Department added successfully!';
         msg.className = 'msg success';
         msg.style.display = 'block';
         document.getElementById('addDepartmentForm').reset();
-        loadDepartments();
-        updateStats();
+        invalidateDepartmentCache();
+        await loadDepartments(true);
+        await updateStats();
       } catch (err) {
         msg.textContent = 'Error: ' + err.message;
         msg.className = 'msg error';
         msg.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Add Dept';
       }
     });
 
@@ -1397,25 +1698,64 @@
       const semester = parseInt(document.getElementById('studentSem').value, 10) || 1;
       const section = (document.getElementById('studentSec').value || 'A').trim().toUpperCase();
 
+      if (!usn) {
+        msg.textContent = 'Please enter a valid Student USN.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (!email) {
+        msg.textContent = 'Please enter a valid Student Email.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
       submitBtn.disabled = true;
       submitBtn.textContent = 'Registering Student...';
       msg.style.display = 'none';
 
       let createdUid = null;
       try {
-        // 1. Check if student email already exists in Firestore
-        const snap = await db.collection('students').where('email', '==', email).get();
-        if (!snap.empty) {
-          msg.textContent = 'A student profile with this email already exists!';
+        // 1. Check unique email in dedicated index and students collection
+        const emailDoc = await db.collection('uniqueEmails').doc(email).get();
+        if (emailDoc.exists) {
+          msg.textContent = 'An account with this email already exists.';
           msg.className = 'msg error';
           msg.style.display = 'block';
           return;
         }
 
-        // 2. Create Firebase Authentication account securely via isolated secondary app
+        const emailSnap = await db.collection('students').where('email', '==', email).get();
+        if (!emailSnap.empty) {
+          msg.textContent = 'An account with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // 2. Check unique USN in dedicated index and students collection
+        const usnDoc = await db.collection('uniqueUSNs').doc(usn).get();
+        if (usnDoc.exists) {
+          msg.textContent = 'Student with this USN already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        const usnSnap = await db.collection('students').where('usn', '==', usn).get();
+        if (!usnSnap.empty) {
+          msg.textContent = 'Student with this USN already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // 3. Create Firebase Authentication account securely via isolated secondary app
         createdUid = await createAuthUserWithoutSignout(email, password);
 
-        // 3. Create Firestore student profile keyed by UID (NO password stored)
+        // 4. Create unique key records and student profile atomically
         const student = {
           uid: createdUid,
           name: name,
@@ -1431,12 +1771,26 @@
           approvedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        await db.collection('students').doc(createdUid).set(student);
+        const batch = db.batch();
+        batch.set(db.collection('uniqueEmails').doc(email), {
+          email: email,
+          uid: createdUid,
+          role: 'student',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        batch.set(db.collection('uniqueUSNs').doc(usn), {
+          usn: usn,
+          uid: createdUid,
+          role: 'student',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        batch.set(db.collection('students').doc(createdUid), student);
+        await batch.commit();
 
         // Direction A: Auto-enroll in matching existing subjects for Dept + Semester + Section
         try {
           const subSnap = await db.collection('subjects').get();
-          const batch = db.batch();
+          const enrollBatch = db.batch();
           let matchedCount = 0;
           subSnap.forEach(subDoc => {
             const sub = subDoc.data();
@@ -1452,7 +1806,7 @@
               const updatedRoster = alreadyInRoster
                 ? currentRoster
                 : [...currentRoster, { id: createdUid, name: name, usn: usn }];
-              batch.update(subRef, {
+              enrollBatch.update(subRef, {
                 studentIds: firebase.firestore.FieldValue.arrayUnion(createdUid),
                 enrolledRoster: updatedRoster
               });
@@ -1460,7 +1814,7 @@
             }
           });
           if (matchedCount > 0) {
-            await batch.commit();
+            await enrollBatch.commit();
           }
         } catch (enrollErr) {
           console.warn('Auto-enroll error on manual student onboarding:', enrollErr);
@@ -1470,15 +1824,15 @@
         msg.className = 'msg success';
         msg.style.display = 'block';
         document.getElementById('addStudentForm').reset();
-        loadDepartments();
-        updateStats();
+        await loadDepartments();
+        await updateStats();
         renderListing();
       } catch (err) {
         let errorMsg = err.message;
         if (err.code === 'auth/email-already-in-use') {
-          errorMsg = 'An account with this email already exists in Firebase Authentication.';
+          errorMsg = 'An account with this email already exists.';
         }
-        msg.textContent = 'Error: ' + errorMsg;
+        msg.textContent = errorMsg;
         msg.className = 'msg error';
         msg.style.display = 'block';
       } finally {
@@ -1496,16 +1850,31 @@
       const password = document.getElementById('facultyPassword').value.trim();
       const dept = document.getElementById('facultyDept').value;
 
+      if (!email) {
+        msg.textContent = 'Please enter a valid Faculty Email.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
       submitBtn.disabled = true;
       submitBtn.textContent = 'Registering Faculty...';
       msg.style.display = 'none';
 
       let createdUid = null;
       try {
-        // 1. Check if faculty email already exists in Firestore
+        // 1. Check unique email in dedicated index and faculty collection
+        const emailDoc = await db.collection('uniqueEmails').doc(email).get();
+        if (emailDoc.exists) {
+          msg.textContent = 'Faculty with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
         const snap = await db.collection('faculty').where('email', '==', email).get();
         if (!snap.empty) {
-          msg.textContent = 'A faculty profile with this email already exists!';
+          msg.textContent = 'Faculty with this email already exists.';
           msg.className = 'msg error';
           msg.style.display = 'block';
           return;
@@ -1514,7 +1883,7 @@
         // 2. Create Firebase Authentication account securely via isolated secondary app
         createdUid = await createAuthUserWithoutSignout(email, password);
 
-        // 3. Create Firestore faculty profile keyed by UID (NO password stored)
+        // 3. Create unique email record and faculty profile atomically
         const faculty = {
           uid: createdUid,
           name: name,
@@ -1523,22 +1892,30 @@
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        await db.collection('faculty').doc(createdUid).set(faculty);
+        const batch = db.batch();
+        batch.set(db.collection('uniqueEmails').doc(email), {
+          email: email,
+          uid: createdUid,
+          role: 'faculty',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        batch.set(db.collection('faculty').doc(createdUid), faculty);
+        await batch.commit();
 
         msg.textContent = 'Faculty member onboarded successfully! Firebase Auth credentials provisioned.';
         msg.className = 'msg success';
         msg.style.display = 'block';
         document.getElementById('addFacultyForm').reset();
-        loadDepartments();
-        loadFacultyOptions();
-        updateStats();
+        await loadDepartments();
+        await loadFacultyOptions();
+        await updateStats();
         renderListing();
       } catch (err) {
         let errorMsg = err.message;
         if (err.code === 'auth/email-already-in-use') {
-          errorMsg = 'An account with this email already exists in Firebase Authentication.';
+          errorMsg = 'Faculty with this email already exists.';
         }
-        msg.textContent = 'Error: ' + errorMsg;
+        msg.textContent = errorMsg;
         msg.className = 'msg error';
         msg.style.display = 'block';
       } finally {
@@ -1554,15 +1931,32 @@
 
       const subjectName = document.getElementById('subjectName').value.trim();
       const subjectCode = document.getElementById('subjectCode').value.trim().toUpperCase();
+      const normalizedSubjectCode = subjectCode.toLowerCase();
       const departmentId = document.getElementById('subjectDept').value;
       const semester = parseInt(document.getElementById('subjectSem').value, 10) || 1;
       const section = (document.getElementById('subjectSec').value || 'A').trim().toUpperCase();
       const facultyId = document.getElementById('subjectFaculty').value;
-      const totalHoursInput = document.getElementById('subjectTotalHours').value;
-      const totalHours = parseInt(totalHoursInput, 10);
+      
+      const plannedInput = document.getElementById('subjectPlannedClasses')?.value || document.getElementById('subjectTotalHours')?.value;
+      const plannedClasses = parseInt(plannedInput, 10) || 60;
+      const minAttendance = parseInt(document.getElementById('subjectMinAttendance')?.value, 10) || 75;
 
-      if (!Number.isFinite(totalHours) || totalHours <= 0) {
-        msg.textContent = 'Please enter a valid positive number for Total Subject Hours (e.g. 45).';
+      if (!subjectCode) {
+        msg.textContent = 'Please enter a valid Subject Code (e.g. CS045).';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (!departmentId) {
+        msg.textContent = 'Please select a Department.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (!Number.isFinite(plannedClasses) || plannedClasses <= 0) {
+        msg.textContent = 'Please enter a valid positive number for Total Planned Classes (e.g. 60).';
         msg.className = 'msg error';
         msg.style.display = 'block';
         return;
@@ -1570,8 +1964,36 @@
 
       submitBtn.disabled = true;
       submitBtn.textContent = 'Creating Course Offering...';
+      msg.style.display = 'none';
 
       try {
+        // 1. Check global subject code uniqueness
+        const codeDoc = await db.collection('uniqueSubjectCodes').doc(normalizedSubjectCode).get();
+        if (codeDoc.exists) {
+          msg.textContent = 'Subject code already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        const offeringKey = `${departmentId.toLowerCase()}_sem${semester}_sec${section.toLowerCase()}_${normalizedSubjectCode}`;
+        const offeringDoc = await db.collection('uniqueOfferings').doc(offeringKey).get();
+        if (offeringDoc.exists) {
+          msg.textContent = 'Subject code already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // Secondary check by querying subjects collection
+        const existingCodeSnap = await db.collection('subjects').where('subjectCode', '==', subjectCode).get();
+        if (!existingCodeSnap.empty) {
+          msg.textContent = 'Subject code already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
         const deptName = deptMap[departmentId] || departmentId || 'Department';
 
         // Retrieve faculty name
@@ -1614,33 +2036,57 @@
           }
         });
 
+        const newSubjectRef = db.collection('subjects').doc();
         const subject = {
           subjectName,
           subjectCode,
+          normalizedCode: normalizedSubjectCode,
+          offeringKey,
           departmentId,
           department: departmentId,
           departmentName: deptName,
           semester,
           section,
           facultyId,
+          facultyUid: facultyId,
           facultyName,
-          totalHours: totalHours,
-          attendanceRequiredPercentage: 75,
+          plannedClasses: plannedClasses,
+          totalPlannedClasses: plannedClasses,
+          totalHours: plannedClasses,
+          minAttendancePercentage: minAttendance,
+          attendanceRequiredPercentage: minAttendance,
           studentIds: matchingStudentIds,
           enrolledRoster: matchingRoster,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        await db.collection('subjects').add(subject);
+        const batch = db.batch();
+        batch.set(db.collection('uniqueSubjectCodes').doc(normalizedSubjectCode), {
+          code: subjectCode,
+          normalizedCode: normalizedSubjectCode,
+          subjectId: newSubjectRef.id,
+          offeringKey: offeringKey,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        batch.set(db.collection('uniqueOfferings').doc(offeringKey), {
+          offeringKey: offeringKey,
+          code: subjectCode,
+          subjectId: newSubjectRef.id,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        batch.set(newSubjectRef, subject);
+        await batch.commit();
 
         msg.innerHTML = `
           <div style="font-weight:700; font-size:0.95rem; margin-bottom:4px;">✓ Course created successfully.</div>
-          <div style="font-size:0.88rem; color:var(--text-muted);">${deptName} • Semester ${semester} • Section ${section} • Total Hours: ${totalHours} (75% Req)</div>
+          <div style="font-size:0.88rem; color:var(--text-muted);">${deptName} • Semester ${semester} • Section ${section} • Planned Classes: ${plannedClasses} (${minAttendance}% Min Req)</div>
           <div style="font-size:0.88rem; font-weight:600; margin-top:2px;">Automatically enrolled: <strong>${matchingStudentIds.length} student${matchingStudentIds.length === 1 ? '' : 's'}</strong></div>
         `;
         msg.className = 'msg success';
         msg.style.display = 'block';
         document.getElementById('addSubjectForm').reset();
+        const minAttInput = document.getElementById('subjectMinAttendance');
+        if (minAttInput) minAttInput.value = '75';
         await loadDepartments();
         await loadFacultyOptions();
         await updateStats();
@@ -1706,129 +2152,678 @@
     }
 
     // =========================================================================
-    // ATTENDANCE CORRECTION REQUESTS AUDIT LOG
+    // TIMETABLE MANAGEMENT SYSTEM
     // =========================================================================
-    let allAdminCorrectionRequests = [];
+    let allAdminTimetable = [];
+    let currentAdminTimetableDay = 'all';
+    let cachedSubjectsList = [];
+    let cachedFacultyList = [];
 
-    function escapeHtml(str) {
-      if (!str) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+    function timeToMinutes(t) {
+      if (!t) return 0;
+      const parts = t.split(':').map(Number);
+      return (parts[0] || 0) * 60 + (parts[1] || 0);
     }
 
-    async function loadAdminCorrectionRequests() {
-      const tbody = document.getElementById('adminCorrectionsTableBody');
-      const badge = document.getElementById('adminPendingCorrectionsBadge');
+    function switchAdminTimetableDay(btn) {
+      document.querySelectorAll('#adminTimetableDayTabs .day-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentAdminTimetableDay = btn.dataset.day;
+      renderAdminTimetableTable();
+    }
+
+    async function ensureSubjectsAndFacultyCached() {
       try {
-        const snap = await db.collection('attendanceCorrectionRequests').get();
-        allAdminCorrectionRequests = [];
-        snap.forEach(doc => {
-          allAdminCorrectionRequests.push({ id: doc.id, ...doc.data() });
-        });
-
-        allAdminCorrectionRequests.sort((a, b) => {
-          const tB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-          const tA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-          return tB - tA;
-        });
-
-        const pendingCount = allAdminCorrectionRequests.filter(r => r.status === 'pending').length;
-        if (badge) {
-          badge.textContent = `${pendingCount} Pending`;
-          badge.className = pendingCount > 0 ? 'badge amber' : 'badge';
+        if (cachedSubjectsList.length === 0) {
+          const subSnap = await db.collection('subjects').get().catch(() => null);
+          if (subSnap) {
+            cachedSubjectsList = [];
+            subSnap.forEach(doc => {
+              cachedSubjectsList.push({ id: doc.id, ...doc.data() });
+            });
+          }
         }
 
-        renderAdminCorrectionsTable();
+        if (cachedFacultyList.length === 0) {
+          const facSnap = await db.collection('faculty').get().catch(() => null);
+          if (facSnap) {
+            cachedFacultyList = [];
+            facSnap.forEach(doc => {
+              cachedFacultyList.push({ id: doc.id, ...doc.data() });
+            });
+          }
+        }
       } catch (err) {
-        console.error('loadAdminCorrectionRequests error:', err);
-        if (tbody) {
-          tbody.innerHTML = '<tr><td colspan="9" class="empty" style="color:var(--crimson-dark);">Error loading audit log: ' + err.message + '</td></tr>';
-        }
+        console.warn('Could not cache subjects/faculty for timetable:', err);
       }
     }
 
-    function renderAdminCorrectionsTable() {
-      const tbody = document.getElementById('adminCorrectionsTableBody');
-      if (!tbody) return;
-
-      const query = (document.getElementById('adminCorrectionSearch')?.value || '').trim().toLowerCase();
-      const statusFilter = document.getElementById('adminCorrectionStatusFilter')?.value || 'pending';
-
-      let filtered = allAdminCorrectionRequests;
-
-      if (statusFilter !== 'all') {
-        filtered = filtered.filter(r => r.status === statusFilter);
-      }
-
-      if (query) {
-        filtered = filtered.filter(r => {
-          const stu = (r.studentName || '').toLowerCase();
-          const usn = (r.studentUsn || '').toLowerCase();
-          const sub = (r.subjectName || '').toLowerCase();
-          const fac = (r.facultyName || '').toLowerCase();
-          return stu.includes(query) || usn.includes(query) || sub.includes(query) || fac.includes(query);
-        });
-      }
-
-      if (filtered.length === 0) {
-        const filterName = statusFilter === 'all' ? '' : statusFilter + ' ';
-        tbody.innerHTML = `<tr><td colspan="9" class="empty">No ${filterName}attendance correction requests found.</td></tr>`;
+    async function loadAdminTimetable() {
+      if (!auth || !auth.currentUser) {
+        console.warn('loadAdminTimetable called before auth resolved.');
         return;
       }
 
-      tbody.innerHTML = filtered.map(r => {
-        let statusBadge = '';
-        if (r.status === 'pending') {
-          statusBadge = '<span class="badge amber" style="font-weight:700;">🟡 Pending</span>';
-        } else if (r.status === 'approved') {
-          statusBadge = '<span class="badge green" style="font-weight:700;">🟢 Approved</span>';
-        } else if (r.status === 'rejected') {
-          statusBadge = '<span class="badge red" style="font-weight:700;">🔴 Rejected</span>';
+      const tbody = document.getElementById('adminTimetableTbody');
+      if (tbody && allAdminTimetable.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">Loading institutional timetable...</td></tr>';
+      }
+
+      try {
+        // Ensure cache for subjects & faculty
+        await ensureSubjectsAndFacultyCached();
+
+        // Query timetable collection
+        const ttSnap = await db.collection('timetable').get();
+        allAdminTimetable = [];
+        ttSnap.forEach(doc => {
+          allAdminTimetable.push({ id: doc.id, ...doc.data() });
+        });
+
+        const dayOrder = { 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7 };
+        allAdminTimetable.sort((a, b) => {
+          const dDiff = (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99);
+          if (dDiff !== 0) return dDiff;
+          return (a.startTime || '').localeCompare(b.startTime || '');
+        });
+
+        renderAdminTimetableTable();
+      } catch (err) {
+        console.error('loadAdminTimetable error:', err);
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="8" class="empty" style="color:var(--crimson-dark);">Unable to load timetable. Please refresh.</td></tr>';
+        }
+      }
+    }
+
+    function renderAdminTimetableTable() {
+      const tbody = document.getElementById('adminTimetableTbody');
+      if (!tbody) return;
+
+      const deptFilter = document.getElementById('ttFilterDept')?.value || '';
+      const semFilter = document.getElementById('ttFilterSem')?.value || '';
+      const secFilter = document.getElementById('ttFilterSec')?.value || '';
+
+      let filtered = allAdminTimetable;
+
+      if (currentAdminTimetableDay !== 'all') {
+        filtered = filtered.filter(item => item.day === currentAdminTimetableDay);
+      }
+
+      if (deptFilter) {
+        filtered = filtered.filter(item => !item.departmentId || item.departmentId === deptFilter || isDepartmentMatching(item.departmentId, deptFilter));
+      }
+
+      if (semFilter) {
+        const sNum = parseInt(semFilter, 10);
+        filtered = filtered.filter(item => !item.semester || parseInt(item.semester, 10) === sNum);
+      }
+
+      if (secFilter) {
+        filtered = filtered.filter(item => !item.section || String(item.section).toUpperCase() === secFilter.toUpperCase());
+      }
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">No timetable entries found matching current filter.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(item => {
+        let typeBadge = '';
+        let titleDisplay = '';
+        let academicDisplay = '-';
+        let facultyDisplay = '-';
+        let roomDisplay = item.room ? `<span class="badge">${item.room}</span>` : '-';
+
+        if (item.type === 'subject') {
+          typeBadge = '<span class="badge blue">📚 Subject</span>';
+          titleDisplay = `<strong>${item.subjectName || '-'}</strong> <span class="badge" style="font-size:0.75rem;">${item.subjectCode || ''}</span>`;
+          const deptN = deptMap[item.departmentId] || item.departmentName || item.departmentId || 'Dept';
+          academicDisplay = `<span class="badge">${deptN}</span> <span class="badge blue">Sem ${item.semester || 1} • Sec ${item.section || 'A'}</span>`;
+          facultyDisplay = item.facultyName || '-';
+        } else if (item.type === 'lab') {
+          typeBadge = '<span class="badge purple">🔬 Lab</span>';
+          titleDisplay = `<strong>${item.subjectName || item.title || 'Laboratory'}</strong> <span class="badge" style="font-size:0.75rem;">${item.subjectCode || ''}</span>`;
+          const deptN = deptMap[item.departmentId] || item.departmentName || item.departmentId || 'Dept';
+          academicDisplay = `<span class="badge">${deptN}</span> <span class="badge blue">Sem ${item.semester || 1} • Sec ${item.section || 'A'}</span>`;
+          facultyDisplay = item.facultyName || '-';
+        } else if (item.type === 'break') {
+          typeBadge = '<span class="badge amber">☕ Break</span>';
+          titleDisplay = `<strong>${item.title || 'Short Break'}</strong>`;
+        } else if (item.type === 'lunch') {
+          typeBadge = '<span class="badge" style="background:#ffedd5; color:#c2410c;">🍴 Lunch</span>';
+          titleDisplay = `<strong>${item.title || 'Lunch Break'}</strong>`;
+        } else if (item.type === 'forum') {
+          typeBadge = '<span class="badge purple">🗣️ Forum Hour</span>';
+          titleDisplay = `<strong>${item.title || 'Forum Hour'}</strong>`;
+          if (item.departmentId || item.semester) {
+            const deptN = deptMap[item.departmentId] || item.departmentName || item.departmentId || '';
+            academicDisplay = `${deptN ? `<span class="badge">${deptN}</span> ` : ''}${item.semester ? `<span class="badge blue">Sem ${item.semester} • Sec ${item.section || 'A'}</span>` : ''}`;
+          }
+          if (item.facultyName) facultyDisplay = item.facultyName;
+        } else if (item.type === 'sports') {
+          typeBadge = '<span class="badge green">🏃 Sports</span>';
+          titleDisplay = `<strong>${item.title || 'Sports / PT'}</strong>`;
+          if (item.departmentId || item.semester) {
+            const deptN = deptMap[item.departmentId] || item.departmentName || item.departmentId || '';
+            academicDisplay = `${deptN ? `<span class="badge">${deptN}</span> ` : ''}${item.semester ? `<span class="badge blue">Sem ${item.semester} • Sec ${item.section || 'A'}</span>` : ''}`;
+          }
+          if (item.facultyName) facultyDisplay = item.facultyName;
+        } else if (item.type === 'activity') {
+          typeBadge = '<span class="badge purple">📢 Activity</span>';
+          titleDisplay = `<strong>${item.title || 'Activity / Seminar'}</strong>`;
+          if (item.departmentId || item.semester) {
+            const deptN = deptMap[item.departmentId] || item.departmentName || item.departmentId || '';
+            academicDisplay = `${deptN ? `<span class="badge">${deptN}</span> ` : ''}${item.semester ? `<span class="badge blue">Sem ${item.semester} • Sec ${item.section || 'A'}</span>` : ''}`;
+          }
+          if (item.facultyName) facultyDisplay = item.facultyName;
         } else {
-          statusBadge = `<span class="badge">${r.status || 'Unknown'}</span>`;
+          typeBadge = `<span class="badge">${item.type || 'Period'}</span>`;
+          titleDisplay = `<strong>${item.title || item.subjectName || 'Schedule Entry'}</strong>`;
         }
 
-        const dateClassStr = `${r.date || '-'}${r.classNumber ? ' (Class ' + r.classNumber + ')' : ''}`;
-        const subDisplay = `${r.subjectName || '-'}${r.subjectCode ? ' (' + r.subjectCode + ')' : ''}`;
-        const createdDisplay = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
-        
-        let decisionHtml = '-';
-        if (r.status === 'approved') {
-          const revTime = r.reviewedAt?.toDate ? r.reviewedAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-          decisionHtml = `<span style="color:var(--emerald-dark); font-weight:600;">Approved ${revTime}</span>`;
-        } else if (r.status === 'rejected') {
-          const revTime = r.reviewedAt?.toDate ? r.reviewedAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-          decisionHtml = `<span style="color:#ef4444; font-weight:600;">Rejected ${revTime}</span><br><span style="font-size:0.75rem; color:var(--text-muted);">Note: "${escapeHtml(r.reviewReason || '-')}"</span>`;
-        }
+        const safeItemJson = encodeURIComponent(JSON.stringify(item));
 
         return `
           <tr>
-            <td><strong>${escapeHtml(r.studentName || '-')}</strong></td>
-            <td><strong>${escapeHtml(r.studentUsn || '-')}</strong></td>
-            <td><span class="badge blue">${escapeHtml(subDisplay)}</span></td>
-            <td>${escapeHtml(r.facultyName || '-')}</td>
-            <td>${escapeHtml(dateClassStr)}</td>
-            <td style="max-width:220px; word-break:break-word; font-size:0.82rem; font-style:italic;">"${escapeHtml(r.reason || '-')}"</td>
-            <td>${statusBadge}</td>
-            <td style="font-size:0.8rem; color:var(--text-muted);">${createdDisplay}</td>
-            <td style="font-size:0.8rem;">${decisionHtml}</td>
+            <td><strong>${item.day}</strong></td>
+            <td><span class="badge" style="font-weight:700;">${item.startTime} – ${item.endTime}</span></td>
+            <td>${typeBadge}</td>
+            <td>${titleDisplay}</td>
+            <td>${academicDisplay}</td>
+            <td>${facultyDisplay}</td>
+            <td>${roomDisplay}</td>
+            <td>
+              <div style="display:flex; gap:6px;">
+                <button type="button" class="btn btn-primary" style="padding:4px 10px; font-size:0.78rem;" onclick="openTimetableModal(decodeURIComponent('${safeItemJson}'))">✏️ Edit</button>
+                <button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="deleteTimetableEntry('${item.id}')">🗑️ Delete</button>
+              </div>
+            </td>
           </tr>
         `;
       }).join('');
     }
 
-    function initAdminDashboard() {
-      loadFacultyOptions();
-      loadDepartments();
-      loadRegistrationRequests();
-      loadAdminCorrectionRequests();
-      loadSettings();
-      updateStats();
-      renderListing();
+    async function openTimetableModal(entryOrJson = null) {
+      console.log("[Timetable] Add button clicked");
+      console.log("[Timetable] Opening timetable modal");
+
+      const modal = document.getElementById('timetableModal');
+      const form = document.getElementById('timetableForm');
+      const title = document.getElementById('ttModalTitle');
+      const badge = document.getElementById('ttModalBadge');
+      const msg = document.getElementById('ttMsg');
+      if (msg) msg.style.display = 'none';
+
+      if (!modal) {
+        console.error('[Timetable] Error: timetableModal element not found in DOM');
+        return;
+      }
+
+      // 1. Immediately display the modal so the user gets instant feedback
+      modal.style.display = 'flex';
+
+      console.log("[Timetable] Modal element:", modal);
+      console.log("[Timetable] Modal classes:", modal?.className);
+      console.log("[Timetable] Modal display:", modal ? (typeof getComputedStyle !== 'undefined' ? getComputedStyle(modal).display : modal.style.display) : "missing");
+      console.log("[Timetable] Modal visibility:", modal ? (typeof getComputedStyle !== 'undefined' ? getComputedStyle(modal).visibility : 'visible') : "missing");
+      console.log("[Timetable] Modal opacity:", modal ? (typeof getComputedStyle !== 'undefined' ? getComputedStyle(modal).opacity : '1') : "missing");
+
+      // 2. Populate department select from currently loaded deptMap
+      const deptSelect = document.getElementById('ttDept');
+      if (deptSelect && (deptSelect.options.length <= 1 || Object.keys(deptMap).length > deptSelect.options.length - 1)) {
+        deptSelect.innerHTML = '<option value="">Select Department</option>';
+        Object.entries(deptMap).forEach(([id, name]) => {
+          deptSelect.innerHTML += `<option value="${id}">${name}</option>`;
+        });
+      }
+
+      // 3. Populate faculty select from currently cached faculty list
+      const facultySelect = document.getElementById('ttFacultySelect');
+      if (facultySelect && (facultySelect.options.length <= 1 || cachedFacultyList.length > facultySelect.options.length - 1)) {
+        facultySelect.innerHTML = '<option value="">Select Faculty</option>';
+        cachedFacultyList.forEach(f => {
+          facultySelect.innerHTML += `<option value="${f.id}">${f.name}</option>`;
+        });
+      }
+
+      let entry = null;
+      if (typeof entryOrJson === 'string') {
+        try { entry = JSON.parse(entryOrJson); } catch (e) {}
+      } else if (typeof entryOrJson === 'object' && entryOrJson !== null) {
+        entry = entryOrJson;
+      }
+
+      if (form) form.reset();
+
+      if (entry && entry.id) {
+        document.getElementById('ttEntryId').value = entry.id;
+        if (title) title.textContent = 'Edit Timetable Entry';
+        if (badge) badge.textContent = 'Edit Schedule';
+        document.getElementById('ttDay').value = entry.day || 'Monday';
+        document.getElementById('ttStartTime').value = entry.startTime || '08:30';
+        document.getElementById('ttEndTime').value = entry.endTime || '09:25';
+        document.getElementById('ttType').value = entry.type || 'subject';
+        document.getElementById('ttTitle').value = entry.title || '';
+        document.getElementById('ttDept').value = entry.departmentId || '';
+        document.getElementById('ttSem').value = entry.semester || 1;
+        document.getElementById('ttSec').value = entry.section || 'A';
+        document.getElementById('ttRoom').value = entry.room || '';
+
+        onTimetableTypeChange();
+        onTimetableDeptSemSecChange();
+
+        if (entry.subjectId) {
+          document.getElementById('ttSubjectSelect').value = entry.subjectId;
+        }
+        if (entry.facultyId || entry.facultyUid) {
+          document.getElementById('ttFacultySelect').value = entry.facultyId || entry.facultyUid;
+        }
+      } else {
+        document.getElementById('ttEntryId').value = '';
+        if (title) title.textContent = 'Add Timetable Entry';
+        if (badge) badge.textContent = 'New Schedule Slot';
+
+        const preferredDay = currentAdminTimetableDay !== 'all' ? currentAdminTimetableDay : 'Monday';
+        document.getElementById('ttDay').value = preferredDay;
+        document.getElementById('ttStartTime').value = '08:30';
+        document.getElementById('ttEndTime').value = '09:25';
+        document.getElementById('ttType').value = 'subject';
+        document.getElementById('ttTitle').value = '';
+
+        const filterDeptVal = document.getElementById('ttFilterDept')?.value;
+        const defaultDept = filterDeptVal || (deptSelect && deptSelect.options.length > 1 ? deptSelect.options[1].value : '');
+        document.getElementById('ttDept').value = defaultDept;
+
+        const filterSemVal = document.getElementById('ttFilterSem')?.value;
+        document.getElementById('ttSem').value = filterSemVal || 1;
+
+        const filterSecVal = document.getElementById('ttFilterSec')?.value;
+        document.getElementById('ttSec').value = filterSecVal || 'A';
+        document.getElementById('ttRoom').value = '';
+
+        onTimetableTypeChange();
+        onTimetableDeptSemSecChange();
+      }
+
+      // 4. Background refresh if cache is empty
+      if (cachedSubjectsList.length === 0 || cachedFacultyList.length === 0) {
+        ensureSubjectsAndFacultyCached().then(() => {
+          if (modal.style.display === 'flex') {
+            if (facultySelect && facultySelect.options.length <= 1) {
+              facultySelect.innerHTML = '<option value="">Select Faculty</option>';
+              cachedFacultyList.forEach(f => {
+                facultySelect.innerHTML += `<option value="${f.id}">${f.name}</option>`;
+              });
+              if (entry && (entry.facultyId || entry.facultyUid)) {
+                facultySelect.value = entry.facultyId || entry.facultyUid;
+              }
+            }
+            onTimetableDeptSemSecChange();
+            if (entry && entry.subjectId) {
+              const subSelect = document.getElementById('ttSubjectSelect');
+              if (subSelect) subSelect.value = entry.subjectId;
+            }
+          }
+        }).catch(err => console.warn('Background timetable cache error:', err));
+      }
+    }
+
+    function closeTimetableModal() {
+      const modal = document.getElementById('timetableModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function closeTimetableModalOnBackdrop(e) {
+      if (e && e.target && e.target.id === 'timetableModal') {
+        closeTimetableModal();
+      }
+    }
+
+    window.openTimetableModal = openTimetableModal;
+    window.closeTimetableModal = closeTimetableModal;
+    window.closeTimetableModalOnBackdrop = closeTimetableModalOnBackdrop;
+
+    function onTimetableTypeChange() {
+      const type = document.getElementById('ttType').value;
+      const nonSubWrap = document.getElementById('ttNonSubjectFields');
+      const academicWrap = document.getElementById('ttAcademicFields');
+      const subjectWrap = document.getElementById('ttSubjectFieldWrap');
+      const facultyWrap = document.getElementById('ttFacultyFieldWrap');
+      const facultyRoomGrid = document.getElementById('ttFacultyRoomWrap');
+      const titleInput = document.getElementById('ttTitle');
+      const deptSelect = document.getElementById('ttDept');
+      const subjectSelect = document.getElementById('ttSubjectSelect');
+      const facultySelect = document.getElementById('ttFacultySelect');
+
+      if (type === 'subject' || type === 'lab') {
+        nonSubWrap.style.display = 'none';
+        academicWrap.style.display = 'grid';
+        subjectWrap.style.display = 'block';
+        facultyWrap.style.display = 'block';
+        facultyRoomGrid.style.display = 'grid';
+        facultyRoomGrid.style.gridTemplateColumns = '2fr 1fr';
+        titleInput.required = false;
+        deptSelect.required = true;
+        subjectSelect.required = true;
+        facultySelect.required = true;
+      } else if (type === 'break' || type === 'lunch') {
+        nonSubWrap.style.display = 'block';
+        academicWrap.style.display = 'none';
+        subjectWrap.style.display = 'none';
+        facultyWrap.style.display = 'none';
+        facultyRoomGrid.style.display = 'grid';
+        facultyRoomGrid.style.gridTemplateColumns = '1fr';
+        titleInput.value = titleInput.value || (type === 'lunch' ? 'Lunch Break' : 'Short Break');
+        titleInput.required = true;
+        deptSelect.required = false;
+        subjectSelect.required = false;
+        facultySelect.required = false;
+      } else {
+        // forum, sports, activity
+        nonSubWrap.style.display = 'block';
+        academicWrap.style.display = 'grid';
+        subjectWrap.style.display = 'none';
+        facultyWrap.style.display = 'block';
+        facultyRoomGrid.style.display = 'grid';
+        facultyRoomGrid.style.gridTemplateColumns = '2fr 1fr';
+        const defaultTitle = type === 'forum' ? 'Forum Hour' : (type === 'sports' ? 'Sports Period' : 'Activity / Seminar');
+        titleInput.value = titleInput.value || defaultTitle;
+        titleInput.required = true;
+        deptSelect.required = false;
+        subjectSelect.required = false;
+        facultySelect.required = false;
+      }
+    }
+
+    function onTimetableDeptSemSecChange() {
+      const deptId = document.getElementById('ttDept').value;
+      const sem = parseInt(document.getElementById('ttSem').value, 10) || 1;
+      const sec = (document.getElementById('ttSec').value || 'A').toUpperCase();
+      const subSelect = document.getElementById('ttSubjectSelect');
+
+      if (!subSelect) return;
+
+      subSelect.innerHTML = '<option value="">-- Select Matching Subject --</option>';
+
+      const matching = cachedSubjectsList.filter(s => {
+        const studentObj = { dept: deptId, semester: sem, section: sec };
+        return isAcademicMatch(studentObj, s, deptMap);
+      });
+
+      matching.forEach(s => {
+        const facName = s.facultyName || 'Unassigned';
+        subSelect.innerHTML += `<option value="${s.id}" data-faculty-id="${s.facultyId || ''}" data-faculty-name="${facName}" data-code="${s.subjectCode || ''}">${s.subjectName} (${s.subjectCode || ''}) - Faculty: ${facName}</option>`;
+      });
+
+      // Also append other subjects in an optgroup
+      const others = cachedSubjectsList.filter(s => !matching.some(m => m.id === s.id));
+      if (others.length > 0) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = 'Other Subjects (All Departments)';
+        others.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = `${s.subjectName} (${s.subjectCode || ''}) - Sem ${s.semester || 1}`;
+          opt.dataset.facultyId = s.facultyId || '';
+          opt.dataset.facultyName = s.facultyName || '';
+          opt.dataset.code = s.subjectCode || '';
+          optgroup.appendChild(opt);
+        });
+        subSelect.appendChild(optgroup);
+      }
+
+      // If exactly 1 matching subject, auto-select it
+      if (matching.length === 1 && !subSelect.value) {
+        subSelect.value = matching[0].id;
+        onTimetableSubjectSelectChange();
+      }
+    }
+
+    function onTimetableSubjectSelectChange() {
+      const subSelect = document.getElementById('ttSubjectSelect');
+      const facSelect = document.getElementById('ttFacultySelect');
+      const selectedOption = subSelect.options[subSelect.selectedIndex];
+      if (!selectedOption || !selectedOption.value) return;
+
+      const facultyId = selectedOption.dataset.facultyId;
+      if (facultyId && facSelect) {
+        facSelect.value = facultyId;
+      }
+    }
+
+    async function saveTimetableEntry(e) {
+      e.preventDefault();
+      const msg = document.getElementById('ttMsg');
+      const submitBtn = document.getElementById('ttSubmitBtn');
+      msg.style.display = 'none';
+
+      const entryId = document.getElementById('ttEntryId').value.trim();
+      const day = document.getElementById('ttDay').value;
+      const startTime = document.getElementById('ttStartTime').value.trim();
+      const endTime = document.getElementById('ttEndTime').value.trim();
+      const type = document.getElementById('ttType').value;
+      const room = document.getElementById('ttRoom').value.trim();
+
+      // 1. Time validations
+      if (!day) {
+        msg.textContent = 'Please select a valid Day.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (!startTime || !endTime) {
+        msg.textContent = 'Please select both valid Start Time and End Time.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      const startMin = timeToMinutes(startTime);
+      const endMin = timeToMinutes(endTime);
+
+      if (startMin >= endMin) {
+        msg.textContent = 'Start time must be earlier than end time.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      // 2. Type-specific validations
+      const isAcademic = (type === 'subject' || type === 'lab');
+      const deptId = document.getElementById('ttDept').value;
+      const sem = parseInt(document.getElementById('ttSem').value, 10) || 1;
+      const sec = (document.getElementById('ttSec').value || 'A').toUpperCase();
+      const subId = document.getElementById('ttSubjectSelect').value;
+      const facId = document.getElementById('ttFacultySelect').value;
+      const title = document.getElementById('ttTitle').value.trim();
+
+      if (isAcademic) {
+        if (!deptId) {
+          msg.textContent = 'Please select an Academic Department.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+        if (!subId) {
+          msg.textContent = 'Please select a Course Subject.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+        if (!facId) {
+          msg.textContent = 'Please select an Assigned Faculty member.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+      } else if (type === 'break' || type === 'lunch') {
+        if (!title) {
+          msg.textContent = 'Please provide a title for the break.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+      } else {
+        // forum, sports, activity
+        if (!title) {
+          msg.textContent = 'Please provide a title for the activity.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+      }
+
+      // 3. Duplicate and Slot Collision Validation
+      const deptDisplayName = deptMap[deptId] || deptId || 'Department';
+
+      for (const existing of allAdminTimetable) {
+        if (existing.id === entryId) continue;
+        if (existing.day !== day) continue;
+
+        const exStartMin = timeToMinutes(existing.startTime);
+        const exEndMin = timeToMinutes(existing.endTime);
+        const isExactMatch = (existing.startTime === startTime && existing.endTime === endTime);
+        const hasTimeOverlap = (startMin < exEndMin && endMin > exStartMin);
+
+        if (!hasTimeOverlap) continue;
+
+        const isSameSection = (isAcademic || (deptId && (type === 'forum' || type === 'sports' || type === 'activity'))) &&
+                              isDepartmentMatching(existing.departmentId || existing.department, deptId) &&
+                              parseInt(existing.semester || 1, 10) === sem &&
+                              String(existing.section || 'A').toUpperCase() === sec;
+
+        // 1. Exact Duplicate Section Check
+        if (isExactMatch && isSameSection) {
+          msg.textContent = 'Timetable entry already exists for this time slot.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // 2. Section Overlap Conflict
+        if (isSameSection) {
+          msg.textContent = `Timetable conflict detected: ${deptDisplayName} Sem ${sem} Sec ${sec} already has a class during this time slot (${existing.startTime} – ${existing.endTime}).`;
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // 3. Faculty Overlap Conflict
+        if (facId && (existing.facultyId === facId || existing.facultyUid === facId)) {
+          const facultyObj = cachedFacultyList.find(f => f.id === facId);
+          const facName = facultyObj?.name || 'Assigned faculty';
+          msg.textContent = `Timetable conflict detected: ${facName} is already assigned to another class during this time slot (${existing.startTime} – ${existing.endTime}).`;
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // 4. Room Overlap Conflict
+        if (room && existing.room && room.trim().toLowerCase() === existing.room.trim().toLowerCase()) {
+          msg.textContent = `Timetable conflict detected: Room ${room} is already booked for another class during this time slot (${existing.startTime} – ${existing.endTime}).`;
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving Timetable Entry...';
+
+      try {
+        const data = {
+          day,
+          startTime,
+          endTime,
+          type,
+          room: room || '',
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        if (isAcademic) {
+          const subjectObj = cachedSubjectsList.find(s => s.id === subId);
+          const facultyObj = cachedFacultyList.find(f => f.id === facId);
+
+          data.departmentId = deptId;
+          data.department = deptId;
+          data.departmentName = deptDisplayName;
+          data.semester = sem;
+          data.section = sec;
+          data.subjectId = subId;
+          data.subjectName = subjectObj?.subjectName || 'Subject';
+          data.subjectCode = subjectObj?.subjectCode || '';
+          data.facultyId = facId;
+          data.facultyUid = facId;
+          data.facultyName = facultyObj?.name || subjectObj?.facultyName || 'Faculty';
+        } else if (type === 'break' || type === 'lunch') {
+          data.title = title || (type === 'lunch' ? 'Lunch Break' : 'Break');
+        } else {
+          // forum, sports, activity
+          data.title = title;
+          if (deptId) {
+            data.departmentId = deptId;
+            data.department = deptId;
+            data.departmentName = deptDisplayName;
+            data.semester = sem;
+            data.section = sec;
+          }
+          if (facId) {
+            const facultyObj = cachedFacultyList.find(f => f.id === facId);
+            data.facultyId = facId;
+            data.facultyUid = facId;
+            data.facultyName = facultyObj?.name || 'Faculty';
+          }
+        }
+
+        if (entryId) {
+          await db.collection('timetable').doc(entryId).update(data);
+        } else {
+          data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+          await db.collection('timetable').add(data);
+        }
+
+        closeTimetableModal();
+        await loadAdminTimetable();
+      } catch (err) {
+        msg.textContent = 'Error saving entry: ' + err.message;
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save Timetable Entry';
+      }
+    }
+
+    async function deleteTimetableEntry(id) {
+      if (!confirm('Are you sure you want to delete this timetable entry?')) return;
+      try {
+        await db.collection('timetable').doc(id).delete();
+        await loadAdminTimetable();
+      } catch (err) {
+        alert('Error deleting timetable entry: ' + err.message);
+      }
+    }
+
+    async function initAdminDashboard() {
+      // Bind Add Timetable Entry button explicitly
+      const addTtBtn = document.getElementById('btnAddTimetableEntry');
+      if (addTtBtn) {
+        addTtBtn.onclick = (e) => {
+          if (e) e.preventDefault();
+          openTimetableModal();
+        };
+      }
+
+      // Execute each module independently so one error does not break the entire page
+      try { await loadDepartments(); } catch (e) { console.warn('loadDepartments error:', e); }
+      try { await loadFacultyOptions(); } catch (e) { console.warn('loadFacultyOptions error:', e); }
+      try { await loadRegistrationRequests(); } catch (e) { console.warn('loadRegistrationRequests error:', e); }
+      try { await loadAdminTimetable(); } catch (e) { console.warn('loadAdminTimetable error:', e); }
+      try { await loadSettings(); } catch (e) { console.warn('loadSettings error:', e); }
+      try { await updateStats(); } catch (e) { console.warn('updateStats error:', e); }
+      try { await renderListing(); } catch (e) { console.warn('renderListing error:', e); }
     }
   </script>
 </body>

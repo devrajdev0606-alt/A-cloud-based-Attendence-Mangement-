@@ -70,7 +70,7 @@
     </section>
 
     <!-- Overview Stats Cards -->
-    <div class="stats">
+    <div class="stats" style="margin-bottom: 24px;">
       <div class="stat">
         <div class="stat-header">
           <span class="stat-label">Overall Attendance</span>
@@ -112,137 +112,204 @@
       </div>
     </div>
 
-    <!-- Main Content Layout -->
-    <div class="dashboard-grid">
-      <!-- Left Column: My Course Subjects -->
-      <div style="display: flex; flex-direction: column; gap: 24px;">
-        <!-- My Subjects Section Card -->
-        <div class="card" style="margin-bottom: 0;">
-          <div class="card-header">
-            <h2>📚 My Academic Subjects</h2>
-            <span class="badge blue" id="academicBadge">Department • Sem • Sec</span>
-          </div>
-          <p class="card-desc">Your assigned section course offerings and faculty instructors for the current academic term.</p>
-          
-          <div id="subjectsContainer">
-            <div id="subjectsLoading" class="info-box">Loading your course subjects...</div>
-            <div id="subjectsList" style="display: flex; flex-direction: column; gap: 14px;"></div>
-          </div>
+    <!-- Collapsible 1: Today's Schedule -->
+    <div class="collapsible-card open" id="todayScheduleCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📅 Today's Schedule</h2>
+          <span class="badge blue" id="todayScheduleCountBadge">0 entries</span>
         </div>
-
-        <!-- Biometric Face Enrollment Card (Collapsible if already enrolled) -->
-        <div class="card" id="faceEnrollmentCard" style="margin-bottom: 0;">
-          <div class="card-header">
-            <h2>👤 Face Biometrics Enrollment</h2>
-            <span id="enrollBadge" class="badge">Registration Required</span>
-          </div>
-          <p class="card-desc">Enroll your facial biometric template once to enable camera-based attendance verification.</p>
-          
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
-            <!-- Biometric Scanner HUD Frame -->
-            <div class="biometric-scanner-wrap" id="regScannerWrap">
-              <video id="regVideo" class="scanner-video" autoplay muted playsinline></video>
-              <div class="scanner-hud-overlay">
-                <div class="hud-corner tl"></div>
-                <div class="hud-corner tr"></div>
-                <div class="hud-corner bl"></div>
-                <div class="hud-corner br"></div>
-                <div class="hud-reticle" id="regReticle"></div>
-                <div class="scan-laser"></div>
-              </div>
-            </div>
-            <canvas id="regCanvas"></canvas>
-
-            <!-- Status HUD Strip -->
-            <div class="hud-status-strip">
-              <div class="status-chip">
-                <span class="status-chip-dot" id="regCamDot"></span>
-                <span id="regCamText">Camera: Standby</span>
-              </div>
-              <div class="status-chip">
-                <span class="status-chip-dot" id="regModelDot"></span>
-                <span id="regModelText">AI Model: Ready</span>
-              </div>
-            </div>
-
-            <div class="btn-row" style="justify-content: center; width: 100%;">
-              <button type="button" class="btn reg-btn" id="startRegBtn" onclick="startRegistration()">📷 Open Camera</button>
-              <button type="button" class="btn reg-btn" id="captureRegBtn" onclick="captureFace()" disabled>Capture & Register Face</button>
-            </div>
-          </div>
-          <div id="regMsg" class="msg"></div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <div class="timetable-slots-list" id="studentTodayScheduleList">
+          <p class="empty">Loading your schedule for today...</p>
         </div>
       </div>
+    </div>
 
-      <!-- Right Column: Verification HUD & Attendance History -->
-      <div style="display: flex; flex-direction: column; gap: 24px;">
-        <!-- Mark Attendance Card -->
-        <div class="card" id="markAttendanceCard" style="margin-bottom: 0;">
-          <div class="card-header">
-            <h2>📍 Mark Class Attendance (Face + GPS)</h2>
-            <span id="activeVerificationBadge" class="badge green">● Session Active</span>
-          </div>
-          <div id="selectedSubjectInfo" class="info-box" style="margin-bottom: 14px; display:none;"></div>
-          
-          <div style="margin-bottom: 14px;">
-            <label class="form-label" for="subjectSelect" style="font-size:0.84rem; font-weight:600;">Active Class to Verify:</label>
-            <select id="subjectSelect" onchange="onSubjectSelectChange()">
-              <option value="">-- Select Active Subject --</option>
-            </select>
-          </div>
+    <!-- Collapsible 2: Weekly Timetable -->
+    <div class="collapsible-card" id="studentWeeklyTimetableCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📅 Weekly Timetable</h2>
+          <span class="badge" style="background:rgba(255,255,255,0.06);">6 Days Schedule</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <!-- Day Tabs [ MON ] [ TUE ] [ WED ] [ THU ] [ FRI ] [ SAT ] -->
+        <div class="day-tabs-nav" id="studentDayTabs">
+          <button type="button" class="day-tab-btn" data-day="Monday" onclick="switchStudentDay(this)">MON</button>
+          <button type="button" class="day-tab-btn" data-day="Tuesday" onclick="switchStudentDay(this)">TUE</button>
+          <button type="button" class="day-tab-btn" data-day="Wednesday" onclick="switchStudentDay(this)">WED</button>
+          <button type="button" class="day-tab-btn" data-day="Thursday" onclick="switchStudentDay(this)">THU</button>
+          <button type="button" class="day-tab-btn" data-day="Friday" onclick="switchStudentDay(this)">FRI</button>
+          <button type="button" class="day-tab-btn" data-day="Saturday" onclick="switchStudentDay(this)">SAT</button>
+        </div>
+        <div class="timetable-slots-list" id="studentWeeklyScheduleList">
+          <p class="empty">Select a day tab above to view your timetable.</p>
+        </div>
+      </div>
+    </div>
 
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
-            <!-- Biometric Scanner HUD Frame -->
-            <div class="biometric-scanner-wrap" id="attScannerWrap">
-              <video id="attVideo" class="scanner-video" autoplay muted playsinline></video>
-              <div class="scanner-hud-overlay">
-                <div class="hud-corner tl"></div>
-                <div class="hud-corner tr"></div>
-                <div class="hud-corner bl"></div>
-                <div class="hud-corner br"></div>
-                <div class="hud-reticle" id="attReticle"></div>
-                <div class="scan-laser"></div>
-              </div>
-            </div>
-            <canvas id="attCanvas"></canvas>
+    <!-- Collapsible 3: My Attendance Summary -->
+    <div class="collapsible-card" id="studentAttendanceSummaryCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📊 My Attendance Summary</h2>
+          <span class="badge blue" id="academicBadge">Department • Sem • Sec</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <p class="card-desc" style="margin-bottom:16px;">Detailed breakdown of your attendance percentage and eligibility status for each course (75% minimum required).</p>
+        <div id="subjectsContainer">
+          <div id="subjectsLoading" class="info-box">Loading your course subjects...</div>
+          <div id="subjectsList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;"></div>
+        </div>
+      </div>
+    </div>
 
-            <!-- Status HUD Strip -->
-            <div class="hud-status-strip">
-              <div class="status-chip">
-                <span class="status-chip-dot" id="attCamDot"></span>
-                <span id="attCamText">Camera: Off</span>
-              </div>
-              <div class="status-chip">
-                <span class="status-chip-dot" id="attGpsDot"></span>
-                <span id="attGpsText">GPS: Ready</span>
-              </div>
-              <div class="status-chip">
-                <span class="status-chip-dot" id="attFaceDot"></span>
-                <span id="attFaceText">Face: Standby</span>
-              </div>
-            </div>
-
-            <div class="btn-row" style="justify-content: center; width: 100%;">
-              <button type="button" class="btn att-btn" id="startAttBtn" onclick="startAttendance()">📷 Open Camera</button>
-              <button type="button" class="btn att-btn" id="captureAttBtn" onclick="markAttendance()" disabled>✓ Verify & Mark Attendance</button>
-            </div>
-          </div>
-          <div id="attMsg" class="msg"></div>
-          <div id="faceFailCorrectionWrap" style="display:none; margin-top:12px; text-align:center;">
-            <button type="button" class="btn btn-primary" id="requestLiveCorrectionBtn" style="font-size:0.85rem; padding:8px 18px;" onclick="openCorrectionModalForLiveSession()">
-              📝 Request Attendance Correction
-            </button>
-          </div>
-          <div id="gpsInfo" class="info-box" style="display:none; margin-top:12px;"></div>
+    <!-- Collapsible 4: Mark Class Attendance (Face + GPS) -->
+    <div class="collapsible-card open" id="markAttendanceCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📍 Mark Class Attendance (Face + GPS)</h2>
+          <span id="activeVerificationBadge" class="badge green">● Live Session Active</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <div id="selectedSubjectInfo" class="info-box" style="margin-bottom: 14px; display:none;"></div>
+        
+        <div style="margin-bottom: 14px;">
+          <label class="form-label" for="subjectSelect" style="font-size:0.84rem; font-weight:600;">Active Class to Verify:</label>
+          <select id="subjectSelect" onchange="onSubjectSelectChange()">
+            <option value="">-- Select Active Subject --</option>
+          </select>
         </div>
 
-        <!-- Attendance History Table Card -->
-        <div class="card" style="margin-bottom: 0;">
-          <div class="card-header">
-            <h2>📋 My Attendance History Log</h2>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
+          <!-- Biometric Scanner HUD Frame -->
+          <div class="biometric-scanner-wrap" id="attScannerWrap">
+            <video id="attVideo" class="scanner-video" autoplay muted playsinline></video>
+            <div class="scanner-hud-overlay">
+              <div class="hud-corner tl"></div>
+              <div class="hud-corner tr"></div>
+              <div class="hud-corner bl"></div>
+              <div class="hud-corner br"></div>
+              <div class="hud-reticle" id="attReticle"></div>
+              <div class="scan-laser"></div>
+            </div>
           </div>
-          <p class="card-desc">Verified attendance records with GPS proximity and timestamps.</p>
-          
+          <canvas id="attCanvas"></canvas>
+
+          <!-- Status HUD Strip -->
+          <div class="hud-status-strip">
+            <div class="status-chip">
+              <span class="status-chip-dot" id="attCamDot"></span>
+              <span id="attCamText">Camera: Off</span>
+            </div>
+            <div class="status-chip">
+              <span class="status-chip-dot" id="attGpsDot"></span>
+              <span id="attGpsText">GPS: Ready</span>
+            </div>
+            <div class="status-chip">
+              <span class="status-chip-dot" id="attFaceDot"></span>
+              <span id="attFaceText">Face: Standby</span>
+            </div>
+          </div>
+
+          <div class="btn-row" style="justify-content: center; width: 100%;">
+            <button type="button" class="btn att-btn" id="startAttBtn" onclick="startAttendance()">📷 Open Camera</button>
+            <button type="button" class="btn att-btn" id="captureAttBtn" onclick="markAttendance()" disabled>✓ Verify & Mark Attendance</button>
+          </div>
+        </div>
+        <div id="attMsg" class="msg"></div>
+        <div id="faceFailCorrectionWrap" style="display:none; margin-top:12px; text-align:center;">
+          <button type="button" class="btn btn-primary" id="requestLiveCorrectionBtn" style="font-size:0.85rem; padding:8px 18px;" onclick="openCorrectionModalForLiveSession()">
+            📝 Request Attendance Correction
+          </button>
+        </div>
+        <div id="gpsInfo" class="info-box" style="display:none; margin-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- Collapsible 5: Face Biometrics Enrollment -->
+    <div class="collapsible-card" id="faceEnrollmentCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>👤 Face Biometrics Enrollment</h2>
+          <span id="enrollBadge" class="badge">Registration Required</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <p class="card-desc">Enroll your facial biometric template once to enable camera-based attendance verification.</p>
+        
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
+          <!-- Biometric Scanner HUD Frame -->
+          <div class="biometric-scanner-wrap" id="regScannerWrap">
+            <video id="regVideo" class="scanner-video" autoplay muted playsinline></video>
+            <div class="scanner-hud-overlay">
+              <div class="hud-corner tl"></div>
+              <div class="hud-corner tr"></div>
+              <div class="hud-corner bl"></div>
+              <div class="hud-corner br"></div>
+              <div class="hud-reticle" id="regReticle"></div>
+              <div class="scan-laser"></div>
+            </div>
+          </div>
+          <canvas id="regCanvas"></canvas>
+
+          <!-- Status HUD Strip -->
+          <div class="hud-status-strip">
+            <div class="status-chip">
+              <span class="status-chip-dot" id="regCamDot"></span>
+              <span id="regCamText">Camera: Standby</span>
+            </div>
+            <div class="status-chip">
+              <span class="status-chip-dot" id="regModelDot"></span>
+              <span id="regModelText">AI Model: Ready</span>
+            </div>
+          </div>
+
+          <div class="btn-row" style="justify-content: center; width: 100%;">
+            <button type="button" class="btn reg-btn" id="startRegBtn" onclick="startRegistration()">📷 Open Camera</button>
+            <button type="button" class="btn reg-btn" id="captureRegBtn" onclick="captureFace()" disabled>Capture & Register Face</button>
+          </div>
+        </div>
+        <div id="regMsg" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- Collapsible 6: Attendance History & Correction Requests -->
+    <div class="collapsible-card" id="historyCorrectionCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📋 Attendance History & Correction Requests</h2>
+          <span class="badge amber" id="myPendingReqBadge">0 Pending</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <!-- Tabs: Submitted Requests & Missed/Conducted Classes & Full History -->
+        <div class="tabs" style="margin-bottom: 14px;">
+          <div class="tab active" id="tabMyRequests" onclick="switchStudentCorrectionTab('requests')">Submitted Requests (<span id="myRequestsCount">0</span>)</div>
+          <div class="tab" id="tabMissedClasses" onclick="switchStudentCorrectionTab('missed')">Missed / Unrecorded Classes (<span id="missedClassesCount">0</span>)</div>
+          <div class="tab" id="tabFullHistory" onclick="switchStudentCorrectionTab('history')">Attendance Log Table</div>
+        </div>
+
+        <div id="correctionRequestsList" style="display: flex; flex-direction: column; gap: 10px;">
+          <p class="empty">Loading attendance correction requests...</p>
+        </div>
+
+        <div id="missedClassesList" style="display: none; flex-direction: column; gap: 10px;">
+          <p class="empty">Checking for missed class sessions...</p>
+        </div>
+
+        <div id="historyTableContainer" style="display: none;">
           <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
             <table>
               <thead>
@@ -258,29 +325,6 @@
                 <tr><td colspan="5" class="empty">Loading your attendance records...</td></tr>
               </tbody>
             </table>
-          </div>
-        </div>
-
-        <!-- Attendance Correction / Regularisation Card -->
-        <div class="card" style="margin-bottom: 0;">
-          <div class="card-header">
-            <h2>📝 Attendance Correction Requests</h2>
-            <span class="badge amber" id="myPendingReqBadge">0 Pending</span>
-          </div>
-          <p class="card-desc">View submitted regularisation requests or request attendance correction for unrecorded class sessions.</p>
-          
-          <!-- Tabs: Submitted Requests & Missed/Conducted Classes -->
-          <div class="tabs" style="margin-bottom: 14px;">
-            <div class="tab active" id="tabMyRequests" onclick="switchStudentCorrectionTab('requests')">Submitted Requests (<span id="myRequestsCount">0</span>)</div>
-            <div class="tab" id="tabMissedClasses" onclick="switchStudentCorrectionTab('missed')">Missed / Unrecorded Classes (<span id="missedClassesCount">0</span>)</div>
-          </div>
-
-          <div id="correctionRequestsList" style="display: flex; flex-direction: column; gap: 10px;">
-            <p class="empty">Loading attendance correction requests...</p>
-          </div>
-
-          <div id="missedClassesList" style="display: none; flex-direction: column; gap: 10px;">
-            <p class="empty">Checking for missed class sessions...</p>
           </div>
         </div>
       </div>
@@ -414,7 +458,10 @@
         const snap = await db.collection('departments').get().catch(() => null);
         if (snap) {
           snap.forEach(doc => {
-            deptMap[doc.id] = doc.data().name;
+            const d = doc.data();
+            deptMap[doc.id] = d.name;
+            const normKey = (d.normalizedName || d.name || '').trim().toLowerCase();
+            if (normKey) deptMap[normKey] = d.name;
           });
         }
       } catch (err) {
@@ -540,14 +587,49 @@
         if (capBtn) capBtn.disabled = true;
       }
 
+      // Highlight current day in student weekly tabs
+      document.querySelectorAll('#studentDayTabs .day-tab-btn').forEach(btn => {
+        if (btn.dataset.day === currentDayOfWeek) {
+          btn.classList.add('today-indicator');
+        }
+        if (btn.dataset.day === selectedStudentDay) {
+          btn.classList.add('active');
+        }
+      });
+
       if (!isDashboardInitialized) {
         isDashboardInitialized = true;
         await loadSettings();
         await loadMySubjects();
         await loadActiveSessions();
+        await loadStudentTimetable();
         await loadMyAttendance();
+        if (window._studentRefreshInterval) clearInterval(window._studentRefreshInterval);
+        window._studentRefreshInterval = setInterval(async () => {
+          try {
+            await Promise.all([
+              loadActiveSessions(),
+              loadStudentTimetable(),
+              loadMyAttendance()
+            ]);
+          } catch (e) {
+            console.error('Student auto refresh error:', e);
+          }
+        }, 15000);
       }
     });
+
+    function stopVideoStream(videoEl) {
+      if (videoEl && videoEl.srcObject) {
+        const stream = videoEl.srcObject;
+        if (stream && stream.getTracks) {
+          stream.getTracks().forEach(track => {
+            try { track.stop(); } catch (e) {}
+          });
+        }
+        videoEl.srcObject = null;
+      }
+    }
 
     async function loadSettings() {
       try {
@@ -563,25 +645,35 @@
       }
     }
 
+    let modelsLoadingPromise = null;
     async function loadModels() {
       if (modelsLoaded) return true;
-      showMsg('regMsg', 'info', 'Loading biometric AI neural network models, please wait...');
-      try {
-        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-        modelsLoaded = true;
-        const modelDot = document.getElementById('regModelDot');
-        if (modelDot) modelDot.className = 'status-chip-dot active';
-        const modelText = document.getElementById('regModelText');
-        if (modelText) modelText.textContent = 'AI Model: Ready';
-        return true;
-      } catch (err) {
-        const detail = err?.message || 'Network or CORS issue loading models.';
-        showMsg('regMsg', 'error', 'Failed to load AI models: ' + detail);
-        console.error('Model load error:', err);
-        return false;
-      }
+      if (modelsLoadingPromise) return modelsLoadingPromise;
+
+      modelsLoadingPromise = (async () => {
+        showMsg('regMsg', 'info', 'Loading biometric AI neural network models, please wait...');
+        try {
+          await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+          ]);
+          modelsLoaded = true;
+          const modelDot = document.getElementById('regModelDot');
+          if (modelDot) modelDot.className = 'status-chip-dot active';
+          const modelText = document.getElementById('regModelText');
+          if (modelText) modelText.textContent = 'AI Model: Ready';
+          return true;
+        } catch (err) {
+          const detail = err?.message || 'Network or CORS issue loading models.';
+          showMsg('regMsg', 'error', 'Failed to load AI models: ' + detail);
+          console.error('Model load error:', err);
+          modelsLoadingPromise = null;
+          return false;
+        }
+      })();
+
+      return modelsLoadingPromise;
     }
 
     // =========================================================================
@@ -732,7 +824,7 @@
     }
 
     // =========================================================================
-    // RENDER MY ACADEMIC SUBJECTS CARDS
+    // RENDER MY ACADEMIC SUBJECTS CARDS (REQUIREMENTS 13, 14, 16, 17)
     // =========================================================================
     function renderSubjectsUI() {
       const listEl = document.getElementById('subjectsList');
@@ -749,73 +841,58 @@
         const facultyName = s.facultyName || 'Faculty';
         const sem = s.semester || studentSemester || '1';
         const sec = s.section || studentSection || 'A';
-        const attendedHours = studentSubjectsAttendance[s.id]?.present || 0;
-        const hasTotalHours = Boolean(s.totalHours && Number(s.totalHours) > 0);
+        
+        // Exact calculation: conducted sessions vs attended sessions
+        const conductedClasses = conductedSessionsList.filter(sess => sess.subjectId === s.id).length;
+        const attendedClasses = studentSubjectsAttendance[s.id]?.present || 0;
+        const absentClasses = Math.max(0, conductedClasses - attendedClasses);
+        const plannedClasses = s.plannedClasses || s.totalPlannedClasses || s.totalHours || '-';
+        const minReqPct = parseInt(s.minAttendancePercentage || s.attendanceRequiredPercentage, 10) || 75;
 
-        let attendanceSectionHtml = '';
+        let rawPct = 100;
+        let pctDisplay = '100%';
+        let riskBadge = '';
+        let riskColor = 'var(--emerald-dark)';
+        let canMissMessage = '';
 
-        if (hasTotalHours) {
-          const totalHours = parseInt(s.totalHours, 10);
-          const rawPct = (attendedHours / totalHours) * 100;
-          const pctDisplay = Number.isInteger(rawPct) ? rawPct + '%' : rawPct.toFixed(1) + '%';
-          const minRequired = Math.ceil(totalHours * 0.75);
-          const maximumBunkable = totalHours - minRequired;
-          const alreadyMissed = Math.max(0, totalHours - attendedHours);
-          const remainingBunkable = maximumBunkable - alreadyMissed;
-          const isEligible = (attendedHours >= minRequired);
+        if (conductedClasses === 0) {
+          rawPct = 100;
+          pctDisplay = '100%';
+          riskBadge = '<span class="badge green" style="font-weight:700;">🟢 Good</span>';
+          riskColor = 'var(--emerald-dark)';
+          canMissMessage = '<span style="color:var(--text-muted);">No classes conducted yet. Can miss up to 25% of conducted classes.</span>';
+        } else {
+          rawPct = (attendedClasses / conductedClasses) * 100;
+          pctDisplay = Number.isInteger(rawPct) ? rawPct + '%' : rawPct.toFixed(1) + '%';
 
-          let eligibilityBadge = '';
-          let bunkMessage = '';
-
-          if (isEligible) {
-            const safeBunk = Math.max(0, remainingBunkable);
-            eligibilityBadge = '<span class="badge green" style="font-weight:700;">✓ Eligible</span>';
-            bunkMessage = safeBunk > 0 
-              ? `You can bunk ${safeBunk} more hour${safeBunk === 1 ? '' : 's'}.`
-              : `You are at the minimum 75% threshold (0 bunkable hours remaining).`;
+          // Risk Indicators (Requirement 17)
+          if (rawPct >= 80) {
+            riskBadge = '<span class="badge green" style="font-weight:700;">🟢 Good</span>';
+            riskColor = 'var(--emerald-dark)';
+          } else if (rawPct >= minReqPct) {
+            riskBadge = '<span class="badge amber" style="font-weight:700;">🟡 Attendance Risk</span>';
+            riskColor = 'var(--amber-dark, #d97706)';
           } else {
-            const shortage = minRequired - attendedHours;
-            eligibilityBadge = '<span class="badge" style="background:rgba(239, 68, 68, 0.15); color:#ef4444; border:1px solid rgba(239, 68, 68, 0.3); font-weight:700;">⚠ Attendance Shortage</span>';
-            bunkMessage = `Attend ${shortage} more hour${shortage === 1 ? '' : 's'} to reach 75%.`;
+            riskBadge = '<span class="badge red" style="font-weight:700;">🔴 Not Eligible</span>';
+            riskColor = '#ef4444';
           }
 
-          const progressWidth = Math.min(100, Math.max(0, rawPct));
-          const progressColor = isEligible ? 'var(--emerald, #10b981)' : '#ef4444';
-
-          attendanceSectionHtml = `
-            <div style="margin-top: 12px; padding: 12px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Attendance</span>
-                <span style="font-size:1.15rem; font-weight:800; color:${isEligible ? 'var(--emerald-dark)' : '#ef4444'};">${pctDisplay}</span>
-              </div>
-
-              <div style="width:100%; height:7px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; margin-bottom:8px;">
-                <div style="width:${progressWidth}%; height:100%; border-radius:999px; background:${progressColor}; transition:width 0.5s ease;"></div>
-              </div>
-
-              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-                <span style="font-size:0.86rem; font-weight:700; color:var(--text-color);">${attendedHours} / ${totalHours} Hours</span>
-                ${eligibilityBadge}
-              </div>
-
-              <div style="font-size:0.82rem; color:${isEligible ? 'var(--text-muted)' : '#ef4444'}; font-weight:600; margin-top:5px;">
-                ${bunkMessage}
-              </div>
-            </div>
-          `;
-        } else {
-          attendanceSectionHtml = `
-            <div style="margin-top: 12px; padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px;">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Attendance</span>
-                <span class="badge" style="font-size:0.72rem;">Total hours not configured</span>
-              </div>
-              <div style="font-size:0.84rem; color:var(--text-color); margin-top:4px; font-weight:600;">
-                Attended: <strong>${attendedHours} session${attendedHours === 1 ? '' : 's'}</strong>
-              </div>
-            </div>
-          `;
+          // Can Miss Formula: attended / (conducted + X) >= minReqPct/100
+          if (rawPct >= minReqPct) {
+            const canMiss = Math.floor((attendedClasses / (minReqPct / 100)) - conductedClasses);
+            if (canMiss > 0) {
+              canMissMessage = `<span style="color:var(--emerald-dark); font-weight:600;">✓ Can miss: <strong>${canMiss} more class${canMiss === 1 ? '' : 'es'}</strong></span>`;
+            } else {
+              canMissMessage = `<span style="color:var(--amber-dark, #d97706); font-weight:600;">⚠ At minimum threshold (<strong>0 more classes can miss</strong>)</span>`;
+            }
+          } else {
+            // Shortage formula: (minReqPct * conducted - attended) / (1 - minReqPct)
+            const needToAttend = Math.ceil(((minReqPct / 100) * conductedClasses - attendedClasses) / (1 - (minReqPct / 100)));
+            canMissMessage = `<span style="color:#ef4444; font-weight:600;">⚠ Attend <strong>${needToAttend} more consecutive class${needToAttend === 1 ? '' : 'es'}</strong> to reach ${minReqPct}%</span>`;
+          }
         }
+
+        const progressWidth = Math.min(100, Math.max(0, rawPct));
 
         let actionHtml = '';
         if (hasLive) {
@@ -844,34 +921,354 @@
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
               <div>
                 <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                  <h3 style="font-size:1.02rem; font-weight:700; color:var(--text-color); margin:0;">${s.subjectName}</h3>
-                  <span class="badge blue">${s.subjectCode || 'Course'}</span>
+                  <h3 style="font-size:1.02rem; font-weight:700; color:var(--text-color); margin:0;">${escapeHtml(s.subjectName)}</h3>
+                  <span class="badge blue">${escapeHtml(s.subjectCode || 'Course')}</span>
                 </div>
                 <div style="font-size:0.83rem; color:var(--text-muted); margin-top:4px;">
-                  👨‍🏫 Faculty: <strong>${facultyName}</strong> • <span class="badge" style="font-size:0.72rem; padding:2px 6px;">Sem ${sem} - Sec ${sec}</span>
+                  👨‍🏫 Faculty: <strong>${escapeHtml(facultyName)}</strong> • <span class="badge" style="font-size:0.72rem; padding:2px 6px;">Sem ${sem} - Sec ${sec}</span>
+                  ${plannedClasses !== '-' ? ` • <span style="font-size:0.75rem; color:var(--text-muted);">Planned: ${plannedClasses} classes</span>` : ''}
                 </div>
               </div>
             </div>
-            ${attendanceSectionHtml}
+
+            <!-- Subject Statistics Breakdown Matrix -->
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-top:10px; background:rgba(255,255,255,0.03); border:1px solid var(--border-color); border-radius:8px; padding:8px 10px; text-align:center;">
+              <div>
+                <span style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; font-weight:700;">Conducted</span>
+                <div style="font-size:1.05rem; font-weight:800; color:var(--text-color);">${conductedClasses}</div>
+              </div>
+              <div>
+                <span style="font-size:0.7rem; color:var(--emerald-dark); text-transform:uppercase; font-weight:700;">Attended</span>
+                <div style="font-size:1.05rem; font-weight:800; color:var(--emerald-dark);">${attendedClasses}</div>
+              </div>
+              <div>
+                <span style="font-size:0.7rem; color:#ef4444; text-transform:uppercase; font-weight:700;">Absent</span>
+                <div style="font-size:1.05rem; font-weight:800; color:#ef4444;">${absentClasses}</div>
+              </div>
+            </div>
+
+            <div style="margin-top: 10px; padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Attendance % (${minReqPct}% Min)</span>
+                <span style="font-size:1.15rem; font-weight:800; color:${riskColor};">${pctDisplay}</span>
+              </div>
+
+              <div style="width:100%; height:7px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; margin-bottom:8px;">
+                <div style="width:${progressWidth}%; height:100%; border-radius:999px; background:${riskColor}; transition:width 0.5s ease;"></div>
+              </div>
+
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                <div style="font-size:0.82rem;">${canMissMessage}</div>
+                ${riskBadge}
+              </div>
+            </div>
+
             ${actionHtml}
           </div>
         `;
       }).join('');
     }
 
+    // =========================================================================
+    // STUDENT TIMETABLE SYSTEM & TODAY'S SCHEDULE
+    // =========================================================================
+    const DAYS_MAP = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDayOfWeek = DAYS_MAP[new Date().getDay()] || 'Monday';
+    let selectedStudentDay = currentDayOfWeek === 'Sunday' ? 'Monday' : currentDayOfWeek;
+    let allStudentTimetable = [];
+    let todayConductedClassSessions = []; // sessions conducted today matching student's section
+    let sessionAttendanceRecordsMap = {}; // sessionId -> count of present students in that class
+    let studentPresentSessionIds = new Set(); // sessionIds where THIS student was marked present
+    let studentCorrectionRequestMap = {}; // sessionId -> requestDoc
+
+    function toggleCollapsible(headerEl) {
+      const card = headerEl.closest('.collapsible-card');
+      if (card) {
+        card.classList.toggle('open');
+      }
+    }
+
+    function switchStudentDay(btn) {
+      document.querySelectorAll('#studentDayTabs .day-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedStudentDay = btn.dataset.day;
+      renderStudentWeeklyTimetable();
+    }
+
+    function timeToMinutes(t) {
+      if (!t) return 0;
+      const [h, m] = t.split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    }
+
+    async function loadStudentTimetable() {
+      try {
+        const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        const todayDateStr = new Date().toLocaleDateString('en-GB');
+
+        // 1. Fetch all timetable entries
+        const [ttSnap, sessSnap, myAttSnap, myReqSnap] = await Promise.all([
+          db.collection('timetable').get().catch(() => null),
+          db.collection('attendanceSessions').where('date', '==', todayDateStr).get().catch(() => null),
+          db.collection('attendance').where('studentUid', '==', authUid).get().catch(() => null),
+          db.collection('attendanceCorrectionRequests').where('studentUid', '==', authUid).get().catch(() => null)
+        ]);
+
+        const studentAcademicProfile = {
+          dept: studentDept,
+          semester: studentSemester,
+          section: studentSection
+        };
+
+        allStudentTimetable = [];
+        if (ttSnap) {
+          ttSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.type === 'break' || data.type === 'lunch') {
+              allStudentTimetable.push({ id: doc.id, ...data });
+            } else if (data.type === 'activity') {
+              if (!data.departmentId && !data.semester) {
+                allStudentTimetable.push({ id: doc.id, ...data });
+              } else if (isAcademicMatch(studentAcademicProfile, data, deptMap)) {
+                allStudentTimetable.push({ id: doc.id, ...data });
+              }
+            } else if (isAcademicMatch(studentAcademicProfile, data, deptMap)) {
+              allStudentTimetable.push({ id: doc.id, ...data });
+            }
+          });
+        }
+
+        const dayOrder = { 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7 };
+        allStudentTimetable.sort((a, b) => {
+          const dDiff = (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99);
+          if (dDiff !== 0) return dDiff;
+          return (a.startTime || '').localeCompare(b.startTime || '');
+        });
+
+        // 2. Map this student's verified session attendance
+        studentPresentSessionIds = new Set();
+        if (myAttSnap) {
+          myAttSnap.forEach(doc => {
+            const a = doc.data();
+            if (a.sessionId) studentPresentSessionIds.add(a.sessionId);
+          });
+        }
+
+        // 3. Map this student's correction requests
+        studentCorrectionRequestMap = {};
+        if (myReqSnap) {
+          myReqSnap.forEach(doc => {
+            const r = doc.data();
+            if (r.sessionId) studentCorrectionRequestMap[r.sessionId] = { id: doc.id, ...r };
+          });
+        }
+
+        // 4. Fetch today's sessions & total class attendance counts
+        todayConductedClassSessions = [];
+        sessionAttendanceRecordsMap = {};
+        if (sessSnap && !sessSnap.empty) {
+          const attQueries = [];
+          sessSnap.forEach(sDoc => {
+            const s = { id: sDoc.id, ...sDoc.data() };
+            todayConductedClassSessions.push(s);
+            attQueries.push(
+              db.collection('attendance').where('sessionId', '==', sDoc.id).get()
+                .then(snap => { sessionAttendanceRecordsMap[sDoc.id] = snap.size; })
+                .catch(() => { sessionAttendanceRecordsMap[sDoc.id] = 0; })
+            );
+          });
+          await Promise.all(attQueries);
+        }
+
+        renderStudentTodaySchedule();
+        renderStudentWeeklyTimetable();
+      } catch (err) {
+        console.error('loadStudentTimetable error:', err);
+      }
+    }
+
+    function renderStudentTodaySchedule() {
+      const container = document.getElementById('studentTodayScheduleList');
+      const badge = document.getElementById('todayScheduleCountBadge');
+      if (!container) return;
+
+      const todayEntries = allStudentTimetable.filter(item => item.day === currentDayOfWeek);
+
+      if (badge) {
+        badge.textContent = `${todayEntries.length} entries`;
+      }
+
+      if (todayEntries.length === 0) {
+        container.innerHTML = `<p class="empty">No classes scheduled for your section today (${currentDayOfWeek}).</p>`;
+        return;
+      }
+
+      const now = new Date();
+      const currentMin = now.getHours() * 60 + now.getMinutes();
+
+      container.innerHTML = todayEntries.map(item => {
+        return renderStudentTimetableSlotItem(item, currentMin, true);
+      }).join('');
+    }
+
+    function renderStudentWeeklyTimetable() {
+      const container = document.getElementById('studentWeeklyScheduleList');
+      if (!container) return;
+
+      const dayEntries = allStudentTimetable.filter(item => item.day === selectedStudentDay);
+
+      if (dayEntries.length === 0) {
+        container.innerHTML = `<p class="empty">No timetable entries configured for ${selectedStudentDay}.</p>`;
+        return;
+      }
+
+      const isToday = selectedStudentDay === currentDayOfWeek;
+      const now = new Date();
+      const currentMin = now.getHours() * 60 + now.getMinutes();
+
+      container.innerHTML = dayEntries.map(item => {
+        return renderStudentTimetableSlotItem(item, currentMin, isToday);
+      }).join('');
+    }
+
+    function renderStudentTimetableSlotItem(item, currentMin, isToday) {
+      const startMin = timeToMinutes(item.startTime);
+      const endMin = timeToMinutes(item.endTime);
+      const isCurrentSlot = isToday && (currentMin >= startMin && currentMin <= endMin);
+      const isPastSlot = isToday && (currentMin > endMin);
+
+      let slotTypeClass = 'slot-subject';
+      let icon = '📚';
+      let titleDisplay = '';
+      let metaDisplay = '';
+      let statusBadge = '';
+      let studentStatusDisplay = '';
+      let actionHtml = '';
+
+      if (item.type === 'break') {
+        slotTypeClass = 'slot-break';
+        icon = '☕';
+        titleDisplay = item.title || 'Break';
+        statusBadge = '<span class="badge amber">☕ Short Break</span>';
+      } else if (item.type === 'lunch') {
+        slotTypeClass = 'slot-lunch';
+        icon = '🍴';
+        titleDisplay = item.title || 'Lunch Break';
+        statusBadge = '<span class="badge" style="background:#ffedd5; color:#c2410c;">🍴 Lunch Break</span>';
+      } else if (item.type === 'activity') {
+        slotTypeClass = 'slot-activity';
+        icon = '📢';
+        titleDisplay = item.title || 'Activity / Forum';
+        statusBadge = '<span class="badge purple">📢 Activity</span>';
+        if (item.room) {
+          metaDisplay = `<span>Room ${item.room}</span>`;
+        }
+      } else {
+        // Course Subject Slot
+        slotTypeClass = isCurrentSlot ? 'slot-subject slot-current' : 'slot-subject';
+        titleDisplay = `${item.subjectName || 'Course Subject'} <span class="badge" style="font-size:0.75rem;">${item.subjectCode || ''}</span>`;
+        const facName = item.facultyName || 'Faculty';
+        const roomStr = item.room ? ` • <span class="badge" style="font-size:0.75rem;">Room ${item.room}</span>` : '';
+        metaDisplay = `<span>👨‍🏫 Faculty: <strong>${facName}</strong>${roomStr}</span>`;
+
+        // Check if active session is running for this subject right now
+        const liveSession = activeSessions[item.subjectId];
+        // Check if completed session exists for this subject today
+        const completedSession = todayConductedClassSessions.find(s => s.subjectId === item.subjectId && !s.active);
+
+        // Find enrolled count from matching subject doc
+        const subjectDoc = studentSubjectDocs.find(d => d.id === item.subjectId);
+        const enrolledCount = subjectDoc?.studentIds?.length || 0;
+
+        if (liveSession) {
+          statusBadge = '<span class="badge green">🟢 Attendance Open</span>';
+          actionHtml = `
+            <button type="button" class="btn btn-approve" style="padding:6px 14px; font-size:0.82rem;" onclick="selectSubjectForAttendance('${item.subjectId}')">
+              ⚡ Mark Attendance
+            </button>`;
+        } else if (completedSession) {
+          const isStudentPresent = studentPresentSessionIds.has(completedSession.id);
+          const req = studentCorrectionRequestMap[completedSession.id];
+          const classPresent = sessionAttendanceRecordsMap[completedSession.id] || 0;
+          const classRatio = enrolledCount > 0 ? `${classPresent} / ${enrolledCount}` : `${classPresent}`;
+
+          let youBadge = '';
+          if (isStudentPresent) {
+            youBadge = '<span class="badge green" style="font-weight:700;">✓ You are Present</span>';
+          } else if (req) {
+            if (req.status === 'approved') {
+              youBadge = '<span class="badge green" style="font-weight:700;">✓ Correction Approved</span>';
+            } else if (req.status === 'rejected') {
+              youBadge = '<span class="badge red" style="font-weight:700;">✕ Correction Rejected</span>';
+            } else {
+              youBadge = '<span class="badge amber" style="font-weight:700;">⚠ Correction Pending</span>';
+            }
+          } else {
+            youBadge = '<span class="badge red" style="font-weight:700;">✕ Absent</span>';
+            actionHtml = `
+              <button type="button" class="btn btn-primary" style="padding:5px 12px; font-size:0.78rem;" onclick="openCorrectionModal('${completedSession.id}', 'Was present in class, attendance unrecorded.')">
+                📝 Request Correction
+              </button>`;
+          }
+
+          statusBadge = '<span class="badge">Session Ended</span>';
+          studentStatusDisplay = `
+            <div style="margin-top:6px; font-size:0.84rem; display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
+              ${youBadge}
+              <span style="font-weight:600; color:var(--text-muted); font-size:0.8rem;">• 👥 Class: ${classRatio} Present</span>
+            </div>`;
+        } else {
+          // Upcoming / Scheduled
+          if (isToday) {
+            if (isCurrentSlot) {
+              statusBadge = '<span class="badge blue">🔵 In Session (No active window)</span>';
+            } else if (isPastSlot) {
+              statusBadge = '<span class="badge">⚪ Session Not Conducted</span>';
+            } else {
+              statusBadge = '<span class="badge blue">🔵 Upcoming</span>';
+            }
+          } else {
+            statusBadge = '<span class="badge blue">🔵 Scheduled</span>';
+          }
+        }
+      }
+
+      return `
+        <div class="timetable-slot-card ${slotTypeClass}">
+          <div class="timetable-slot-time">
+            <span class="slot-time-range">${item.startTime} – ${item.endTime}</span>
+            <span class="slot-time-period">${isToday && isCurrentSlot ? '● Current Period' : (isToday && isPastSlot ? 'Past' : 'Period')}</span>
+          </div>
+          <div class="timetable-slot-content">
+            <div class="slot-title-row">
+              <span style="font-size:1.05rem;">${icon}</span>
+              <span class="slot-title">${titleDisplay}</span>
+              ${statusBadge}
+            </div>
+            ${metaDisplay ? `<div class="slot-meta-row">${metaDisplay}</div>` : ''}
+            ${studentStatusDisplay}
+          </div>
+          <div class="timetable-slot-actions">
+            ${actionHtml}
+          </div>
+        </div>
+      `;
+    }
+
     // Helper: Selects active subject and scrolls to the verification scanner
     function selectSubjectForAttendance(subjectId) {
+      const card = document.getElementById('markAttendanceCard');
+      if (card) {
+        card.classList.add('open');
+      }
       const selectEl = document.getElementById('subjectSelect');
       if (selectEl) {
         selectEl.value = subjectId;
         onSubjectSelectChange();
       }
-
-      const card = document.getElementById('markAttendanceCard');
       if (card) {
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-
       const startAttBtn = document.getElementById('startAttBtn');
       if (startAttBtn && !startAttBtn.disabled) {
         startAttendance();
@@ -915,52 +1312,98 @@
     }
 
     async function getLatestSession(subjectId) {
-      const snap = await db.collection('attendanceSessions')
-        .where('subjectId', '==', subjectId)
-        .where('active', '==', true)
-        .get();
-      let latest = null;
-      snap.forEach(doc => {
-        const d = doc.data();
-        if (d.expiresAt && d.expiresAt.toDate() <= new Date()) return;
-        if (!latest || (d.classNumber || 0) > (latest.classNumber || 0)) {
-          latest = { id: doc.id, ...d };
-        }
-      });
-      return latest;
+      if (activeSessions[subjectId]) return activeSessions[subjectId];
+      try {
+        const snap = await db.collection('attendanceSessions')
+          .where('subjectId', '==', subjectId)
+          .where('active', '==', true)
+          .get();
+        let latest = null;
+        snap.forEach(doc => {
+          const d = doc.data();
+          if (d.expiresAt && d.expiresAt.toDate() <= new Date()) return;
+          if (!latest || (d.classNumber || 0) > (latest.classNumber || 0)) {
+            latest = { id: doc.id, ...d };
+          }
+        });
+        return latest;
+      } catch (e) {
+        console.error('getLatestSession error:', e);
+        return null;
+      }
     }
 
     function calculateDistance(lat1, lng1, lat2, lng2) {
-      if (lat1 === 'N/A' || lng1 === 'N/A' || lat2 === 'N/A' || lng2 === 'N/A') return null;
-      const R = 6371e3;
-      const toRad = x => x * Math.PI / 180;
-      const dLat = toRad(lat2 - lat1);
-      const dLng = toRad(lng2 - lng1);
-      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-                Math.sin(dLng/2) * Math.sin(dLng/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      if (lat1 === null || lat1 === undefined || lat1 === '' ||
+          lng1 === null || lng1 === undefined || lng1 === '' ||
+          lat2 === null || lat2 === undefined || lat2 === '' ||
+          lng2 === null || lng2 === undefined || lng2 === '' ||
+          typeof lat1 === 'boolean' || typeof lng1 === 'boolean' ||
+          typeof lat2 === 'boolean' || typeof lng2 === 'boolean') {
+        return null;
+      }
+
+      const nLat1 = Number(lat1);
+      const nLng1 = Number(lng1);
+      const nLat2 = Number(lat2);
+      const nLng2 = Number(lng2);
+
+      if (!Number.isFinite(nLat1) || !Number.isFinite(nLng1) || !Number.isFinite(nLat2) || !Number.isFinite(nLng2)) {
+        return null;
+      }
+      if (nLat1 < -90 || nLat1 > 90 || nLat2 < -90 || nLat2 > 90 || nLng1 < -180 || nLng1 > 180 || nLng2 < -180 || nLng2 > 180) {
+        return null;
+      }
+
+      const R = 6371e3; // Earth radius in meters
+      const toRad = x => (x * Math.PI) / 180;
+      const dLat = toRad(nLat2 - nLat1);
+      const dLng = toRad(nLng2 - nLng1);
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(toRad(nLat1)) * Math.cos(toRad(nLat2)) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       return R * c;
     }
 
     async function checkDuplicate(subjectId, sessionId) {
-      const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
-      const snapshot = await db.collection('attendance')
-        .where('studentUid', '==', authUid)
-        .where('subjectId', '==', subjectId)
-        .where('sessionId', '==', sessionId)
-        .get();
-      return !snapshot.empty;
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+      if (!currentAuthUid || !sessionId) return false;
+      try {
+        const queries = [
+          db.collection('attendance')
+            .where('studentUid', '==', currentAuthUid)
+            .where('sessionId', '==', sessionId)
+            .get()
+        ];
+        if (studentId && studentId !== currentAuthUid) {
+          queries.push(
+            db.collection('attendance')
+              .where('studentId', '==', studentId)
+              .where('sessionId', '==', sessionId)
+              .get()
+          );
+        }
+        const snapshots = await Promise.all(queries);
+        return snapshots.some(snap => snap && !snap.empty);
+      } catch (err) {
+        console.error('checkDuplicate error:', err);
+        return false;
+      }
     }
 
     async function startRegistration() {
-      const ok = await loadModels();
-      if (!ok) return;
+      const startBtn = document.getElementById('startRegBtn');
+      if (startBtn) startBtn.disabled = true;
       try {
+        const ok = await loadModels();
+        if (!ok) {
+          if (startBtn) startBtn.disabled = false;
+          return;
+        }
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         const video = document.getElementById('regVideo');
         video.srcObject = stream;
-        document.getElementById('startRegBtn').disabled = true;
         document.getElementById('captureRegBtn').disabled = false;
         
         const wrap = document.getElementById('regScannerWrap');
@@ -971,34 +1414,60 @@
         if (camText) camText.textContent = 'Camera: Active';
       } catch (err) {
         showMsg('regMsg', 'error', 'Camera access denied: ' + err.message);
+        if (startBtn) startBtn.disabled = false;
       }
     }
 
     async function captureFace() {
+      const captureBtn = document.getElementById('captureRegBtn');
       const video = document.getElementById('regVideo');
       const canvas = document.getElementById('regCanvas');
+      if (captureBtn) captureBtn.disabled = true;
+
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       showMsg('regMsg', 'info', 'Detecting facial biometric landmarks...');
+
       try {
-        const detection = await faceapi.detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-        if (!detection) {
-          showMsg('regMsg', 'error', 'No face detected. Please look straight into the camera frame.');
+        const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
+        if (!detections || detections.length === 0) {
+          showMsg('regMsg', 'error', 'Face not detected. Please position your face clearly in the camera frame.');
           const reticle = document.getElementById('regReticle');
           if (reticle) reticle.className = 'hud-reticle error';
+          if (captureBtn) captureBtn.disabled = false;
           return;
         }
-        const descriptor = Array.from(detection.descriptor);
-        await db.collection('students').doc(studentId).update({
+
+        if (detections.length > 1) {
+          showMsg('regMsg', 'error', 'Multiple faces detected. Only one person is allowed in the camera frame.');
+          const reticle = document.getElementById('regReticle');
+          if (reticle) reticle.className = 'hud-reticle error';
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
+
+        const descriptor = Array.from(detections[0].descriptor);
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        await db.collection('students').doc(studentId || currentAuthUid).update({
           faceDescriptor: descriptor,
           faceRegistered: true
         });
         localStorage.setItem('faceRegistered', 'true');
         showMsg('regMsg', 'success', '✓ Face Biometrics Registered Successfully!');
-        document.getElementById('captureRegBtn').disabled = true;
         
+        // Stop video stream to free camera resource
+        stopVideoStream(video);
+        const wrap = document.getElementById('regScannerWrap');
+        if (wrap) wrap.classList.remove('is-scanning');
+        const camDot = document.getElementById('regCamDot');
+        if (camDot) camDot.className = 'status-chip-dot';
+        const camText = document.getElementById('regCamText');
+        if (camText) camText.textContent = 'Camera: Standby';
+        const startBtn = document.getElementById('startRegBtn');
+        if (startBtn) startBtn.disabled = false;
+
         const reticle = document.getElementById('regReticle');
         if (reticle) reticle.className = 'hud-reticle verified';
 
@@ -1017,20 +1486,26 @@
       } catch (err) {
         showMsg('regMsg', 'error', 'Error: ' + err.message);
         console.error(err);
+        if (captureBtn) captureBtn.disabled = false;
       }
     }
 
     async function startAttendance() {
-      const ok = await loadModels();
-      if (!ok) return;
+      const startBtn = document.getElementById('startAttBtn');
+      if (startBtn) startBtn.disabled = true;
+
       try {
+        const ok = await loadModels();
+        if (!ok) {
+          if (startBtn) startBtn.disabled = false;
+          return;
+        }
         const failWrap = document.getElementById('faceFailCorrectionWrap');
         if (failWrap) failWrap.style.display = 'none';
 
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         const video = document.getElementById('attVideo');
         video.srcObject = stream;
-        document.getElementById('startAttBtn').disabled = true;
         document.getElementById('captureAttBtn').disabled = false;
         
         const wrap = document.getElementById('attScannerWrap');
@@ -1041,10 +1516,12 @@
         if (camText) camText.textContent = 'Camera: Active';
       } catch (err) {
         showMsg('attMsg', 'error', 'Camera access denied: ' + err.message);
+        if (startBtn) startBtn.disabled = false;
       }
     }
 
     async function markAttendance() {
+      const captureBtn = document.getElementById('captureAttBtn');
       const selectedSubject = document.getElementById('subjectSelect').value;
       const failWrap = document.getElementById('faceFailCorrectionWrap');
       if (failWrap) failWrap.style.display = 'none';
@@ -1054,47 +1531,69 @@
         return;
       }
       
-      await loadSettings();
-      const latestSession = await getLatestSession(selectedSubject);
-      if (!latestSession) {
-        showMsg('attMsg', 'error', 'No active session found for this subject right now. Ask faculty to start the session.');
-        return;
-      }
-      
-      if (await checkDuplicate(selectedSubject, latestSession.id)) {
-        showMsg('attMsg', 'error', 'Attendance has already been verified and marked for this class session.');
-        return;
-      }
-      
-      const video = document.getElementById('attVideo');
-      const canvas = document.getElementById('attCanvas');
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      showMsg('attMsg', 'info', 'Analyzing facial biometrics...');
-      
-      const faceDot = document.getElementById('attFaceDot');
-      if (faceDot) faceDot.className = 'status-chip-dot warning';
-      const faceText = document.getElementById('attFaceText');
-      if (faceText) faceText.textContent = 'Face: Matching...';
+      if (captureBtn) captureBtn.disabled = true;
 
       try {
-        const detection = await faceapi.detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-        if (!detection) {
-          showMsg('attMsg', 'error', 'Face Verification Failed - No face detected in frame.');
+        await loadSettings();
+        const latestSession = await getLatestSession(selectedSubject);
+        if (!latestSession) {
+          showMsg('attMsg', 'error', 'No active session found for this subject right now. Ask faculty to start the session.');
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
+        
+        if (await checkDuplicate(selectedSubject, latestSession.id)) {
+          showMsg('attMsg', 'error', 'Attendance has already been verified and marked for this class session.');
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
+        
+        const video = document.getElementById('attVideo');
+        const canvas = document.getElementById('attCanvas');
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        showMsg('attMsg', 'info', 'Analyzing facial biometrics...');
+        
+        const faceDot = document.getElementById('attFaceDot');
+        if (faceDot) faceDot.className = 'status-chip-dot warning';
+        const faceText = document.getElementById('attFaceText');
+        if (faceText) faceText.textContent = 'Face: Matching...';
+
+        const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
+        if (!detections || detections.length === 0) {
+          showMsg('attMsg', 'error', 'Face not detected. Please position your face clearly in the camera frame.');
           const reticle = document.getElementById('attReticle');
           if (reticle) reticle.className = 'hud-reticle error';
+          if (faceDot) faceDot.className = 'status-chip-dot error';
+          if (faceText) faceText.textContent = 'Face: Not Found';
           showFaceFailCorrectionOption(latestSession, selectedSubject, 'Face verification failed, but I was present in the class.');
+          if (captureBtn) captureBtn.disabled = false;
           return;
         }
-        const doc = await db.collection('students').doc(studentId).get();
+
+        if (detections.length > 1) {
+          showMsg('attMsg', 'error', 'Multiple faces detected. Only one person is allowed in the camera frame.');
+          const reticle = document.getElementById('attReticle');
+          if (reticle) reticle.className = 'hud-reticle error';
+          if (faceDot) faceDot.className = 'status-chip-dot error';
+          if (faceText) faceText.textContent = 'Face: Multiple Faces';
+          showFaceFailCorrectionOption(latestSession, selectedSubject, 'Multiple faces in frame during attendance.');
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
+
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        const doc = await db.collection('students').doc(studentId || currentAuthUid).get();
         if (!doc.exists || !doc.data().faceDescriptor) {
           showMsg('attMsg', 'error', 'Please complete Face Biometrics Enrollment first.');
+          if (captureBtn) captureBtn.disabled = false;
           return;
         }
+
         const storedDescriptor = new Float32Array(doc.data().faceDescriptor);
-        const currentDescriptor = detection.descriptor;
+        const currentDescriptor = detections[0].descriptor;
         const distance = faceapi.euclideanDistance(currentDescriptor, storedDescriptor);
         const faceMatchPercent = Math.max(0, Math.round((1 - distance) * 100));
         
@@ -1102,7 +1601,10 @@
           showMsg('attMsg', 'error', `Face Verification Failed (${faceMatchPercent}% confidence match). Please look directly at the camera.`);
           const reticle = document.getElementById('attReticle');
           if (reticle) reticle.className = 'hud-reticle error';
+          if (faceDot) faceDot.className = 'status-chip-dot error';
+          if (faceText) faceText.textContent = 'Face: Mismatch';
           showFaceFailCorrectionOption(latestSession, selectedSubject, 'Face verification failed, but I was present in the class.');
+          if (captureBtn) captureBtn.disabled = false;
           return;
         }
 
@@ -1115,11 +1617,11 @@
         if (reticle) reticle.className = 'hud-reticle verified';
 
         showMsg('attMsg', 'success', `Face Biometrics Verified (${faceMatchPercent}% match). Verifying GPS proximity...`);
-        document.getElementById('captureAttBtn').disabled = true;
         await captureGPS(selectedSubject, latestSession);
       } catch (err) {
         showMsg('attMsg', 'error', 'Error: ' + err.message);
         console.error(err);
+        if (captureBtn) captureBtn.disabled = false;
       }
     }
 
@@ -1134,7 +1636,7 @@
         const gpsText = document.getElementById('attGpsText');
 
         if (!navigator.geolocation) {
-          gpsInfo.textContent = 'Geolocation is required to mark attendance.';
+          gpsInfo.textContent = 'Geolocation is not supported by your browser.';
           showMsg('attMsg', 'error', 'Location access is required for attendance verification.');
           resolve();
           return;
@@ -1178,7 +1680,7 @@
                   await new Promise(r => setTimeout(r, retryDelayMs));
                   continue;
                 }
-                showMsg('attMsg', 'error', `GPS accuracy too low (${accuracy}m). Ask admin to adjust GPS accuracy threshold.`);
+                showMsg('attMsg', 'error', `GPS accuracy too low (${accuracy}m). Required: ≤ ${gpsAccuracyThreshold}m. Please move to an open area with clear satellite line-of-sight.`);
                 if (gpsDot) gpsDot.className = 'status-chip-dot error';
                 if (gpsText) gpsText.textContent = 'GPS: Low Accuracy';
                 resolve();
@@ -1186,9 +1688,10 @@
               }
 
               if (dist !== null && dist > distanceThreshold) {
-                showMsg('attMsg', 'error', `Outside allowable classroom range (${dist.toFixed(1)}m). Must be within ${distanceThreshold} meters.`);
+                showMsg('attMsg', 'error', `Outside allowable classroom range (${dist.toFixed(1)}m). Must be within ${distanceThreshold} meters of faculty beacon.`);
                 if (gpsDot) gpsDot.className = 'status-chip-dot error';
                 if (gpsText) gpsText.textContent = 'GPS: Out of Range';
+                showFaceFailCorrectionOption(session, subjectId, `Location out of range (${dist.toFixed(1)}m from beacon), but I was in class.`);
                 resolve();
                 return;
               }
@@ -1200,9 +1703,9 @@
               resolve();
               return;
             } catch (err) {
-              if (err?.code === 1) {
-                gpsInfo.textContent = 'Location access denied. Attendance was not recorded.';
-                showMsg('attMsg', 'error', 'Location access is required for proximity verification.');
+              if (err?.code === 1) { // PERMISSION_DENIED
+                gpsInfo.textContent = 'Location access denied by user. Attendance was not recorded.';
+                showMsg('attMsg', 'error', 'Location permission denied. Please allow location access in your browser settings.');
                 if (gpsDot) gpsDot.className = 'status-chip-dot error';
                 if (gpsText) gpsText.textContent = 'GPS: Denied';
                 resolve();
@@ -1214,7 +1717,7 @@
                 continue;
               }
               gpsInfo.textContent = 'GPS coordinates unavailable.';
-              showMsg('attMsg', 'error', 'Location service unavailable. Attendance not recorded.');
+              showMsg('attMsg', 'error', 'Location service unavailable or timed out. Attendance was not recorded.');
               if (gpsDot) gpsDot.className = 'status-chip-dot error';
               if (gpsText) gpsText.textContent = 'GPS: Failed';
               resolve();
@@ -1231,34 +1734,68 @@
       const dateStr = now.toLocaleDateString('en-GB');
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
       const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+      
+      const subjectObj = studentSubjectDocs.find(s => s.id === subjectId);
+      const subName = session?.subjectName || subjectObj?.subjectName || studentSubjectsMap[subjectId] || 'Course Subject';
+      const subCode = session?.subjectCode || subjectObj?.subjectCode || '';
+      const recordId = `${session?.id}_${currentAuthUid}`;
+
       try {
-        const attRef = db.collection('attendance');
-        await attRef.add({
+        const attDocRef = db.collection('attendance').doc(recordId);
+        const existingDoc = await attDocRef.get();
+        if (existingDoc.exists) {
+          showMsg('attMsg', 'info', 'Attendance already marked for this session.');
+          return;
+        }
+
+        await attDocRef.set({
           studentId: studentId || currentAuthUid,
           studentUid: currentAuthUid,
-          studentName,
-          studentUsn,
-          studentDept,
+          studentName: studentName || 'Student',
+          studentUsn: (studentUsn || '').toUpperCase(),
+          usn: (studentUsn || '').toUpperCase(),
+          studentDept: studentDept || '',
           studentSemester: parseInt(studentSemester, 10) || 1,
           studentSection: studentSection || 'A',
           subjectId,
+          subjectName: subName,
+          subjectCode: subCode,
           sessionId: session?.id,
-          classNumber: session?.classNumber,
-          facultyId: session?.facultyId,
-          facultyUid: session?.facultyUid || session?.facultyId,
-          facultyName: session?.facultyName,
+          classNumber: session?.classNumber || 1,
+          facultyId: session?.facultyId || '',
+          facultyUid: session?.facultyUid || session?.facultyId || '',
+          facultyName: session?.facultyName || subjectObj?.facultyName || 'Faculty',
           date: dateStr,
           time: timeStr,
           latitude: lat,
           longitude: lng,
           distance: distance,
+          status: 'present',
+          attendanceMethod: 'biometric_gps',
           timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         showMsg('attMsg', 'success', '🎉 Attendance Marked Successfully! Verified with Face Biometrics & GPS proximity.');
+        
+        // Stop video stream upon successful attendance
+        const video = document.getElementById('attVideo');
+        stopVideoStream(video);
+        const wrap = document.getElementById('attScannerWrap');
+        if (wrap) wrap.classList.remove('is-scanning');
+        const camDot = document.getElementById('attCamDot');
+        if (camDot) camDot.className = 'status-chip-dot';
+        const camText = document.getElementById('attCamText');
+        if (camText) camText.textContent = 'Camera: Standby';
+        const startBtn = document.getElementById('startAttBtn');
+        if (startBtn) startBtn.disabled = false;
+
+        await loadSubjectSessions();
         await loadMyAttendance();
-        await loadActiveSessions();
       } catch (err) {
-        showMsg('attMsg', 'error', 'Error: ' + err.message);
+        if (err?.code === 'permission-denied' || (err?.message && err.message.toLowerCase().includes('permission'))) {
+          showMsg('attMsg', 'error', 'Attendance record already exists for this session or update is not authorized.');
+        } else {
+          showMsg('attMsg', 'error', 'Error: ' + err.message);
+        }
       }
     }
 
@@ -1286,19 +1823,28 @@
       currentStudentCorrectionTab = tab;
       const tabReq = document.getElementById('tabMyRequests');
       const tabMiss = document.getElementById('tabMissedClasses');
+      const tabHist = document.getElementById('tabFullHistory');
       const listReq = document.getElementById('correctionRequestsList');
       const listMiss = document.getElementById('missedClassesList');
+      const listHist = document.getElementById('historyTableContainer');
+
+      if (tabReq) tabReq.classList.remove('active');
+      if (tabMiss) tabMiss.classList.remove('active');
+      if (tabHist) tabHist.classList.remove('active');
+      if (listReq) listReq.style.display = 'none';
+      if (listMiss) listMiss.style.display = 'none';
+      if (listHist) listHist.style.display = 'none';
 
       if (tab === 'requests') {
         if (tabReq) tabReq.classList.add('active');
-        if (tabMiss) tabMiss.classList.remove('active');
         if (listReq) listReq.style.display = 'flex';
-        if (listMiss) listMiss.style.display = 'none';
-      } else {
-        if (tabReq) tabReq.classList.remove('active');
+      } else if (tab === 'missed') {
         if (tabMiss) tabMiss.classList.add('active');
-        if (listReq) listReq.style.display = 'none';
         if (listMiss) listMiss.style.display = 'flex';
+        renderMissedClassesUI();
+      } else if (tab === 'history') {
+        if (tabHist) tabHist.classList.add('active');
+        if (listHist) listHist.style.display = 'block';
       }
     }
 
@@ -1723,11 +2269,11 @@
         return;
       }
 
-      try {
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Submitting...';
-        showCorrectionModalMsg('info', 'Submitting attendance correction request...');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      showCorrectionModalMsg('info', 'Submitting attendance correction request...');
 
+      try {
         const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
         if (!currentAuthUid) {
           throw new Error('You must be signed in to submit a request.');
@@ -1740,21 +2286,15 @@
           .get();
         if (!attSnap.empty) {
           showCorrectionModalMsg('error', 'Attendance has already been recorded for this class.');
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Submit Correction Request';
           return;
         }
 
         // 2. Check duplicate pending request in Firestore
-        const dupReqSnap = await db.collection('attendanceCorrectionRequests')
-          .where('sessionId', '==', selectedCorrectionSession.id)
-          .where('studentUid', '==', currentAuthUid)
-          .where('status', '==', 'pending')
-          .get();
-        if (!dupReqSnap.empty) {
+        const reqDocId = `${selectedCorrectionSession.id}_${currentAuthUid}`;
+        const reqDocRef = db.collection('attendanceCorrectionRequests').doc(reqDocId);
+        const existingReqDoc = await reqDocRef.get();
+        if (existingReqDoc.exists && existingReqDoc.data().status === 'pending') {
           showCorrectionModalMsg('error', 'Correction request already submitted for this class.');
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Submit Correction Request';
           return;
         }
 
@@ -1796,7 +2336,7 @@
           reviewReason: null
         };
 
-        await db.collection('attendanceCorrectionRequests').add(newRequest);
+        await reqDocRef.set(newRequest);
 
         showCorrectionModalMsg('success', '✓ Correction request submitted successfully! Your instructor will review it.');
         
@@ -1823,6 +2363,7 @@
       } catch (err) {
         console.error('submitCorrectionRequest error:', err);
         showCorrectionModalMsg('error', 'Failed to submit request: ' + err.message);
+      } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Submit Correction Request';
       }
@@ -1914,28 +2455,30 @@
         document.getElementById('totalCount').textContent = total;
         document.getElementById('todayCount').textContent = today;
         
-        // Progress & percentage calculation across enrolled course offerings
-        let sumPlannedHours = 0;
-        let sumAttendedHours = 0;
+        await loadSubjectSessions();
+
+        // Exact calculation: conducted sessions vs attended sessions across enrolled subjects
+        let sumConducted = 0;
+        let sumAttended = 0;
         studentSubjectDocs.forEach(s => {
-          if (s.totalHours && Number(s.totalHours) > 0) {
-            sumPlannedHours += parseInt(s.totalHours, 10);
-            sumAttendedHours += (studentSubjectsAttendance[s.id]?.present || 0);
-          }
+          const sConducted = conductedSessionsList.filter(sess => sess.subjectId === s.id).length;
+          const sAttended = (studentSubjectsAttendance[s.id]?.present || 0);
+          sumConducted += sConducted;
+          sumAttended += sAttended;
         });
 
-        let pctVal = '--%';
-        let pctWidth = 0;
-        if (sumPlannedHours > 0) {
-          const rawOverall = (sumAttendedHours / sumPlannedHours) * 100;
+        let pctVal = '100%';
+        let pctWidth = 100;
+        if (sumConducted > 0) {
+          const rawOverall = (sumAttended / sumConducted) * 100;
           pctVal = (Number.isInteger(rawOverall) ? rawOverall : rawOverall.toFixed(1)) + '%';
           pctWidth = Math.min(100, Math.max(0, rawOverall));
         } else if (total > 0) {
-          pctVal = total + ' Attended';
-          pctWidth = Math.min(100, total * 10);
+          pctVal = '100%';
+          pctWidth = 100;
         } else {
-          pctVal = '0%';
-          pctWidth = 0;
+          pctVal = '100%';
+          pctWidth = 100;
         }
 
         const overallEl = document.getElementById('overallAttendancePct');
@@ -1957,7 +2500,6 @@
 
         // Re-render subject cards with updated attendance count
         renderSubjectsUI();
-        await loadSubjectSessions();
         await loadMyCorrectionRequests();
       } catch (err) {
         console.error('Attendance history error:', err);
@@ -1973,6 +2515,12 @@
     }
 
     async function logout() {
+      if (window._studentRefreshInterval) {
+        clearInterval(window._studentRefreshInterval);
+        window._studentRefreshInterval = null;
+      }
+      stopVideoStream(document.getElementById('attVideo'));
+      stopVideoStream(document.getElementById('regVideo'));
       try {
         await auth.signOut();
       } catch (e) {

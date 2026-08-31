@@ -94,17 +94,63 @@
       window.location.replace('faculty_dashboard.html');
     }
 
-    async function loadDepartments() {
-      const deptSelect = document.getElementById('dept');
-      try {
-        const snap = await db.collection('departments').orderBy('name').get();
-        deptSelect.innerHTML = '<option value="">-- Select Department --</option>';
-        snap.forEach(doc => {
-          deptSelect.innerHTML += `<option value="${doc.id}">${doc.data().name}</option>`;
-        });
-      } catch (err) {
-        console.error('Error loading departments:', err);
+    let cachedDepartmentsList = null;
+    let departmentsFetchPromise = null;
+
+    async function fetchDepartmentsOnce(forceRefresh = false) {
+      if (!forceRefresh && cachedDepartmentsList !== null) {
+        return cachedDepartmentsList;
       }
+      if (departmentsFetchPromise) {
+        return departmentsFetchPromise;
+      }
+      departmentsFetchPromise = (async () => {
+        try {
+          const snap = await db.collection('departments').orderBy('name').get();
+          console.log(`[Departments] Firestore records received: ${snap.size}`);
+          const uniqueMap = new Map();
+          snap.forEach(doc => {
+            const data = doc.data();
+            const rawName = (data.name || '').trim();
+            if (!rawName) return;
+            const normalizedKey = (data.normalizedName || rawName).toLowerCase();
+            if (!uniqueMap.has(normalizedKey)) {
+              uniqueMap.set(normalizedKey, {
+                id: doc.id,
+                name: rawName,
+                normalizedName: normalizedKey
+              });
+            }
+          });
+          cachedDepartmentsList = Array.from(uniqueMap.values());
+          console.log(`[Departments] Unique departments: ${cachedDepartmentsList.length}`);
+          return cachedDepartmentsList;
+        } catch (err) {
+          console.error('[Departments] Error fetching departments:', err);
+          return cachedDepartmentsList || [];
+        } finally {
+          departmentsFetchPromise = null;
+        }
+      })();
+      return departmentsFetchPromise;
+    }
+
+    async function loadDepartments(forceRefresh = false) {
+      console.log('[Departments] loadDepartments called');
+      const deptSelect = document.getElementById('dept');
+      if (!deptSelect) return;
+      const currentVal = deptSelect.value;
+      const depts = await fetchDepartmentsOnce(forceRefresh);
+      
+      deptSelect.innerHTML = '<option value="">-- Select Department --</option>';
+      depts.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = d.name;
+        deptSelect.appendChild(opt);
+      });
+      if (currentVal) deptSelect.value = currentVal;
+      console.log(`[Departments] Populating dropdown: facultyDepartment (total options: ${deptSelect.options.length})`);
     }
 
     loadDepartments();
@@ -120,6 +166,13 @@
       const pass = document.getElementById('password').value;
       const confirmPass = document.getElementById('confirmPassword').value;
 
+      if (!email) {
+        msg.textContent = 'Please enter a valid Teacher Institutional Email.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
       if (pass !== confirmPass) {
         msg.textContent = 'Passwords do not match.';
         msg.className = 'msg error';
@@ -129,15 +182,41 @@
 
       submitBtn.disabled = true;
       submitBtn.textContent = 'Submitting Request...';
+      msg.style.display = 'none';
 
       let createdAuthUser = null;
       try {
-        // 1. Create Firebase Authentication account securely
+        // 1. Check unique email in uniqueEmails, faculty, and pending registrationRequests
+        const emailDoc = await db.collection('uniqueEmails').doc(email).get().catch(() => null);
+        if (emailDoc && emailDoc.exists) {
+          msg.textContent = 'Faculty with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        const emailSnap = await db.collection('faculty').where('email', '==', email).get().catch(() => null);
+        if (emailSnap && !emailSnap.empty) {
+          msg.textContent = 'Faculty with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        const pendingEmailSnap = await db.collection('registrationRequests').where('email', '==', email).where('status', '==', 'pending').get().catch(() => null);
+        if (pendingEmailSnap && !pendingEmailSnap.empty) {
+          msg.textContent = 'Faculty with this email already exists.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // 2. Create Firebase Authentication account securely
         const userCred = await auth.createUserWithEmailAndPassword(email, pass);
         createdAuthUser = userCred.user;
         const uid = createdAuthUser.uid;
 
-        // 2. Create registration request in Firestore keyed by UID (NO password stored)
+        // 3. Create registration request in Firestore keyed by UID (NO password stored)
         const newRequest = {
           uid: uid,
           role: 'faculty',
@@ -150,7 +229,7 @@
 
         await db.collection('registrationRequests').doc(uid).set(newRequest);
 
-        // 3. Sign out immediately so pending user is not left authenticated in session
+        // 4. Sign out immediately so pending user is not left authenticated in session
         await auth.signOut();
 
         msg.textContent = 'Registration submitted successfully. Your account is waiting for administrator approval.';
@@ -165,7 +244,7 @@
         }
         let errorMsg = err.message;
         if (err.code === 'auth/email-already-in-use') {
-          errorMsg = 'An account or registration request with this email already exists.';
+          errorMsg = 'Faculty with this email already exists.';
         }
         msg.textContent = errorMsg;
         msg.className = 'msg error';

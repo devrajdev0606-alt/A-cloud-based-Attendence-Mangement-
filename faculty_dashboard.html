@@ -42,87 +42,235 @@
   </header>
 
   <main class="page-wrap">
-    <!-- Main Subject Control Card -->
-    <div class="card">
-      <div class="card-header">
-        <h2>📚 My Assigned Subjects & Session Control</h2>
+    <!-- Faculty Hero Welcome Section -->
+    <section class="student-hero" style="margin-bottom: 24px;">
+      <div class="hero-left">
+        <h1 id="facultyHeroGreeting">Good Morning, Teacher 👋</h1>
+        <p id="facultyHeroContext" style="font-size:0.96rem; font-weight:600; color:#93c5fd; margin-bottom:6px;">
+          <span id="facultyDeptBadge">Faculty Member</span> • <span id="facultySubjCountDisplay">Loading assigned courses...</span>
+        </p>
+        <div class="hero-badges">
+          <div class="hero-badge-item">
+            <span>📅</span> <span id="facultyDateDisplay">Loading date...</span>
+          </div>
+          <div class="hero-badge-item">
+            <span>🏛️</span> <span id="facultyDeptDisplay">Department</span>
+          </div>
+          <div class="hero-badge-item">
+            <span>⚙️</span> <span>GPS Verification Active</span>
+          </div>
+        </div>
       </div>
-      <p class="card-desc">Initiate a live GPS-verified attendance window for any of your assigned course subjects.</p>
-      
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th>Subject</th>
-              <th>Code</th>
-              <th>Sem / Sec</th>
-              <th>Total Hours</th>
-              <th>Enrolled Students</th>
-              <th>Session Actions</th>
-            </tr>
-          </thead>
-          <tbody id="subjectsTable">
-            <tr><td colspan="5" class="empty">Loading your assigned subjects...</td></tr>
-          </tbody>
-        </table>
+    </section>
+
+    <!-- Collapsible 1: Today's Classes -->
+    <div class="collapsible-card open" id="todayClassesCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📅 Today's Classes</h2>
+          <span class="badge blue" id="todayClassesCountBadge">0 entries</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <div class="timetable-slots-list" id="todayClassesList">
+          <p class="empty">Loading today's classes...</p>
+        </div>
       </div>
     </div>
 
-    <!-- Active Sessions Live Monitor -->
-    <div class="card">
-      <div class="card-header">
-        <h2>🟢 Live Attendance Sessions Monitor</h2>
+    <!-- Collapsible 2: Weekly Timetable -->
+    <div class="collapsible-card" id="weeklyTimetableCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📅 Weekly Timetable</h2>
+          <span class="badge" style="background:rgba(255,255,255,0.06);">6 Days Schedule</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
       </div>
-      <div id="activeSessions">
-        <p class="empty">Checking for active attendance sessions...</p>
-      </div>
-    </div>
-
-    <!-- Attendance Analytics Card -->
-    <div class="card">
-      <div class="card-header">
-        <h2>📊 Subject Attendance Analytics Matrix</h2>
-      </div>
-      <p class="card-desc">View class-by-class attendance records, student percentages, and attendance health for each subject.</p>
-      
-      <div style="margin-bottom: 16px;">
-        <label class="form-label" for="analyticsSubject">Select Course Subject:</label>
-        <select id="analyticsSubject" class="analytics-select" onchange="loadAnalytics()">
-          <option value="">Select Subject</option>
-        </select>
-      </div>
-
-      <div id="analyticsContainer">
-        <p class="empty">Select a subject above to render the attendance matrix.</p>
+      <div class="collapsible-body">
+        <!-- Day Tabs [ MON ] [ TUE ] [ WED ] [ THU ] [ FRI ] [ SAT ] -->
+        <div class="day-tabs-nav" id="facultyDayTabs">
+          <button type="button" class="day-tab-btn" data-day="Monday" onclick="switchFacultyDay(this)">MON</button>
+          <button type="button" class="day-tab-btn" data-day="Tuesday" onclick="switchFacultyDay(this)">TUE</button>
+          <button type="button" class="day-tab-btn" data-day="Wednesday" onclick="switchFacultyDay(this)">WED</button>
+          <button type="button" class="day-tab-btn" data-day="Thursday" onclick="switchFacultyDay(this)">THU</button>
+          <button type="button" class="day-tab-btn" data-day="Friday" onclick="switchFacultyDay(this)">FRI</button>
+          <button type="button" class="day-tab-btn" data-day="Saturday" onclick="switchFacultyDay(this)">SAT</button>
+        </div>
+        <div class="timetable-slots-list" id="weeklyClassesList">
+          <p class="empty">Select a day tab above to view timetable.</p>
+        </div>
       </div>
     </div>
 
-    <!-- Attendance Correction Requests Card -->
-    <div class="card">
-      <div class="card-header">
-        <h2>📝 Attendance Correction Requests</h2>
-        <span class="badge amber" id="facultyPendingBadge">0 Pending</span>
+    <!-- Collapsible 3: Attendance Summary -->
+    <div class="collapsible-card" id="attendanceSummaryCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📊 Attendance Summary</h2>
+          <span class="badge green" id="summaryRateBadge">--% Avg</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
       </div>
-      <p class="card-desc">Review and approve or reject attendance regularisation requests submitted by students for your class sessions.</p>
-      
-      <!-- Filter Toolbar -->
-      <div class="filter-row" style="margin-bottom: 16px;">
-        <input type="text" id="facultyReqSearch" placeholder="🔍 Search requests by student name, USN, or subject..." oninput="renderFacultyCorrectionRequests()" style="flex: 2 1 200px;" />
-        <select id="facultyReqFilter" onchange="renderFacultyCorrectionRequests()" style="flex: 1 1 140px;">
-          <option value="all">All Statuses</option>
-          <option value="pending" selected>🟡 Pending Review</option>
-          <option value="approved">🟢 Approved</option>
-          <option value="rejected">🔴 Rejected</option>
-        </select>
-        <button type="button" class="btn btn-primary" onclick="loadFacultyCorrectionRequests()">🔄 Refresh Requests</button>
+      <div class="collapsible-body">
+        <div class="summary-stat-grid">
+          <div class="summary-stat-box">
+            <div class="summary-stat-val" id="summaryTodayClasses">0</div>
+            <div class="summary-stat-lbl">Today's Classes</div>
+          </div>
+          <div class="summary-stat-box">
+            <div class="summary-stat-val" id="summaryCompletedClasses" style="color:var(--emerald-dark);">0</div>
+            <div class="summary-stat-lbl">Completed</div>
+          </div>
+          <div class="summary-stat-box">
+            <div class="summary-stat-val" id="summaryPresentStudents" style="color:var(--accent-blue);">0</div>
+            <div class="summary-stat-lbl">Students Present Today</div>
+          </div>
+          <div class="summary-stat-box">
+            <div class="summary-stat-val" id="summaryAvgAttendance" style="color:var(--teacher-dark);">--%</div>
+            <div class="summary-stat-lbl">Average Attendance</div>
+          </div>
+        </div>
       </div>
+    </div>
 
-      <!-- Correction Requests List Container -->
-      <div id="facultyRequestsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
-        <p class="empty">Loading attendance correction requests...</p>
+    <!-- Collapsible 4: Live Attendance Sessions Monitor -->
+    <div class="collapsible-card open" id="liveMonitorCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>🟢 Live Attendance Sessions Monitor</h2>
+          <span class="badge green" id="activeSessionsBadge">0 Active</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <div id="activeSessions">
+          <p class="empty">Checking for active attendance sessions...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collapsible 5: My Assigned Subjects & Session Control -->
+    <div class="collapsible-card" id="assignedSubjectsCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📚 My Assigned Subjects & Session Control</h2>
+          <span class="badge blue" id="assignedSubjectsCountBadge">0 Courses</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <p class="card-desc" style="margin-bottom:14px;">Initiate a live GPS-verified attendance window for any of your assigned course subjects.</p>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>Subject</th>
+                <th>Code</th>
+                <th>Sem / Sec</th>
+                <th>Total Hours</th>
+                <th>Enrolled Students</th>
+                <th>Session Actions</th>
+              </tr>
+            </thead>
+            <tbody id="subjectsTable">
+              <tr><td colspan="6" class="empty">Loading your assigned subjects...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collapsible 6: Attendance Correction Requests Card -->
+    <div class="collapsible-card" id="correctionRequestsCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📝 Attendance Correction Requests</h2>
+          <span class="badge amber" id="facultyPendingBadge">0 Pending</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <p class="card-desc">Review and approve or reject attendance regularisation requests submitted by students for your class sessions.</p>
+        
+        <!-- Filter Toolbar -->
+        <div class="filter-row" style="margin-bottom: 16px;">
+          <input type="text" id="facultyReqSearch" placeholder="🔍 Search requests by student name, USN, or subject..." oninput="renderFacultyCorrectionRequests()" style="flex: 2 1 200px;" />
+          <select id="facultyReqFilter" onchange="renderFacultyCorrectionRequests()" style="flex: 1 1 140px;">
+            <option value="all">All Statuses</option>
+            <option value="pending" selected>🟡 Pending Review</option>
+            <option value="approved">🟢 Approved</option>
+            <option value="rejected">🔴 Rejected</option>
+          </select>
+          <button type="button" class="btn btn-primary" onclick="loadFacultyCorrectionRequests()">🔄 Refresh Requests</button>
+        </div>
+
+        <!-- Correction Requests List Container -->
+        <div id="facultyRequestsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
+          <p class="empty">Loading attendance correction requests...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collapsible 7: Attendance Analytics Card -->
+    <div class="collapsible-card" id="analyticsCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📊 Subject Attendance Analytics Matrix</h2>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <p class="card-desc">View class-by-class attendance records, student percentages, and attendance health for each subject.</p>
+        
+        <div style="margin-bottom: 16px;">
+          <label class="form-label" for="analyticsSubject">Select Course Subject:</label>
+          <select id="analyticsSubject" class="analytics-select" onchange="loadAnalytics()">
+            <option value="">Select Subject</option>
+          </select>
+        </div>
+
+        <div id="analyticsContainer">
+          <p class="empty">Select a subject above to render the attendance matrix.</p>
+        </div>
       </div>
     </div>
   </main>
+
+  <!-- Session Attendance Roster Modal (Present / Absent List) -->
+  <div id="sessionAttendanceModal" class="modal-overlay" style="display:none;" onclick="closeSessionAttendanceModalOnBackdrop(event)">
+    <div class="modal-card" style="max-width: 580px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span id="sessionModalBadge" class="badge green">Live / Completed Roster</span>
+          <h2 id="sessionModalTitle" style="margin-top:4px;">Session Attendance</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeSessionAttendanceModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="sessionModalMeta" style="font-size:0.86rem; color:var(--text-muted); margin-bottom:12px;"></p>
+        <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px;">#</th>
+                <th>Student Name</th>
+                <th>USN</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="sessionModalTbody">
+              <tr><td colspan="4" class="empty">Loading student attendance...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="btn-row" style="justify-content: flex-end; width: 100%; margin-top: 14px;">
+          <button type="button" class="btn back-btn" onclick="closeSessionAttendanceModal()">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Faculty Reject Reason Modal -->
   <div id="facultyRejectModal" class="modal-overlay" style="display:none;" onclick="closeFacultyRejectModalOnBackdrop(event)">
@@ -168,10 +316,49 @@
 
     let facultyId = localStorage.getItem('facultyId');
     let facultyUid = localStorage.getItem('facultyUid');
+    let allFacultyIds = [facultyUid, facultyId].filter(Boolean);
     let facultyName = localStorage.getItem('facultyName') || 'Faculty';
     let facultyDept = localStorage.getItem('facultyDept') || '';
     let gpsAccuracyThreshold = 50;
     let isDashboardInitialized = false;
+    let refreshIntervalId = null;
+
+    // Timetable & Schedule State
+    const DAYS_MAP = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDayOfWeek = DAYS_MAP[new Date().getDay()] || 'Monday';
+    let selectedFacultyDay = currentDayOfWeek === 'Sunday' ? 'Monday' : currentDayOfWeek;
+    let allFacultyTimetable = [];
+    let assignedSubjectDocs = [];
+    let liveSessionsMap = {}; // subjectId -> sessionDoc
+    let todayConductedSessions = [];
+    let sessionAttendanceCounts = {}; // sessionId -> count of present students
+
+    function toggleCollapsible(headerEl) {
+      const card = headerEl.closest('.collapsible-card');
+      if (card) {
+        card.classList.toggle('open');
+      }
+    }
+
+    function switchFacultyDay(btn) {
+      document.querySelectorAll('#facultyDayTabs .day-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedFacultyDay = btn.dataset.day;
+      renderFacultyWeeklyTimetable();
+    }
+
+    function getGreetingTime() {
+      const hr = new Date().getHours();
+      if (hr < 12) return 'Morning';
+      if (hr < 17) return 'Afternoon';
+      return 'Evening';
+    }
+
+    function timeToMinutes(t) {
+      if (!t) return 0;
+      const [h, m] = t.split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    }
 
     // =========================================================================
     // FACULTY AUTHENTICATION & LEGACY PROFILE GUARD
@@ -184,19 +371,28 @@
       }
 
       facultyUid = user.uid;
+      const currentAuthUid = user.uid;
 
-      // 1. Check profile by UID (new architecture)
+      // 1. Check profile by UID (authoritative architecture)
       let facultyDoc = await db.collection('faculty').doc(user.uid).get().catch(() => null);
       let facultyData = facultyDoc && facultyDoc.exists ? facultyDoc.data() : null;
       let effectiveId = user.uid;
+      allFacultyIds = [user.uid];
 
-      // 2. Fallback check by email (legacy document support)
-      if (!facultyData && user.email) {
+      // 2. Fallback check by email (supporting legacy documents without modifying DB)
+      if (user.email) {
         const emailSnap = await db.collection('faculty').where('email', '==', user.email.toLowerCase()).get().catch(() => null);
         if (emailSnap && !emailSnap.empty) {
-          facultyDoc = emailSnap.docs[0];
-          facultyData = facultyDoc.data();
-          effectiveId = facultyDoc.id;
+          emailSnap.forEach(d => {
+            if (!facultyData) {
+              facultyDoc = d;
+              facultyData = d.data();
+              effectiveId = d.id;
+            }
+            if (!allFacultyIds.includes(d.id)) {
+              allFacultyIds.push(d.id);
+            }
+          });
         }
       }
 
@@ -210,7 +406,7 @@
 
       facultyId = effectiveId;
       facultyName = facultyData.name || 'Faculty';
-      facultyDept = facultyData.department || '';
+      facultyDept = facultyData.department || facultyData.dept || '';
 
       localStorage.setItem('facultyId', facultyId);
       localStorage.setItem('facultyUid', facultyUid);
@@ -218,14 +414,37 @@
       localStorage.setItem('facultyDept', facultyDept);
 
       document.getElementById('welcome').textContent = facultyName;
+      const greetText = `Good ${getGreetingTime()}, ${facultyName.split(' ')[0] || facultyName} 👋`;
+      const heroGreet = document.getElementById('facultyHeroGreeting');
+      if (heroGreet) heroGreet.textContent = greetText;
+      const deptBadge = document.getElementById('facultyDeptBadge');
+      if (deptBadge) deptBadge.textContent = facultyDept ? `${facultyDept} Faculty` : 'Faculty Member';
+      const deptDisplay = document.getElementById('facultyDeptDisplay');
+      if (deptDisplay) deptDisplay.textContent = facultyDept || 'Academic Dept';
+      const dateDisplay = document.getElementById('facultyDateDisplay');
+      if (dateDisplay) dateDisplay.textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+      // Highlight current day tab
+      document.querySelectorAll('#facultyDayTabs .day-tab-btn').forEach(btn => {
+        if (btn.dataset.day === currentDayOfWeek) {
+          btn.classList.add('today-indicator');
+        }
+        if (btn.dataset.day === selectedFacultyDay) {
+          btn.classList.add('active');
+        }
+      });
 
       if (!isDashboardInitialized) {
         isDashboardInitialized = true;
-        loadSettings();
-        loadSubjects();
-        loadActiveSessions();
-        loadFacultyCorrectionRequests();
-        setInterval(refreshSessionsAndCleanup, 15000);
+        await loadSettings();
+        await Promise.allSettled([
+          loadActiveSessions(),
+          loadSubjects(),
+          loadFacultyTimetable(),
+          loadFacultyCorrectionRequests()
+        ]);
+        if (refreshIntervalId) clearInterval(refreshIntervalId);
+        refreshIntervalId = setInterval(refreshSessionsAndCleanup, 15000);
       }
     });
 
@@ -244,123 +463,176 @@
 
     async function loadSubjects() {
       const tbody = document.getElementById('subjectsTable');
+      if (tbody && tbody.children.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">Loading your assigned subjects...</td></tr>';
+      }
       try {
-        const queries = [db.collection('subjects').where('facultyId', '==', facultyId).get()];
-        if (facultyUid && facultyUid !== facultyId) {
-          queries.push(db.collection('subjects').where('facultyId', '==', facultyUid).get());
-        }
-        const snapshots = await Promise.all(queries);
-        const seenSubjectIds = new Set();
-        const subjectDocs = [];
-        snapshots.forEach(snap => {
-          snap.forEach(doc => {
-            if (!seenSubjectIds.has(doc.id)) {
-              seenSubjectIds.add(doc.id);
-              subjectDocs.push(doc);
-            }
-          });
-        });
-
-        if (subjectDocs.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="empty">No subjects assigned yet. Please contact admin.</td></tr>';
-          return;
-        }
-        tbody.innerHTML = '';
         const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+        if (!currentAuthUid) return;
 
-        for (const doc of subjectDocs) {
-          const s = doc.data();
-          const sQueries = [
-            db.collection('attendanceSessions')
-              .where('facultyUid', '==', currentAuthUid)
-              .where('subjectId', '==', doc.id)
-              .where('active', '==', true)
-              .get()
-              .catch(() => null)
-          ];
-          if (facultyId && facultyId !== currentAuthUid) {
-            sQueries.push(
-              db.collection('attendanceSessions')
-                .where('facultyId', '==', facultyId)
-                .where('subjectId', '==', doc.id)
-                .where('active', '==', true)
-                .get()
-                .catch(() => null)
+        // Query assigned subjects:
+        // 1. Where facultyUid == currentAuthUid
+        // 2. Where facultyId == currentAuthUid
+        // 3. For any legacy document IDs associated with this faculty profile
+        const queryPromises = [
+          db.collection('subjects').where('facultyUid', '==', currentAuthUid).get().catch(e => { console.warn('Subjects facultyUid query error:', e); return null; }),
+          db.collection('subjects').where('facultyId', '==', currentAuthUid).get().catch(e => { console.warn('Subjects facultyId (UID) query error:', e); return null; })
+        ];
+
+        (allFacultyIds || []).forEach(fId => {
+          if (fId && fId !== currentAuthUid) {
+            queryPromises.push(
+              db.collection('subjects').where('facultyId', '==', fId).get().catch(e => { console.warn('Subjects legacy facultyId query error:', e); return null; })
             );
           }
-          const sSnapshots = await Promise.all(sQueries);
-          let activeSession = null;
-          sSnapshots.forEach(sessionSnapshot => {
-            if (!sessionSnapshot) return;
-            const live = sessionSnapshot.docs.find(sessionDoc => {
-              const expiresAt = sessionDoc.data().expiresAt;
-              return !expiresAt || expiresAt.toDate() > new Date();
-            });
-            if (live && !activeSession) activeSession = live;
-            for (const sessionDoc of sessionSnapshot.docs) {
-              const expiresAt = sessionDoc.data().expiresAt;
-              if (expiresAt && expiresAt.toDate() <= new Date()) {
-                db.collection('attendanceSessions').doc(sessionDoc.id).update({ active: false }).catch(() => {});
-              }
-            }
-          });
+        });
 
-          const hasActive = Boolean(activeSession);
-          const semSecBadge = s.semester ? `<span class="badge blue">Sem ${s.semester} • Sec ${s.section || 'A'}</span>` : '<span class="badge">-</span>';
-          const btn = hasActive 
-            ? `<button class="btn stop-btn" onclick="stopAttendance('${doc.id}', this)">⏹ Stop Attendance</button>`
-            : `<div style="display:inline-flex; align-items:center; gap:8px;">
-                <select class="duration-select" id="duration-${doc.id}">
-                  <option value="1">1 Min</option>
-                  <option value="5">5 Min</option>
-                  <option value="10" selected>10 Min</option>
-                  <option value="15">15 Min</option>
-                </select>
-                <button class="btn start-btn" onclick="startAttendance('${doc.id}', '${s.subjectName}', this)">▶ Start Attendance</button>
-              </div>`;
-          const hoursBadge = s.totalHours
-            ? `<span class="badge" style="font-weight:600;">${s.totalHours} hrs <span style="font-size:10px; color:var(--emerald-dark);">(75% req)</span></span>`
-            : '<span class="badge" style="opacity:0.6;">Not configured</span>';
-          tbody.innerHTML += `<tr>
-            <td><strong>${s.subjectName}</strong></td>
-            <td><span class="badge">${s.subjectCode}</span></td>
-            <td>${semSecBadge}</td>
-            <td>${hoursBadge}</td>
-            <td><span class="badge green">${s.studentIds?.length || 0} students</span></td>
-            <td>${btn}</td>
-          </tr>`;
+        const snapshots = await Promise.all(queryPromises);
+        const seenSubjectIds = new Set();
+        assignedSubjectDocs = [];
+
+        snapshots.forEach(snap => {
+          if (snap && !snap.empty) {
+            snap.forEach(doc => {
+              if (!seenSubjectIds.has(doc.id)) {
+                seenSubjectIds.add(doc.id);
+                assignedSubjectDocs.push(doc);
+              }
+            });
+          }
+        });
+
+        const countBadge = document.getElementById('assignedSubjectsCountBadge');
+        if (countBadge) countBadge.textContent = `${assignedSubjectDocs.length} Course${assignedSubjectDocs.length === 1 ? '' : 's'}`;
+        const heroSubjCount = document.getElementById('facultySubjCountDisplay');
+        if (heroSubjCount) heroSubjCount.textContent = `${assignedSubjectDocs.length} Active Course${assignedSubjectDocs.length === 1 ? '' : 's'}`;
+
+        // Populate Analytics Subject Dropdown
+        const analyticsSelect = document.getElementById('analyticsSubject');
+        if (analyticsSelect) {
+          const currentVal = analyticsSelect.value;
+          analyticsSelect.innerHTML = '<option value="">-- Select Subject --</option>';
+          for (const doc of assignedSubjectDocs) {
+            const s = doc.data();
+            const semText = s.semester ? ` - Sem ${s.semester} Sec ${s.section || 'A'}` : '';
+            const plannedNum = s.plannedClasses || s.totalPlannedClasses || s.totalHours;
+            const hrsText = plannedNum ? ` [${plannedNum} classes]` : '';
+            analyticsSelect.innerHTML += `<option value="${doc.id}">${s.subjectName || 'Subject'} (${s.subjectCode || ''}${semText}${hrsText})</option>`;
+          }
+          if (currentVal && seenSubjectIds.has(currentVal)) {
+            analyticsSelect.value = currentVal;
+          } else if (assignedSubjectDocs.length > 0 && !analyticsSelect.value) {
+            analyticsSelect.value = assignedSubjectDocs[0].id;
+            loadAnalytics();
+          }
         }
-        document.getElementById('analyticsSubject').innerHTML = '<option value="">-- Select Subject --</option>';
-        for (const doc of subjectDocs) {
-          const s = doc.data();
-          const semText = s.semester ? ` - Sem ${s.semester} Sec ${s.section || 'A'}` : '';
-          const hrsText = s.totalHours ? ` [${s.totalHours} hrs]` : '';
-          document.getElementById('analyticsSubject').innerHTML += `<option value="${doc.id}">${s.subjectName} (${s.subjectCode}${semText}${hrsText})</option>`;
-        }
+
+        renderSubjectsTable();
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty" style="color:var(--crimson-dark);">Error loading subjects</td></tr>';
-        console.error(err);
+        console.error('loadSubjects error:', err);
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty" style="color:var(--crimson-dark);">Unable to load assigned subjects. Please refresh the page.</td></tr>';
+        }
       }
+    }
+
+    function renderSubjectsTable() {
+      const tbody = document.getElementById('subjectsTable');
+      if (!tbody) return;
+
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+
+      if (assignedSubjectDocs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">No subjects assigned yet. Please contact admin.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = assignedSubjectDocs.map(doc => {
+        const s = doc.data();
+        const activeSession = liveSessionsMap[doc.id] || null;
+        const hasActive = Boolean(activeSession);
+        const semSecBadge = s.semester ? `<span class="badge blue">Sem ${s.semester} • Sec ${s.section || 'A'}</span>` : '<span class="badge">-</span>';
+        const safeName = (s.subjectName || 'Subject').replace(/'/g, "\\'");
+        const isAssignedFaculty = (
+          s.facultyUid === currentAuthUid ||
+          s.facultyId === currentAuthUid ||
+          (allFacultyIds || []).includes(s.facultyId) ||
+          (allFacultyIds || []).includes(s.facultyUid)
+        );
+
+        let btn = '';
+        if (hasActive) {
+          btn = `<div style="display:inline-flex; align-items:center; gap:6px;">
+                   <button class="btn view-btn" style="padding:6px 10px; font-size:0.8rem;" onclick="openSessionAttendanceModal('${activeSession.id}', '${doc.id}')">👥 View</button>
+                   ${isAssignedFaculty ? `<button class="btn stop-btn" style="padding:6px 10px; font-size:0.8rem;" onclick="stopAttendance('${doc.id}', this)">⏹ Stop</button>` : ''}
+                 </div>`;
+        } else if (isAssignedFaculty) {
+          btn = `<div style="display:inline-flex; align-items:center; gap:8px;">
+                   <select class="duration-select" id="duration-${doc.id}" style="padding:4px 8px; font-size:0.8rem;">
+                     <option value="1">1 Min</option>
+                     <option value="5">5 Min</option>
+                     <option value="10" selected>10 Min</option>
+                     <option value="15">15 Min</option>
+                   </select>
+                   <button class="btn start-btn" style="padding:6px 12px; font-size:0.8rem;" onclick="startAttendance('${doc.id}', '${safeName}', this)">▶ Start Attendance</button>
+                 </div>`;
+        } else {
+          btn = `<span style="font-size:0.8rem; color:var(--text-muted);">Assigned: ${s.facultyName || 'Other Faculty'}</span>`;
+        }
+
+        const plannedNum = s.plannedClasses || s.totalPlannedClasses || s.totalHours;
+        const minReq = s.minAttendancePercentage || s.attendanceRequiredPercentage || 75;
+        const hoursBadge = plannedNum
+          ? `<span class="badge" style="font-weight:600;">${plannedNum} classes <span style="font-size:10px; color:var(--emerald-dark);">(${minReq}% min)</span></span>`
+          : '<span class="badge" style="opacity:0.6;">Not configured</span>';
+        const enrolledCount = s.enrolledRoster?.length || s.studentIds?.length || 0;
+
+        return `<tr>
+          <td><strong>${s.subjectName || 'Subject'}</strong></td>
+          <td><span class="badge">${s.subjectCode || '-'}</span></td>
+          <td>${semSecBadge}</td>
+          <td>${hoursBadge}</td>
+          <td><span class="badge green">👥 ${enrolledCount} students</span></td>
+          <td>${btn}</td>
+        </tr>`;
+      }).join('');
     }
 
     async function loadActiveSessions() {
       const container = document.getElementById('activeSessions');
+      const badge = document.getElementById('activeSessionsBadge');
       try {
-        const queries = [db.collection('attendanceSessions').where('facultyId', '==', facultyId).where('active', '==', true).get()];
-        if (facultyUid && facultyUid !== facultyId) {
-          queries.push(db.collection('attendanceSessions').where('facultyUid', '==', facultyUid).where('active', '==', true).get());
-        }
-        const snapshots = await Promise.all(queries);
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+        if (!currentAuthUid) return;
+
+        const sessionQueries = [
+          db.collection('attendanceSessions').where('facultyUid', '==', currentAuthUid).where('active', '==', true).get().catch(() => null),
+          db.collection('attendanceSessions').where('facultyId', '==', currentAuthUid).where('active', '==', true).get().catch(() => null)
+        ];
+
+        (allFacultyIds || []).forEach(fId => {
+          if (fId && fId !== currentAuthUid) {
+            sessionQueries.push(
+              db.collection('attendanceSessions').where('facultyId', '==', fId).where('active', '==', true).get().catch(() => null)
+            );
+          }
+        });
+
+        const snapshots = await Promise.all(sessionQueries);
         const seenSessionIds = new Set();
         const activeDocs = [];
+        liveSessionsMap = {};
 
         snapshots.forEach(snap => {
+          if (!snap || snap.empty) return;
           snap.forEach(sessionDoc => {
             if (!seenSessionIds.has(sessionDoc.id)) {
               seenSessionIds.add(sessionDoc.id);
-              const expiresAt = sessionDoc.data().expiresAt;
-              if (!expiresAt || expiresAt.toDate() > new Date()) {
+              const d = sessionDoc.data();
+              const expiresAt = d.expiresAt;
+              if (!expiresAt || (expiresAt.toDate && expiresAt.toDate() > new Date())) {
                 activeDocs.push(sessionDoc);
+                liveSessionsMap[d.subjectId] = { id: sessionDoc.id, ...d };
               } else {
                 db.collection('attendanceSessions').doc(sessionDoc.id).update({ active: false }).catch(() => {});
               }
@@ -368,37 +640,408 @@
           });
         });
 
+        if (badge) {
+          badge.textContent = `${activeDocs.length} Active`;
+          badge.className = activeDocs.length > 0 ? 'badge green' : 'badge';
+        }
+
+        // Synchronize subject table buttons and timetable cards with live session status
+        renderSubjectsTable();
+        renderTodayClasses();
+        renderFacultyWeeklyTimetable();
+
+        if (!container) return;
+
         if (activeDocs.length === 0) {
           container.innerHTML = '<p class="empty">No active attendance sessions in progress.</p>';
           return;
         }
+
         container.innerHTML = '';
         for (const doc of activeDocs) {
           const s = doc.data();
-          const subjectDoc = await db.collection('subjects').doc(s.subjectId).get();
-          const subject = subjectDoc.data();
+          let subject = null;
+          const cachedSub = assignedSubjectDocs.find(d => d.id === s.subjectId);
+          if (cachedSub) {
+            subject = cachedSub.data();
+          } else {
+            const subDoc = await db.collection('subjects').doc(s.subjectId).get().catch(() => null);
+            if (subDoc && subDoc.exists) subject = subDoc.data();
+          }
+
+          const enrolledCount = subject?.enrolledRoster?.length || subject?.studentIds?.length || 0;
+
+          // Fetch attendance count using faculty-authorized query
+          let presentCount = 0;
+          try {
+            const attSnap = await db.collection('attendance')
+              .where('facultyUid', '==', currentAuthUid)
+              .where('sessionId', '==', doc.id)
+              .get()
+              .catch(async () => {
+                return await db.collection('attendance')
+                  .where('facultyId', '==', currentAuthUid)
+                  .where('sessionId', '==', doc.id)
+                  .get()
+                  .catch(() => null);
+              });
+            if (attSnap && !attSnap.empty) {
+              presentCount = attSnap.size;
+            }
+          } catch (e) {
+            presentCount = 0;
+          }
+
           container.innerHTML += `
             <div class="session-info">
               <div>
-                <span style="font-size:1rem; font-weight:700; color:var(--primary-navy);">📖 ${subject?.subjectName || 'Unknown'}</span>
+                <span style="font-size:1rem; font-weight:700; color:var(--primary-navy);">📖 ${subject?.subjectName || s.subjectName || 'Course'}</span>
                 <span class="badge green" style="margin-left:8px;">Class ${s.classNumber || 1}</span>
+                <span class="badge" style="margin-left:6px; font-weight:700; background:rgba(16, 185, 129, 0.12); color:var(--emerald-dark);">👥 ${presentCount} / ${enrolledCount} Present</span>
               </div>
-              <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; font-size:0.84rem; color:var(--text-muted);">
-                <span>⏰ Started: <strong>${s.startTime}</strong></span>
-                <span>⏳ Duration: <strong>${s.duration} min</strong></span>
-                <span>📍 GPS: <strong>${Number(s.latitude).toFixed(4)}, ${Number(s.longitude).toFixed(4)}</strong></span>
+              <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; font-size:0.84rem; color:var(--text-muted); margin-top:4px;">
+                <span>⏰ Started: <strong>${s.startTime || '-'}</strong></span>
+                <span>⏳ Duration: <strong>${s.duration || 10} min</strong></span>
+                <span>📍 GPS: <strong>${Number(s.latitude || 0).toFixed(4)}, ${Number(s.longitude || 0).toFixed(4)}</strong></span>
               </div>
-              <button class="btn view-btn" onclick="viewAttendance('${s.subjectId}')">📊 View Attendance Log</button>
+              <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+                <button class="btn view-btn" onclick="openSessionAttendanceModal('${doc.id}', '${s.subjectId}')">👥 View Attendance Roster</button>
+                <button class="btn stop-btn" style="padding:6px 12px; font-size:0.8rem;" onclick="stopAttendance('${s.subjectId}', this)">⏹ Stop Session</button>
+              </div>
             </div>`;
         }
       } catch (err) {
-        container.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Error loading sessions</p>';
+        console.error('loadActiveSessions error:', err);
+        if (container) {
+          container.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Unable to load active sessions. Please refresh the page.</p>';
+        }
       }
+    }
+
+    // =========================================================================
+    // FACULTY TIMETABLE SYSTEM & TODAY'S CLASSES
+    // =========================================================================
+    async function loadFacultyTimetable() {
+      const todayContainer = document.getElementById('todayClassesList');
+      const weeklyContainer = document.getElementById('weeklyClassesList');
+      try {
+        const todayDateStr = new Date().toLocaleDateString('en-GB');
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+        if (!currentAuthUid) return;
+
+        // Fetch timetable and today's conducted sessions for this faculty (avoiding non-scoped collection scans)
+        const sessionQueries = [
+          db.collection('attendanceSessions').where('facultyUid', '==', currentAuthUid).where('date', '==', todayDateStr).get().catch(() => null),
+          db.collection('attendanceSessions').where('facultyId', '==', currentAuthUid).where('date', '==', todayDateStr).get().catch(() => null)
+        ];
+        (allFacultyIds || []).forEach(fId => {
+          if (fId && fId !== currentAuthUid) {
+            sessionQueries.push(
+              db.collection('attendanceSessions').where('facultyId', '==', fId).where('date', '==', todayDateStr).get().catch(() => null)
+            );
+          }
+        });
+
+        const [ttSnap, ...sessSnapshots] = await Promise.all([
+          db.collection('timetable').get().catch(err => { console.warn('Timetable fetch error:', err); return null; }),
+          ...sessionQueries
+        ]);
+
+        allFacultyTimetable = [];
+        if (ttSnap && !ttSnap.empty) {
+          ttSnap.forEach(doc => {
+            allFacultyTimetable.push({ id: doc.id, ...doc.data() });
+          });
+        }
+
+        const dayOrder = { 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7 };
+        allFacultyTimetable.sort((a, b) => {
+          const dDiff = (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99);
+          if (dDiff !== 0) return dDiff;
+          return (a.startTime || '').localeCompare(b.startTime || '');
+        });
+
+        // Deduplicate today's conducted sessions
+        const seenTodaySessionIds = new Set();
+        todayConductedSessions = [];
+        sessionAttendanceCounts = {};
+
+        sessSnapshots.forEach(snap => {
+          if (!snap || snap.empty) return;
+          snap.forEach(sDoc => {
+            if (!seenTodaySessionIds.has(sDoc.id)) {
+              seenTodaySessionIds.add(sDoc.id);
+              todayConductedSessions.push({ id: sDoc.id, ...sDoc.data() });
+            }
+          });
+        });
+
+        // Query attendance counts with faculty-scoped query
+        const attCountPromises = todayConductedSessions.map(async (sess) => {
+          try {
+            const snap = await db.collection('attendance')
+              .where('facultyUid', '==', currentAuthUid)
+              .where('sessionId', '==', sess.id)
+              .get()
+              .catch(async () => {
+                return await db.collection('attendance')
+                  .where('facultyId', '==', currentAuthUid)
+                  .where('sessionId', '==', sess.id)
+                  .get()
+                  .catch(() => null);
+              });
+            sessionAttendanceCounts[sess.id] = snap ? snap.size : 0;
+          } catch (e) {
+            sessionAttendanceCounts[sess.id] = 0;
+          }
+        });
+
+        await Promise.all(attCountPromises);
+
+        renderTodayClasses();
+        renderFacultyWeeklyTimetable();
+        renderAttendanceSummary();
+      } catch (err) {
+        console.error('loadFacultyTimetable error:', err);
+        if (todayContainer) todayContainer.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Unable to load today\'s classes. Please refresh the page.</p>';
+        if (weeklyContainer) weeklyContainer.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Unable to load weekly timetable. Please refresh the page.</p>';
+      }
+    }
+
+    function renderTodayClasses() {
+      const container = document.getElementById('todayClassesList');
+      const badge = document.getElementById('todayClassesCountBadge');
+      if (!container) return;
+
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+      const todayEntries = allFacultyTimetable.filter(item => item.day === currentDayOfWeek);
+
+      if (badge) {
+        badge.textContent = `${todayEntries.length} entries`;
+      }
+
+      if (todayEntries.length === 0) {
+        container.innerHTML = `<p class="empty">No classes scheduled for today (${currentDayOfWeek}).</p>`;
+        return;
+      }
+
+      const now = new Date();
+      const currentMin = now.getHours() * 60 + now.getMinutes();
+
+      container.innerHTML = todayEntries.map(item => {
+        return renderTimetableSlotItem(item, currentAuthUid, currentMin, true);
+      }).join('');
+    }
+
+    function renderFacultyWeeklyTimetable() {
+      const container = document.getElementById('weeklyClassesList');
+      if (!container) return;
+
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+      const dayEntries = allFacultyTimetable.filter(item => item.day === selectedFacultyDay);
+
+      if (dayEntries.length === 0) {
+        container.innerHTML = `<p class="empty">No timetable entries configured for ${selectedFacultyDay}.</p>`;
+        return;
+      }
+
+      const isToday = selectedFacultyDay === currentDayOfWeek;
+      const now = new Date();
+      const currentMin = now.getHours() * 60 + now.getMinutes();
+
+      container.innerHTML = dayEntries.map(item => {
+        return renderTimetableSlotItem(item, currentAuthUid, currentMin, isToday);
+      }).join('');
+    }
+
+    function renderTimetableSlotItem(item, currentAuthUid, currentMin, isToday) {
+      const startMin = timeToMinutes(item.startTime);
+      const endMin = timeToMinutes(item.endTime);
+      const isCurrentSlot = isToday && (currentMin >= startMin && currentMin <= endMin);
+      const isPastSlot = isToday && (currentMin > endMin);
+
+      let slotTypeClass = 'slot-subject';
+      let icon = '📚';
+      let titleDisplay = '';
+      let metaDisplay = '';
+      let statusBadge = '';
+      let statsDisplay = '';
+      let actionHtml = '';
+
+      if (item.type === 'break') {
+        slotTypeClass = 'slot-break';
+        icon = '☕';
+        titleDisplay = item.title || 'Break';
+        statusBadge = '<span class="badge amber">☕ Short Break</span>';
+      } else if (item.type === 'lunch') {
+        slotTypeClass = 'slot-lunch';
+        icon = '🍴';
+        titleDisplay = item.title || 'Lunch Break';
+        statusBadge = '<span class="badge" style="background:#ffedd5; color:#c2410c;">🍴 Lunch Break</span>';
+      } else if (item.type === 'activity') {
+        slotTypeClass = 'slot-activity';
+        icon = '📢';
+        titleDisplay = item.title || 'Activity / Lab';
+        statusBadge = '<span class="badge purple">📢 Activity</span>';
+        if (item.departmentId || item.semester) {
+          const deptStr = item.departmentName || item.departmentId || '';
+          metaDisplay = `<span>${deptStr} • Sem ${item.semester || 1} • Sec ${item.section || 'A'}</span>`;
+        }
+      } else {
+        // Course Subject Slot
+        slotTypeClass = isCurrentSlot ? 'slot-subject slot-current' : 'slot-subject';
+        titleDisplay = `${item.subjectName || 'Course Subject'} <span class="badge" style="font-size:0.75rem;">${item.subjectCode || ''}</span>`;
+        const deptStr = item.departmentName || item.departmentId || 'Dept';
+        const roomStr = item.room ? ` • <span class="badge" style="font-size:0.75rem;">Room ${item.room}</span>` : '';
+        metaDisplay = `<span>${deptStr} • Sem ${item.semester || 1} • Sec ${item.section || 'A'}${roomStr}</span>`;
+
+        // Check if current faculty is assigned to this timetable entry
+        const isAssignedFaculty = (
+          (item.facultyUid && (item.facultyUid === currentAuthUid || (allFacultyIds || []).includes(item.facultyUid))) ||
+          (item.facultyId && (item.facultyId === currentAuthUid || (allFacultyIds || []).includes(item.facultyId)))
+        );
+
+        // Check for active session right now
+        const activeSession = liveSessionsMap[item.subjectId];
+        // Check for completed session today
+        const completedSession = todayConductedSessions.find(s => s.subjectId === item.subjectId && !s.active);
+
+        // Find enrolled count from matching subject doc
+        const subjectDoc = assignedSubjectDocs.find(d => d.id === item.subjectId);
+        const enrolledCount = subjectDoc?.data()?.enrolledRoster?.length || subjectDoc?.data()?.studentIds?.length || 0;
+
+        if (activeSession) {
+          statusBadge = '<span class="badge green">🟢 Attendance Open</span>';
+          const livePresent = sessionAttendanceCounts[activeSession.id] || 0;
+          statsDisplay = `
+            <div style="margin-top:4px; font-size:0.84rem; font-weight:700; color:var(--emerald-dark);">
+              👥 ${livePresent} / ${enrolledCount} Present (Live)
+            </div>`;
+          if (isAssignedFaculty) {
+            actionHtml = `
+              <div style="display:inline-flex; align-items:center; gap:6px;">
+                <button class="btn view-btn" style="padding:6px 10px; font-size:0.8rem;" onclick="openSessionAttendanceModal('${activeSession.id}', '${item.subjectId}')">👥 View</button>
+                <button class="btn stop-btn" style="padding:6px 12px; font-size:0.8rem;" onclick="stopAttendance('${item.subjectId}', this)">⏹ Stop Attendance</button>
+              </div>`;
+          } else {
+            actionHtml = `
+              <div style="display:inline-flex; align-items:center; gap:6px;">
+                <button class="btn view-btn" style="padding:6px 10px; font-size:0.8rem;" onclick="openSessionAttendanceModal('${activeSession.id}', '${item.subjectId}')">👥 View Attendance</button>
+              </div>`;
+          }
+        } else if (completedSession) {
+          const presentCount = sessionAttendanceCounts[completedSession.id] || 0;
+          const absentCount = Math.max(0, enrolledCount - presentCount);
+          const pct = enrolledCount > 0 ? ((presentCount / enrolledCount) * 100).toFixed(1) : '0.0';
+          statusBadge = '<span class="badge green">✓ Attendance Completed</span>';
+          statsDisplay = `
+            <div style="margin-top:4px; font-size:0.84rem; font-weight:700; color:var(--emerald-dark);">
+              👥 ${presentCount} / ${enrolledCount} Present 
+              <span style="font-weight:500; font-size:0.78rem; color:var(--text-muted); margin-left:4px;">(${presentCount} Present • ${absentCount} Absent • ${pct}%)</span>
+            </div>`;
+          actionHtml = `
+            <div style="display:inline-flex; align-items:center; gap:8px;">
+              <button class="btn view-btn" style="padding:6px 12px; font-size:0.8rem;" onclick="openSessionAttendanceModal('${completedSession.id}', '${item.subjectId}')">👥 View Attendance</button>
+            </div>`;
+        } else {
+          // Not started / Upcoming
+          if (isToday) {
+            if (isCurrentSlot) {
+              statusBadge = '<span class="badge green">🟢 Ready to Start</span>';
+            } else if (isPastSlot) {
+              statusBadge = '<span class="badge">⚪ Session Not Conducted</span>';
+            } else {
+              statusBadge = '<span class="badge blue">🔵 Upcoming</span>';
+            }
+
+            if (isAssignedFaculty) {
+              const safeName = (item.subjectName || 'Subject').replace(/'/g, "\\'");
+              actionHtml = `
+                <div style="display:inline-flex; align-items:center; gap:6px;">
+                  <select class="duration-select" id="dur-tt-${item.id}" style="padding:4px 8px; font-size:0.8rem;">
+                    <option value="1">1 Min</option>
+                    <option value="5">5 Min</option>
+                    <option value="10" selected>10 Min</option>
+                    <option value="15">15 Min</option>
+                  </select>
+                  <button class="btn start-btn" style="padding:6px 12px; font-size:0.8rem;" onclick="startAttendance('${item.subjectId}', '${safeName}', this, document.getElementById('dur-tt-${item.id}').value)">▶ Start Attendance</button>
+                </div>`;
+            } else {
+              actionHtml = `<span style="font-size:0.8rem; color:var(--text-muted); font-style:italic;">Assigned Faculty: <strong>${item.facultyName || 'Other Teacher'}</strong></span>`;
+            }
+          } else {
+            statusBadge = '<span class="badge blue">🔵 Scheduled</span>';
+            actionHtml = `<span style="font-size:0.8rem; color:var(--text-muted);">Assigned: <strong>${item.facultyName || 'Faculty'}</strong></span>`;
+          }
+        }
+      }
+
+      return `
+        <div class="timetable-slot-card ${slotTypeClass}">
+          <div class="timetable-slot-time">
+            <span class="slot-time-range">${item.startTime} – ${item.endTime}</span>
+            <span class="slot-time-period">${isToday && isCurrentSlot ? '● Current Period' : (isToday && isPastSlot ? 'Past' : 'Period')}</span>
+          </div>
+          <div class="timetable-slot-content">
+            <div class="slot-title-row">
+              <span style="font-size:1.05rem;">${icon}</span>
+              <span class="slot-title">${titleDisplay}</span>
+              ${statusBadge}
+            </div>
+            ${metaDisplay ? `<div class="slot-meta-row">${metaDisplay}</div>` : ''}
+            ${statsDisplay}
+          </div>
+          <div class="timetable-slot-actions">
+            ${actionHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAttendanceSummary() {
+      const todayTotalEl = document.getElementById('summaryTodayClasses');
+      const completedEl = document.getElementById('summaryCompletedClasses');
+      const presentEl = document.getElementById('summaryPresentStudents');
+      const avgEl = document.getElementById('summaryAvgAttendance');
+      const badge = document.getElementById('summaryRateBadge');
+
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+      const todayEntries = allFacultyTimetable.filter(item => 
+        item.day === currentDayOfWeek && 
+        (item.type === 'subject' || item.type === 'lab') &&
+        (item.facultyUid === currentAuthUid || item.facultyId === currentAuthUid || (allFacultyIds || []).includes(item.facultyId) || (allFacultyIds || []).includes(item.facultyUid))
+      );
+      const totalToday = todayEntries.length;
+      const completedToday = todayConductedSessions.filter(s => !s.active).length;
+
+      let totalPresent = 0;
+      let totalEnrolled = 0;
+
+      todayConductedSessions.forEach(s => {
+        const pres = sessionAttendanceCounts[s.id] || 0;
+        totalPresent += pres;
+        const subj = assignedSubjectDocs.find(d => d.id === s.subjectId);
+        const enr = subj?.data()?.enrolledRoster?.length || subj?.data()?.studentIds?.length || 0;
+        totalEnrolled += enr;
+      });
+
+      const avgPct = totalEnrolled > 0 ? Math.round((totalPresent / totalEnrolled) * 100) : null;
+
+      if (todayTotalEl) todayTotalEl.textContent = totalToday;
+      if (completedEl) completedEl.textContent = completedToday;
+      if (presentEl) presentEl.textContent = totalPresent;
+      if (avgEl) avgEl.textContent = avgPct !== null ? `${avgPct}%` : '--%';
+      if (badge) badge.textContent = avgPct !== null ? `${avgPct}% Avg` : '--% Avg';
     }
 
     async function refreshSessionsAndCleanup() {
       try {
-        await Promise.all([loadSubjects(), loadActiveSessions(), loadFacultyCorrectionRequests()]);
+        await Promise.allSettled([
+          loadActiveSessions(),
+          loadSubjects(),
+          loadFacultyTimetable(),
+          loadFacultyCorrectionRequests()
+        ]);
       } catch (err) {
         console.error('Auto refresh error:', err);
       }
@@ -411,50 +1054,82 @@
           .where('facultyUid', '==', currentAuthUid)
           .where('subjectId', '==', subjectId)
           .get()
+          .catch(() => null),
+        db.collection('attendanceSessions')
+          .where('facultyId', '==', currentAuthUid)
+          .where('subjectId', '==', subjectId)
+          .get()
           .catch(() => null)
       ];
-      if (facultyId && facultyId !== currentAuthUid) {
-        queries.push(
-          db.collection('attendanceSessions')
-            .where('facultyId', '==', facultyId)
-            .where('subjectId', '==', subjectId)
-            .get()
-            .catch(() => null)
-        );
-      }
+      (allFacultyIds || []).forEach(fId => {
+        if (fId && fId !== currentAuthUid) {
+          queries.push(
+            db.collection('attendanceSessions')
+              .where('facultyId', '==', fId)
+              .where('subjectId', '==', subjectId)
+              .get()
+              .catch(() => null)
+          );
+        }
+      });
       const snapshots = await Promise.all(queries);
       const numbers = [];
       snapshots.forEach(snap => {
-        if (snap) {
+        if (snap && !snap.empty) {
           snap.forEach(d => { const n = d.data().classNumber; if (n) numbers.push(n); });
         }
       });
       return numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
     }
 
-    async function startAttendance(subjectId, subjectName, button) {
+    async function startAttendance(subjectId, subjectName, button, customDuration = null) {
+      if (button) {
+        button.disabled = true;
+      }
       await loadSettings();
-      const duration = document.getElementById(`duration-${subjectId}`).value;
-      const existingStatus = button.closest('td').querySelector('.start-status-msg');
+      let duration = customDuration;
+      if (!duration) {
+        const durEl = document.getElementById(`duration-${subjectId}`);
+        duration = durEl ? durEl.value : '10';
+      }
+      const statusContainer = button ? (button.closest('.timetable-slot-card') || button.closest('td') || button.parentElement) : document.body;
+      const existingStatus = statusContainer.querySelector('.start-status-msg');
       if (existingStatus) existingStatus.remove();
       const statusMsg = document.createElement('div');
       statusMsg.classList.add('start-status-msg');
       statusMsg.className = 'msg info';
-      statusMsg.textContent = 'Capturing GPS location...';
+      statusMsg.textContent = 'Verifying session status...';
       statusMsg.style.display = 'block';
-      button.closest('td').appendChild(statusMsg);
+      statusContainer.appendChild(statusMsg);
 
-      if (!navigator.geolocation) {
-        statusMsg.className = 'msg error';
-        statusMsg.textContent = 'Geolocation not supported by this browser.';
-        return;
-      }
-      const maxAttempts = 3;
-      const retryDelayMs = 1200;
-      const getPosition = () => new Promise((resolvePos, rejectPos) => {
-        navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, { enableHighAccuracy: true, timeout: 30000, maximumAge: 15000 });
-      });
       try {
+        // 1. Check if active session is already running for this subject
+        const activeSnap = await db.collection('attendanceSessions')
+          .where('subjectId', '==', subjectId)
+          .where('active', '==', true)
+          .get();
+
+        if (!activeSnap.empty) {
+          statusMsg.className = 'msg error';
+          statusMsg.textContent = 'Attendance session is already active.';
+          if (button) button.disabled = false;
+          return;
+        }
+
+        statusMsg.textContent = 'Capturing GPS location...';
+
+        if (!navigator.geolocation) {
+          statusMsg.className = 'msg error';
+          statusMsg.textContent = 'Geolocation not supported by this browser.';
+          if (button) button.disabled = false;
+          return;
+        }
+        const maxAttempts = 3;
+        const retryDelayMs = 1200;
+        const getPosition = () => new Promise((resolvePos, rejectPos) => {
+          navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, { enableHighAccuracy: true, timeout: 30000, maximumAge: 15000 });
+        });
+
         let selectedPos = null;
         let selectedAccuracyMeters = null;
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -472,6 +1147,7 @@
               }
               statusMsg.className = 'msg error';
               statusMsg.textContent = `GPS accuracy is too low (${accuracyMeters.toFixed(1)}m). Required: ≤ ${gpsAccuracyThreshold}m. Move closer to an open window or increase threshold in settings.`;
+              if (button) button.disabled = false;
               return;
             }
             selectedPos = pos;
@@ -481,6 +1157,7 @@
             if (err?.code === 1) {
               statusMsg.className = 'msg error';
               statusMsg.textContent = 'Location access denied. Please allow location permissions.';
+              if (button) button.disabled = false;
               return;
             }
             if (attempt < maxAttempts) {
@@ -491,6 +1168,7 @@
             }
             statusMsg.className = 'msg error';
             statusMsg.textContent = 'Unable to capture GPS location.';
+            if (button) button.disabled = false;
             return;
           }
         }
@@ -498,47 +1176,71 @@
         if (!selectedPos) {
           statusMsg.className = 'msg error';
           statusMsg.textContent = 'Unable to capture GPS location.';
+          if (button) button.disabled = false;
           return;
         }
-
         const now = new Date();
         const durationMinutes = parseInt(duration, 10);
         const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         const dateStr = now.toLocaleDateString('en-GB');
+        const endTimeObj = new Date(now.getTime() + durationMinutes * 60 * 1000);
+        const endTimeStr = endTimeObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         const classNumber = await getNextClassNumber(subjectId);
         const currentAuthUid = auth.currentUser ? auth.currentUser.uid : (facultyUid || facultyId);
 
+        let subjectData = null;
+        const subjDocCache = assignedSubjectDocs.find(d => d.id === subjectId);
+        if (subjDocCache) {
+          subjectData = subjDocCache.data();
+        } else {
+          const subSnap = await db.collection('subjects').doc(subjectId).get().catch(() => null);
+          if (subSnap && subSnap.exists) subjectData = subSnap.data();
+        }
+
         await db.collection('attendanceSessions').add({
           subjectId,
+          subjectName: subjectData?.subjectName || subjectName || 'Subject',
+          subjectCode: subjectData?.subjectCode || '',
           facultyId: facultyId || currentAuthUid,
           facultyUid: currentAuthUid,
-          facultyName,
+          facultyName: facultyName || subjectData?.facultyName || 'Faculty',
+          departmentId: subjectData?.departmentId || subjectData?.department || '',
+          departmentName: subjectData?.departmentName || '',
+          semester: subjectData?.semester || 1,
+          section: subjectData?.section || 'A',
+          classNumber,
+          date: dateStr,
+          startTime: timeStr,
+          endTime: endTimeStr,
+          duration: durationMinutes,
           active: true,
           latitude: selectedPos.coords.latitude,
           longitude: selectedPos.coords.longitude,
-          startTime: timeStr,
-          classNumber,
-          date: dateStr,
-          duration: durationMinutes,
-          expiresAt: new Date(now.getTime() + durationMinutes * 60 * 1000),
+          expiresAt: endTimeObj,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         statusMsg.className = 'msg success';
         statusMsg.textContent = `Attendance started! Class ${classNumber} (GPS: ${selectedAccuracyMeters !== null ? `${selectedAccuracyMeters.toFixed(1)}m` : 'OK'})`;
-        setTimeout(() => { loadSubjects(); loadActiveSessions(); }, 1000);
+        setTimeout(() => {
+          loadActiveSessions();
+          loadSubjects();
+          loadFacultyTimetable();
+        }, 1000);
       } catch (err) {
         statusMsg.className = 'msg error';
         statusMsg.textContent = 'Error: ' + err.message;
+      } finally {
+        if (button) button.disabled = false;
       }
     }
 
     async function stopAttendance(subjectId, button) {
+      const statusContainer = button.closest('.timetable-slot-card') || button.closest('tr')?.cells?.[5] || button.closest('tr')?.cells?.[4] || button.closest('td') || button.parentElement;
       const statusMsg = document.createElement('div');
       statusMsg.className = 'msg info';
       statusMsg.textContent = 'Stopping session...';
       statusMsg.style.display = 'block';
-      const cell = button.closest('tr')?.cells?.[4] || button.closest('td') || button.parentElement;
-      if (cell) cell.appendChild(statusMsg);
+      if (statusContainer) statusContainer.appendChild(statusMsg);
 
       try {
         const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
@@ -548,21 +1250,29 @@
             .where('subjectId', '==', subjectId)
             .where('active', '==', true)
             .get()
+            .catch(() => null),
+          db.collection('attendanceSessions')
+            .where('facultyId', '==', currentAuthUid)
+            .where('subjectId', '==', subjectId)
+            .where('active', '==', true)
+            .get()
             .catch(() => null)
         ];
-        if (facultyId && facultyId !== currentAuthUid) {
-          queries.push(
-            db.collection('attendanceSessions')
-              .where('facultyId', '==', facultyId)
-              .where('subjectId', '==', subjectId)
-              .where('active', '==', true)
-              .get()
-              .catch(() => null)
-          );
-        }
+        (allFacultyIds || []).forEach(fId => {
+          if (fId && fId !== currentAuthUid) {
+            queries.push(
+              db.collection('attendanceSessions')
+                .where('facultyId', '==', fId)
+                .where('subjectId', '==', subjectId)
+                .where('active', '==', true)
+                .get()
+                .catch(() => null)
+            );
+          }
+        });
         const snapshots = await Promise.all(queries);
         for (const snapshot of snapshots) {
-          if (snapshot) {
+          if (snapshot && !snapshot.empty) {
             for (const doc of snapshot.docs) {
               await db.collection('attendanceSessions').doc(doc.id).update({ active: false });
             }
@@ -570,31 +1280,169 @@
         }
         statusMsg.className = 'msg success';
         statusMsg.textContent = 'Session stopped successfully!';
-        loadSubjects();
-        loadActiveSessions();
+        setTimeout(() => {
+          loadActiveSessions();
+          loadSubjects();
+          loadFacultyTimetable();
+        }, 500);
       } catch (err) {
         statusMsg.className = 'msg error';
         statusMsg.textContent = 'Error: ' + err.message;
       }
     }
 
+    async function openSessionAttendanceModal(sessionId, subjectId) {
+      const modal = document.getElementById('sessionAttendanceModal');
+      const tbody = document.getElementById('sessionModalTbody');
+      const title = document.getElementById('sessionModalTitle');
+      const meta = document.getElementById('sessionModalMeta');
+      const badge = document.getElementById('sessionModalBadge');
+
+      if (!modal) return;
+      modal.style.display = 'flex';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="empty">Loading student attendance roster...</td></tr>';
+
+      try {
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+
+        // 1. Fetch Subject doc for enrolled roster
+        let subjectData = null;
+        const cachedSub = assignedSubjectDocs.find(d => d.id === subjectId);
+        if (cachedSub) {
+          subjectData = cachedSub.data();
+        } else {
+          const subSnap = await db.collection('subjects').doc(subjectId).get().catch(() => null);
+          if (subSnap && subSnap.exists) subjectData = subSnap.data();
+        }
+
+        // 2. Fetch Session doc
+        const sessionSnap = await db.collection('attendanceSessions').doc(sessionId).get().catch(() => null);
+        const sessionData = sessionSnap && sessionSnap.exists ? sessionSnap.data() : null;
+
+        const subName = subjectData?.subjectName || sessionData?.subjectName || 'Course Subject';
+        const subCode = subjectData?.subjectCode || sessionData?.subjectCode || '';
+        const classNum = sessionData?.classNumber || 1;
+        const dateStr = sessionData?.date || '';
+        const isLive = Boolean(sessionData?.active);
+
+        if (title) title.textContent = `${subName} ${subCode ? '(' + subCode + ')' : ''}`;
+        if (badge) {
+          badge.textContent = isLive ? '🟢 Live Session' : '✓ Completed Session';
+          badge.className = isLive ? 'badge green' : 'badge';
+        }
+
+        // 3. Fetch Attendance records for this sessionId with faculty authorization
+        const attQueries = [
+          db.collection('attendance').where('facultyUid', '==', currentAuthUid).where('sessionId', '==', sessionId).get().catch(() => null),
+          db.collection('attendance').where('facultyId', '==', currentAuthUid).where('sessionId', '==', sessionId).get().catch(() => null)
+        ];
+        (allFacultyIds || []).forEach(fId => {
+          if (fId && fId !== currentAuthUid) {
+            attQueries.push(
+              db.collection('attendance').where('facultyId', '==', fId).where('sessionId', '==', sessionId).get().catch(() => null)
+            );
+          }
+        });
+
+        const attSnapshots = await Promise.all(attQueries);
+        const presentStudentMap = {};
+        const seenAttRecordIds = new Set();
+
+        attSnapshots.forEach(snap => {
+          if (!snap || snap.empty) return;
+          snap.forEach(doc => {
+            if (!seenAttRecordIds.has(doc.id)) {
+              seenAttRecordIds.add(doc.id);
+              const a = doc.data();
+              if (a.studentUid) presentStudentMap[a.studentUid] = a;
+              if (a.studentId) presentStudentMap[a.studentId] = a;
+            }
+          });
+        });
+
+        // 4. Build students list from subject enrolledRoster or studentIds
+        let students = subjectData?.enrolledRoster || [];
+        if (!students || students.length === 0) {
+          const sIds = subjectData?.studentIds || [];
+          students = sIds.map(id => ({ id, name: 'Student', usn: '' }));
+        }
+
+        let presentCount = 0;
+        students.forEach(stu => {
+          const isPresent = Boolean(presentStudentMap[stu.id] || (stu.uid && presentStudentMap[stu.uid]));
+          if (isPresent) presentCount++;
+        });
+        const totalCount = students.length;
+        const pct = totalCount > 0 ? ((presentCount / totalCount) * 100).toFixed(1) : '0.0';
+
+        if (meta) {
+          meta.innerHTML = `📅 Date: <strong>${dateStr}</strong> • Class <strong>#${classNum}</strong> • Present: <strong style="color:var(--emerald-dark);">${presentCount} / ${totalCount}</strong> (${pct}%)`;
+        }
+
+        if (!tbody) return;
+
+        if (students.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty">No enrolled students in this course offering.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = students.map((stu, index) => {
+          const attRecord = presentStudentMap[stu.id] || (stu.uid ? presentStudentMap[stu.uid] : null);
+          const isPresent = Boolean(attRecord);
+          const statusBadge = isPresent
+            ? `<span class="badge green">🟢 Present${attRecord?.attendanceMethod === 'correction' ? ' (Correction)' : ''}</span>`
+            : '<span class="badge red">🔴 Absent</span>';
+          return `
+            <tr>
+              <td>${index + 1}</td>
+              <td><strong>${stu.name || 'Student'}</strong></td>
+              <td><span class="badge" style="font-weight:600;">${stu.usn || '-'}</span></td>
+              <td>${statusBadge}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('openSessionAttendanceModal error:', err);
+        if (tbody) {
+          tbody.innerHTML = `<tr><td colspan="4" class="empty" style="color:var(--crimson-dark);">Unable to load student attendance roster. Please try again.</td></tr>`;
+        }
+      }
+    }
+
+    function closeSessionAttendanceModal() {
+      const modal = document.getElementById('sessionAttendanceModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function closeSessionAttendanceModalOnBackdrop(e) {
+      if (e.target.id === 'sessionAttendanceModal') {
+        closeSessionAttendanceModal();
+      }
+    }
+
     // Step 9: Use subject.enrolledRoster for non-sensitive display (zero queries to students collection)
     async function loadAnalytics() {
-      const subjectId = document.getElementById('analyticsSubject').value;
+      const subjectId = document.getElementById('analyticsSubject')?.value;
       const container = document.getElementById('analyticsContainer');
+      if (!container) return;
+
       if (!subjectId) {
         container.innerHTML = '<p class="empty">Select a subject above to view attendance matrix.</p>';
         return;
       }
+
+      container.innerHTML = '<p class="empty">Loading subject attendance analytics matrix...</p>';
+
       try {
         const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
         if (!currentAuthUid) {
-          throw new Error('Faculty authentication session not found.');
+          container.innerHTML = '<p class="empty">Please log in to view analytics.</p>';
+          return;
         }
 
         // 1. Fetch Subject Document (authorized for assigned faculty)
-        const subjectDoc = await db.collection('subjects').doc(subjectId).get();
-        if (!subjectDoc.exists) {
+        const subjectDoc = await db.collection('subjects').doc(subjectId).get().catch(() => null);
+        if (!subjectDoc || !subjectDoc.exists) {
           container.innerHTML = '<p class="empty">Subject record not found.</p>';
           return;
         }
@@ -604,55 +1452,37 @@
 
         // 2. Fetch Sessions for this subject using authorized queries
         const sessionQueries = [
-          db.collection('attendanceSessions')
-            .where('facultyUid', '==', currentAuthUid)
-            .where('subjectId', '==', subjectId)
-            .get()
-            .catch(() => null)
+          db.collection('attendanceSessions').where('facultyUid', '==', currentAuthUid).where('subjectId', '==', subjectId).get().catch(() => null),
+          db.collection('attendanceSessions').where('facultyId', '==', currentAuthUid).where('subjectId', '==', subjectId).get().catch(() => null)
         ];
-        if (facultyId && facultyId !== currentAuthUid) {
+        (allFacultyIds || []).forEach(fId => {
+          if (fId && fId !== currentAuthUid) {
+            sessionQueries.push(
+              db.collection('attendanceSessions').where('facultyId', '==', fId).where('subjectId', '==', subjectId).get().catch(() => null)
+            );
+          }
+        });
+        if (subject.facultyId) {
           sessionQueries.push(
-            db.collection('attendanceSessions')
-              .where('facultyId', '==', facultyId)
-              .where('subjectId', '==', subjectId)
-              .get()
-              .catch(() => null)
-          );
-        }
-        if (subject.facultyId && subject.facultyId !== currentAuthUid && subject.facultyId !== facultyId) {
-          sessionQueries.push(
-            db.collection('attendanceSessions')
-              .where('facultyId', '==', subject.facultyId)
-              .where('subjectId', '==', subjectId)
-              .get()
-              .catch(() => null)
+            db.collection('attendanceSessions').where('facultyId', '==', subject.facultyId).where('subjectId', '==', subjectId).get().catch(() => null)
           );
         }
 
         // 3. Fetch Attendance records for this subject using authorized queries
         const attendanceQueries = [
-          db.collection('attendance')
-            .where('facultyUid', '==', currentAuthUid)
-            .where('subjectId', '==', subjectId)
-            .get()
-            .catch(() => null)
+          db.collection('attendance').where('facultyUid', '==', currentAuthUid).where('subjectId', '==', subjectId).get().catch(() => null),
+          db.collection('attendance').where('facultyId', '==', currentAuthUid).where('subjectId', '==', subjectId).get().catch(() => null)
         ];
-        if (facultyId && facultyId !== currentAuthUid) {
+        (allFacultyIds || []).forEach(fId => {
+          if (fId && fId !== currentAuthUid) {
+            attendanceQueries.push(
+              db.collection('attendance').where('facultyId', '==', fId).where('subjectId', '==', subjectId).get().catch(() => null)
+            );
+          }
+        });
+        if (subject.facultyId) {
           attendanceQueries.push(
-            db.collection('attendance')
-              .where('facultyId', '==', facultyId)
-              .where('subjectId', '==', subjectId)
-              .get()
-              .catch(() => null)
-          );
-        }
-        if (subject.facultyId && subject.facultyId !== currentAuthUid && subject.facultyId !== facultyId) {
-          attendanceQueries.push(
-            db.collection('attendance')
-              .where('facultyId', '==', subject.facultyId)
-              .where('subjectId', '==', subjectId)
-              .get()
-              .catch(() => null)
+            db.collection('attendance').where('facultyId', '==', subject.facultyId).where('subjectId', '==', subjectId).get().catch(() => null)
           );
         }
 
@@ -665,7 +1495,7 @@
         const seenSessionIds = new Set();
         const sessions = [];
         sessionSnapshots.forEach(snap => {
-          if (!snap) return;
+          if (!snap || snap.empty) return;
           snap.forEach(doc => {
             if (!seenSessionIds.has(doc.id)) {
               seenSessionIds.add(doc.id);
@@ -684,7 +1514,7 @@
         const seenAttDocIds = new Set();
         const attendanceBySession = {};
         attendanceSnapshots.forEach(snap => {
-          if (!snap) return;
+          if (!snap || snap.empty) return;
           snap.forEach(doc => {
             if (!seenAttDocIds.has(doc.id)) {
               seenAttDocIds.add(doc.id);
@@ -700,9 +1530,6 @@
         });
 
         // Build roster from non-sensitive enrolledRoster cache, with graceful fallback
-        const rosterMap = {};
-        enrolledRoster.forEach(r => { if (r && r.id) rosterMap[r.id] = r.name || 'Student'; });
-
         let students = [];
         if (enrolledRoster.length > 0) {
           students = enrolledRoster.map(r => ({
@@ -713,7 +1540,7 @@
         } else {
           students = studentIds.map(id => ({
             id: id,
-            name: rosterMap[id] || `Student (${id.substring(0, 6)}...)`,
+            name: `Student (${id.substring(0, 6)}...)`,
             usn: ''
           }));
         }
@@ -723,7 +1550,7 @@
           return;
         }
 
-        // Generate the attendance matrix table
+        // Generate the attendance matrix table (conducted sessions as denominator)
         let html = '<div class="att-matrix"><table><thead><tr><th>Enrolled Student</th>';
         sessions.forEach(s => {
           const dateStr = s.date || '';
@@ -749,8 +1576,8 @@
         html += `<p style="margin-top:12px; font-size:0.82rem; color:var(--text-muted); font-weight:500;">Summary: ${sessions.length} total session(s) conducted | ${students.length} enrolled student(s)</p>`;
         container.innerHTML = html;
       } catch (err) {
-        container.innerHTML = `<p class="empty" style="color:var(--crimson-dark);">Error loading analytics: ${err.message}</p>`;
         console.error('loadAnalytics error:', err);
+        container.innerHTML = `<p class="empty" style="color:var(--crimson-dark);">Unable to load analytics: ${err.message}</p>`;
       }
     }
 
@@ -781,16 +1608,22 @@
           db.collection('attendanceCorrectionRequests')
             .where('facultyUid', '==', currentAuthUid)
             .get()
+            .catch(() => null),
+          db.collection('attendanceCorrectionRequests')
+            .where('facultyId', '==', currentAuthUid)
+            .get()
             .catch(() => null)
         ];
-        if (facultyId && facultyId !== currentAuthUid) {
-          queries.push(
-            db.collection('attendanceCorrectionRequests')
-              .where('facultyId', '==', facultyId)
-              .get()
-              .catch(() => null)
-          );
-        }
+        (allFacultyIds || []).forEach(fId => {
+          if (fId && fId !== currentAuthUid) {
+            queries.push(
+              db.collection('attendanceCorrectionRequests')
+                .where('facultyId', '==', fId)
+                .get()
+                .catch(() => null)
+            );
+          }
+        });
 
         const snapshots = await Promise.all(queries);
         const seenDocIds = new Set();
@@ -825,7 +1658,7 @@
       } catch (err) {
         console.error('loadFacultyCorrectionRequests error:', err);
         if (container) {
-          container.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Error loading correction requests: ' + err.message + '</p>';
+          container.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Unable to load correction requests. Please refresh the page.</p>';
         }
       }
     }
@@ -996,7 +1829,12 @@
       }
 
       // Step 2: Verify current faculty authorization for the request
-      const isAuthFaculty = (req.facultyUid === currentAuthUid || req.facultyId === currentAuthUid || req.facultyId === facultyId || (facultyUid && req.facultyUid === facultyUid));
+      const isAuthFaculty = (
+        req.facultyUid === currentAuthUid ||
+        req.facultyId === currentAuthUid ||
+        (allFacultyIds || []).includes(req.facultyId) ||
+        (allFacultyIds || []).includes(req.facultyUid)
+      );
       if (!isAuthFaculty) {
         alert('Unauthorized: You are not authorized to approve this request.');
         return;
@@ -1025,7 +1863,12 @@
         console.log('APPROVAL STEP 3 SUCCEEDED. Session data:', sessionData);
 
         // Step 4: Verify session ownership
-        const isSessionOwner = (sessionData.facultyUid === currentAuthUid || sessionData.facultyId === currentAuthUid || sessionData.facultyId === facultyId || (facultyUid && sessionData.facultyUid === facultyUid));
+        const isSessionOwner = (
+          sessionData.facultyUid === currentAuthUid ||
+          sessionData.facultyId === currentAuthUid ||
+          (allFacultyIds || []).includes(sessionData.facultyId) ||
+          (allFacultyIds || []).includes(sessionData.facultyUid)
+        );
         if (!isSessionOwner) {
           alert('Error: This attendance session does not belong to your faculty account.');
           return;
@@ -1048,15 +1891,8 @@
         const subjectData = subjectDoc.data();
         console.log('APPROVAL STEP 5 SUCCEEDED. Subject studentIds:', subjectData.studentIds);
 
-        // Step 6: Verify student enrollment & resolve profile metadata
         const targetStudentUid = req.studentUid;
         const targetStudentId = req.studentId;
-
-        let studentDoc = await db.collection('students').doc(targetStudentUid).get().catch(() => null);
-        if ((!studentDoc || !studentDoc.exists) && targetStudentId && targetStudentId !== targetStudentUid) {
-          studentDoc = await db.collection('students').doc(targetStudentId).get().catch(() => null);
-        }
-        const studentData = (studentDoc && studentDoc.exists) ? studentDoc.data() : null;
 
         const enrolledIds = subjectData.studentIds || [];
         const isEnrolled = enrolledIds.includes(targetStudentUid) || (targetStudentId && enrolledIds.includes(targetStudentId));
@@ -1066,13 +1902,12 @@
         }
 
         const rosterEntry = (subjectData.enrolledRoster || []).find(r => r && (r.id === targetStudentUid || (targetStudentId && r.id === targetStudentId)));
-        const finalStudentName = req.studentName || studentData?.name || rosterEntry?.name || 'Student';
-        const finalStudentUsn = req.studentUsn || studentData?.usn || rosterEntry?.usn || '';
-        const finalStudentDept = req.studentDept || studentData?.dept || studentData?.department || '';
-        const finalStudentSemester = req.studentSemester || (studentData?.semester ? parseInt(studentData.semester, 10) : 1);
-        const finalStudentSection = req.studentSection || studentData?.section || 'A';
+        const finalStudentName = req.studentName || rosterEntry?.name || 'Student';
+        const finalStudentUsn = req.studentUsn || rosterEntry?.usn || '';
+        const finalStudentDept = req.studentDept || subjectData.departmentId || subjectData.department || '';
+        const finalStudentSemester = req.studentSemester || subjectData.semester || 1;
+        const finalStudentSection = req.studentSection || subjectData.section || 'A';
 
-        // Step 7: Duplicate attendance check with faculty-authorized query
         console.log('APPROVAL STEP 7: Checking for duplicate attendance in attendance collection');
         try {
           const dupQueries = [
@@ -1081,16 +1916,26 @@
               .where('sessionId', '==', req.sessionId)
               .where('studentUid', '==', targetStudentUid)
               .get()
+              .catch(() => null),
+            db.collection('attendance')
+              .where('facultyId', '==', currentAuthUid)
+              .where('sessionId', '==', req.sessionId)
+              .where('studentUid', '==', targetStudentUid)
+              .get()
+              .catch(() => null)
           ];
-          if (facultyId && facultyId !== currentAuthUid) {
-            dupQueries.push(
-              db.collection('attendance')
-                .where('facultyId', '==', facultyId)
-                .where('sessionId', '==', req.sessionId)
-                .where('studentUid', '==', targetStudentUid)
-                .get()
-            );
-          }
+          (allFacultyIds || []).forEach(fId => {
+            if (fId && fId !== currentAuthUid) {
+              dupQueries.push(
+                db.collection('attendance')
+                  .where('facultyId', '==', fId)
+                  .where('sessionId', '==', req.sessionId)
+                  .where('studentUid', '==', targetStudentUid)
+                  .get()
+                  .catch(() => null)
+              );
+            }
+          });
           const dupSnaps = await Promise.all(dupQueries);
           const hasDuplicate = dupSnaps.some(s => s && !s.empty);
           if (hasDuplicate) {
@@ -1103,7 +1948,6 @@
         }
         console.log('APPROVAL STEP 7 SUCCEEDED: No duplicate attendance found.');
 
-        // Step 8: Create attendance record
         console.log('APPROVAL STEP 8: Creating attendance record in attendance collection');
         const now = new Date();
         const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -1135,15 +1979,15 @@
         };
         console.log('APPROVAL STEP 8 PAYLOAD:', attendancePayload);
 
+        const attDocId = `${req.sessionId}_${targetStudentUid}`;
         try {
-          await db.collection('attendance').add(attendancePayload);
+          await db.collection('attendance').doc(attDocId).set(attendancePayload);
         } catch (err) {
           console.error('APPROVAL STEP 8 FAILED (Attendance creation):', err);
           throw new Error('Attendance creation failed: ' + err.message);
         }
-        console.log('APPROVAL STEP 8 SUCCEEDED: Attendance record created.');
+        console.log('APPROVAL STEP 8 SUCCEEDED: Attendance record created with ID:', attDocId);
 
-        // Step 9: Update correction request status to 'approved'
         console.log('APPROVAL STEP 9: Updating request status in attendanceCorrectionRequests/' + requestId);
         const reqRef = db.collection('attendanceCorrectionRequests').doc(requestId);
         try {
@@ -1155,13 +1999,18 @@
           });
         } catch (err) {
           console.error('APPROVAL STEP 9 FAILED (Request update):', err);
-          throw new Error('Request status update failed: ' + err.message);
+          throw new Error('Correction request status update failed: ' + err.message);
         }
-        console.log('APPROVAL STEP 9 SUCCEEDED: Request status updated to approved.');
+        console.log('APPROVAL STEP 9 SUCCEEDED: Request status updated.');
 
+        console.log('APPROVAL STEP 10: Refreshing faculty datasets');
+        await Promise.allSettled([
+          loadFacultyCorrectionRequests(),
+          loadActiveSessions(),
+          loadAnalytics()
+        ]);
+        console.log('APPROVAL WORKFLOW FULLY COMPLETED.');
         alert('✓ Attendance correction approved successfully! Attendance record created.');
-        await loadFacultyCorrectionRequests();
-        loadAnalytics();
       } catch (err) {
         console.error('approveCorrectionRequest overall error:', err);
         alert('Failed to approve request: ' + err.message);
@@ -1256,8 +2105,11 @@
           msgEl.className = 'msg error';
           msgEl.style.display = 'block';
         }
-        btn.disabled = false;
-        btn.textContent = 'Reject Request';
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Reject Request';
+        }
       }
     }
 
@@ -1267,6 +2119,7 @@
     }
 
     async function logout() {
+      if (refreshIntervalId) clearInterval(refreshIntervalId);
       try {
         await auth.signOut();
       } catch (e) {
