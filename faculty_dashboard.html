@@ -320,6 +320,7 @@
     let facultyName = localStorage.getItem('facultyName') || 'Faculty';
     let facultyDept = localStorage.getItem('facultyDept') || '';
     let gpsAccuracyThreshold = 50;
+    let attendanceSettings = null;
     let isDashboardInitialized = false;
     let refreshIntervalId = null;
 
@@ -451,13 +452,18 @@
     async function loadSettings() {
       try {
         const snap = await db.collection('settings').doc('attendance').get();
-        if (snap.exists) {
-          gpsAccuracyThreshold = snap.data().gpsAccuracyThreshold || 50;
-        } else {
-          gpsAccuracyThreshold = 50;
-        }
+        const data = snap.exists ? snap.data() : {};
+        gpsAccuracyThreshold = Number.isFinite(data.gpsAccuracyThreshold) ? data.gpsAccuracyThreshold : 50;
+        attendanceSettings = {
+          ...data,
+          distanceThreshold: Number.isFinite(data.distanceThreshold) ? data.distanceThreshold : 50,
+          gpsAccuracyThreshold,
+          latitude: Number.isFinite(data.latitude) && data.latitude >= -90 && data.latitude <= 90 ? data.latitude : null,
+          longitude: Number.isFinite(data.longitude) && data.longitude >= -180 && data.longitude <= 180 ? data.longitude : null
+        };
       } catch (err) {
         gpsAccuracyThreshold = 50;
+        attendanceSettings = { distanceThreshold: 50, gpsAccuracyThreshold, latitude: null, longitude: null };
       }
     }
 
@@ -1083,10 +1089,36 @@
     }
 
     async function startAttendance(subjectId, subjectName, button, customDuration = null) {
+      const debug = {
+        subjectId,
+        subjectName,
+        subjectCode: null,
+        authUid: auth.currentUser?.uid || null,
+        facultyId: facultyId || null,
+        facultyUid: facultyUid || null,
+        gps: { requested: false, succeeded: false, latitude: null, longitude: null, accuracy: null, timestamp: null, ageMs: null, threshold: null },
+        subjectExists: null,
+        sessionPayload: null,
+        writeAttempted: false,
+        sessionId: null,
+        errorCode: null,
+        errorMessage: null
+      };
+      console.group('[FACULTY SESSION DEBUG START]');
+      console.log('subjectId:', subjectId);
+      console.log('subjectName:', subjectName);
       if (button) {
         button.disabled = true;
       }
       await loadSettings();
+      debug.authUid = auth.currentUser?.uid || null;
+      debug.facultyId = facultyId || null;
+      debug.facultyUid = facultyUid || null;
+      debug.gps.threshold = gpsAccuracyThreshold;
+      console.log('authUid:', debug.authUid);
+      console.log('facultyUid:', debug.facultyUid);
+      console.log('facultyId:', debug.facultyId);
+      console.log('gpsAccuracyThreshold:', debug.gps.threshold);
       let duration = customDuration;
       if (!duration) {
         const durEl = document.getElementById(`duration-${subjectId}`);
@@ -1118,26 +1150,55 @@
 
         statusMsg.textContent = 'Capturing GPS location...';
 
-        if (!navigator.geolocation) {
+        const hasInstitutionLocation = Number.isFinite(attendanceSettings?.latitude) && Number.isFinite(attendanceSettings?.longitude);
+        let selectedPos = null;
+        let selectedAccuracyMeters = null;
+        let locationSource = 'faculty_device';
+        if (hasInstitutionLocation) {
+          locationSource = 'institution';
+          selectedPos = { coords: { latitude: attendanceSettings.latitude, longitude: attendanceSettings.longitude, accuracy: null } };
+          statusMsg.textContent = `Using configured attendance location: ${attendanceSettings.locationName || 'Institution'}`;
+          console.log('[FACULTY SESSION LOCATION]', {
+            locationSource,
+            locationName: attendanceSettings.locationName || null,
+            latitude: attendanceSettings.latitude,
+            longitude: attendanceSettings.longitude,
+            geofenceRadius: attendanceSettings.distanceThreshold,
+            gpsAccuracyThreshold: attendanceSettings.gpsAccuracyThreshold
+          });
+        } else if (!navigator.geolocation) {
           statusMsg.className = 'msg error';
           statusMsg.textContent = 'Geolocation not supported by this browser.';
           if (button) button.disabled = false;
           return;
-        }
+        } else {
         const maxAttempts = 3;
         const retryDelayMs = 1200;
         const getPosition = () => new Promise((resolvePos, rejectPos) => {
-          navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, { enableHighAccuracy: true, timeout: 30000, maximumAge: 15000 });
+          debug.gps.requested = true;
+          navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 });
         });
 
-        let selectedPos = null;
-        let selectedAccuracyMeters = null;
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
           statusMsg.className = 'msg info';
           statusMsg.textContent = `Capturing GPS location (attempt ${attempt}/${maxAttempts})...`;
           try {
             const pos = await getPosition();
             const accuracyMeters = typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null;
+            debug.gps.succeeded = true;
+            debug.gps.latitude = pos.coords.latitude;
+            debug.gps.longitude = pos.coords.longitude;
+            debug.gps.accuracy = accuracyMeters;
+            debug.gps.timestamp = Number.isFinite(pos.timestamp) ? pos.timestamp : null;
+            debug.gps.ageMs = Number.isFinite(pos.timestamp) ? Math.max(0, Date.now() - pos.timestamp) : null;
+            console.log('GPS success:', debug.gps);
+            console.log('[FACULTY GPS DIAGNOSTIC]', {
+              latitude: debug.gps.latitude,
+              longitude: debug.gps.longitude,
+              accuracy: debug.gps.accuracy,
+              timestamp: debug.gps.timestamp,
+              ageMs: debug.gps.ageMs
+            });
             if (accuracyMeters !== null && accuracyMeters > gpsAccuracyThreshold) {
               if (attempt < maxAttempts) {
                 statusMsg.className = 'msg info';
@@ -1154,6 +1215,7 @@
             selectedAccuracyMeters = accuracyMeters;
             break;
           } catch (err) {
+            console.error('[FACULTY GPS ERROR]', { code: err?.code, message: err?.message || String(err), attempt });
             if (err?.code === 1) {
               statusMsg.className = 'msg error';
               statusMsg.textContent = 'Location access denied. Please allow location permissions.';
@@ -1171,6 +1233,7 @@
             if (button) button.disabled = false;
             return;
           }
+        }
         }
 
         if (!selectedPos) {
@@ -1196,14 +1259,23 @@
           const subSnap = await db.collection('subjects').doc(subjectId).get().catch(() => null);
           if (subSnap && subSnap.exists) subjectData = subSnap.data();
         }
+        debug.subjectExists = Boolean(subjectData);
+        debug.subjectCode = subjectData?.subjectCode || null;
+        console.log('subjectExists:', debug.subjectExists);
+        console.log('subjectCode:', debug.subjectCode);
 
-        await db.collection('attendanceSessions').add({
+        const sessionPayload = {
           subjectId,
           subjectName: subjectData?.subjectName || subjectName || 'Subject',
           subjectCode: subjectData?.subjectCode || '',
           facultyId: facultyId || currentAuthUid,
           facultyUid: currentAuthUid,
           facultyName: facultyName || subjectData?.facultyName || 'Faculty',
+          locationSource,
+          locationAccuracy: selectedAccuracyMeters,
+          locationName: locationSource === 'institution' ? (attendanceSettings.locationName || 'Institution') : 'Faculty Device',
+          geofenceRadius: attendanceSettings.distanceThreshold,
+          gpsAccuracyThreshold: attendanceSettings.gpsAccuracyThreshold,
           departmentId: subjectData?.departmentId || subjectData?.department || '',
           departmentName: subjectData?.departmentName || '',
           semester: subjectData?.semester || 1,
@@ -1218,19 +1290,48 @@
           longitude: selectedPos.coords.longitude,
           expiresAt: endTimeObj,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        };
+        debug.sessionPayload = {
+          ...sessionPayload,
+          expiresAt: endTimeObj.toISOString(),
+          createdAt: '[serverTimestamp]'
+        };
+        console.log('session payload:', debug.sessionPayload);
+        debug.writeAttempted = true;
+        console.log('Firestore write: attendanceSessions.add(payload)');
+        const sessionRef = await db.collection('attendanceSessions').add(sessionPayload);
+        debug.sessionId = sessionRef.id;
+        console.log('[FACULTY SESSION CREATED]', { sessionId: sessionRef.id, subjectId, facultyUid: currentAuthUid });
         statusMsg.className = 'msg success';
         statusMsg.textContent = `Attendance started! Class ${classNumber} (GPS: ${selectedAccuracyMeters !== null ? `${selectedAccuracyMeters.toFixed(1)}m` : 'OK'})`;
+        console.log('[ATTENDANCE SESSION CREATED]', { sessionId: sessionRef.id, subjectId, facultyUid: currentAuthUid });
         setTimeout(() => {
           loadActiveSessions();
           loadSubjects();
           loadFacultyTimetable();
         }, 1000);
       } catch (err) {
+        debug.errorCode = err?.code || null;
+        debug.errorMessage = err?.message || String(err);
+        console.error('[FACULTY SESSION WRITE ERROR]', {
+          code: debug.errorCode,
+          message: debug.errorMessage,
+          subjectId,
+          subjectCode: debug.subjectCode,
+          authUid: debug.authUid,
+          facultyUid: debug.facultyUid,
+          facultyId: debug.facultyId,
+          gps: debug.gps,
+          writeAttempted: debug.writeAttempted
+        });
         statusMsg.className = 'msg error';
         statusMsg.textContent = 'Error: ' + err.message;
       } finally {
         if (button) button.disabled = false;
+        console.log('sessionId:', debug.sessionId);
+        console.log('writeAttempted:', debug.writeAttempted);
+        console.groupEnd();
+        console.log('[FACULTY SESSION DEBUG END]');
       }
     }
 

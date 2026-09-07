@@ -214,7 +214,6 @@ service cloud.firestore {
           && exists(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId))
           && (
             get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.facultyId == request.auth.uid ||
-            ('facultyId' in request.resource.data && get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.facultyId == request.resource.data.facultyId) ||
             ('facultyUid' in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data && get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.facultyUid == request.auth.uid) ||
             (
               'facultyId' in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data &&
@@ -232,7 +231,8 @@ service cloud.firestore {
       );
       allow create: if isAdmin() || isValidFacultySessionCreation();
       allow update: if isAdmin() || (
-        isSignedIn() && (
+        isSignedIn() && request.resource.data.active == false &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active']) && (
           ('facultyUid' in resource.data && resource.data.facultyUid == request.auth.uid) ||
           ('facultyId' in resource.data && resource.data.facultyId == request.auth.uid) ||
           (
@@ -313,6 +313,14 @@ service cloud.firestore {
             ('attendanceMethod' in request.resource.data && request.resource.data.attendanceMethod == 'correction') ||
             ('source' in request.resource.data && request.resource.data.source == 'faculty_correction')
           )
+          && 'correctionRequestId' in request.resource.data
+          && request.resource.data.correctionRequestId is string
+          && request.resource.data.correctionRequestId != ''
+          && exists(/databases/$(database)/documents/attendanceCorrectionRequests/$(request.resource.data.correctionRequestId))
+          && get(/databases/$(database)/documents/attendanceCorrectionRequests/$(request.resource.data.correctionRequestId)).data.status == 'pending'
+          && get(/databases/$(database)/documents/attendanceCorrectionRequests/$(request.resource.data.correctionRequestId)).data.sessionId == request.resource.data.sessionId
+          && get(/databases/$(database)/documents/attendanceCorrectionRequests/$(request.resource.data.correctionRequestId)).data.subjectId == request.resource.data.subjectId
+          && get(/databases/$(database)/documents/attendanceCorrectionRequests/$(request.resource.data.correctionRequestId)).data.studentUid == request.resource.data.studentUid
           && exists(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId))
           && exists(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId))
           && get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.subjectId == request.resource.data.subjectId
@@ -336,6 +344,7 @@ service cloud.firestore {
       allow create: if isAdmin() || (isSignedIn() && (isValidAttendanceSubmission() || isValidFacultyCorrectionAttendance()));
       allow read: if isAdmin() || (
         isSignedIn() && (
+          recordId.matches('^.*_' + request.auth.uid + '$') ||
           ('studentUid' in resource.data && resource.data.studentUid == request.auth.uid) ||
           ('studentId' in resource.data && resource.data.studentId == request.auth.uid) ||
           ('facultyUid' in resource.data && resource.data.facultyUid == request.auth.uid) ||

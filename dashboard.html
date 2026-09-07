@@ -406,11 +406,13 @@
     let deptMap = {};
 
     let activeSessions = {};
+    let attendanceStateBySession = {};
     let studentSubjectDocs = [];
     let studentSubjectsMap = {};
     let studentSubjectsAttendance = {}; // { subjectId: { present: 0, total: 0 } }
     let distanceThreshold = 10;
     let gpsAccuracyThreshold = 50;
+    let gpsAttemptToken = 0;
     const faceDistanceThreshold = 0.6;
     let modelsLoaded = false;
     const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.1/weights';
@@ -631,6 +633,41 @@
       }
     }
 
+    function getAttendanceDocId(sessionId, uid = auth.currentUser?.uid || studentUid) {
+      return sessionId && uid ? `${sessionId}_${uid}` : null;
+    }
+
+    function setAttendanceState(sessionId, state) {
+      if (sessionId) attendanceStateBySession[sessionId] = state;
+    }
+
+    function lockAttendanceControls(state, message) {
+      const captureBtn = document.getElementById('captureAttBtn');
+      const startBtn = document.getElementById('startAttBtn');
+      if (state === 'MARKED' || state === 'ALREADY_MARKED') {
+        if (captureBtn) captureBtn.disabled = true;
+        if (startBtn) startBtn.disabled = true;
+        stopVideoStream(document.getElementById('attVideo'));
+        const wrap = document.getElementById('attScannerWrap');
+        if (wrap) wrap.classList.remove('is-scanning');
+        showMsg('attMsg', 'success', message || 'You have already marked attendance for this class.');
+      }
+    }
+
+    async function checkAttendanceForSession(subjectId, session) {
+      const uid = auth.currentUser?.uid;
+      const sessionId = session?.id;
+      if (!uid || !sessionId) return { exists: false, state: 'FAILED' };
+      const attendanceDocId = getAttendanceDocId(sessionId, uid);
+      const existingDoc = await db.collection('attendance').doc(attendanceDocId).get();
+      const exists = existingDoc.exists;
+      setAttendanceState(sessionId, exists ? 'ALREADY_MARKED' : 'READY');
+      if (exists) {
+        lockAttendanceControls('ALREADY_MARKED');
+      }
+      return { exists, state: exists ? 'ALREADY_MARKED' : 'READY', attendanceDocId };
+    }
+
     async function loadSettings() {
       try {
         const snap = await db.collection('settings').doc('attendance').get();
@@ -808,13 +845,17 @@
           }
         }
 
-        // Populate dropdown options
+        // Preserve the selected subject while the periodic session refresh rebuilds options.
+        const selectedSubjectId = selectEl.value;
         selectEl.innerHTML = '<option value="">-- Select Active Subject to Verify --</option>';
         studentSubjectDocs.forEach(s => {
           const hasLive = Boolean(activeSessions[s.id]);
           const optPrefix = hasLive ? '🟢 [LIVE] ' : '⚪ ';
           selectEl.innerHTML += `<option value="${s.id}" ${hasLive ? 'data-live="true"' : ''}>${optPrefix}${s.subjectName} (${s.subjectCode || 'Course'})</option>`;
         });
+        if (selectedSubjectId && activeSessions[selectedSubjectId]) {
+          selectEl.value = selectedSubjectId;
+        }
 
         // Re-render subject cards with live session tags and buttons
         renderSubjectsUI();
@@ -838,6 +879,8 @@
       listEl.innerHTML = studentSubjectDocs.map(s => {
         const liveSession = activeSessions[s.id];
         const hasLive = Boolean(liveSession);
+        const sessionState = liveSession ? attendanceStateBySession[liveSession.id] : null;
+        const alreadyMarked = sessionState === 'MARKED' || sessionState === 'ALREADY_MARKED';
         const facultyName = s.facultyName || 'Faculty';
         const sem = s.semester || studentSemester || '1';
         const sec = s.section || studentSection || 'A';
@@ -895,7 +938,13 @@
         const progressWidth = Math.min(100, Math.max(0, rawPct));
 
         let actionHtml = '';
-        if (hasLive) {
+        if (hasLive && alreadyMarked) {
+          actionHtml = `
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid rgba(16, 185, 129, 0.2);">
+              <span class="badge green">✓ Attendance Marked</span>
+              <span style="font-size:0.8rem; color:var(--text-muted);">You have already marked attendance for this class.</span>
+            </div>`;
+        } else if (hasLive) {
           actionHtml = `
             <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid rgba(16, 185, 129, 0.2);">
               <div>
@@ -1050,7 +1099,10 @@
         if (myAttSnap) {
           myAttSnap.forEach(doc => {
             const a = doc.data();
-            if (a.sessionId) studentPresentSessionIds.add(a.sessionId);
+            if (a.sessionId) {
+              studentPresentSessionIds.add(a.sessionId);
+              setAttendanceState(a.sessionId, 'MARKED');
+            }
           });
         }
 
@@ -1256,7 +1308,7 @@
     }
 
     // Helper: Selects active subject and scrolls to the verification scanner
-    function selectSubjectForAttendance(subjectId) {
+    async function selectSubjectForAttendance(subjectId) {
       const card = document.getElementById('markAttendanceCard');
       if (card) {
         card.classList.add('open');
@@ -1264,18 +1316,20 @@
       const selectEl = document.getElementById('subjectSelect');
       if (selectEl) {
         selectEl.value = subjectId;
-        onSubjectSelectChange();
+        await onSubjectSelectChange();
       }
       if (card) {
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
       const startAttBtn = document.getElementById('startAttBtn');
-      if (startAttBtn && !startAttBtn.disabled) {
+      const selectedSession = activeSessions[subjectId];
+      const selectedState = selectedSession ? attendanceStateBySession[selectedSession.id] : null;
+      if (startAttBtn && !startAttBtn.disabled && selectedState !== 'MARKED' && selectedState !== 'ALREADY_MARKED') {
         startAttendance();
       }
     }
 
-    function onSubjectSelectChange() {
+    async function onSubjectSelectChange() {
       const selectEl = document.getElementById('subjectSelect');
       const infoBox = document.getElementById('selectedSubjectInfo');
       const subjectId = selectEl.value;
@@ -1309,10 +1363,30 @@
           `;
         }
       }
+      if (liveSession) {
+        const attendanceStatus = await checkAttendanceForSession(subjectId, liveSession).catch(() => null);
+        const startBtn = document.getElementById('startAttBtn');
+        const captureBtn = document.getElementById('captureAttBtn');
+        if (attendanceStatus?.exists) {
+          if (startBtn) startBtn.disabled = true;
+          if (captureBtn) captureBtn.disabled = true;
+          return;
+        }
+        stopVideoStream(document.getElementById('attVideo'));
+        if (startBtn) startBtn.disabled = false;
+        if (captureBtn) captureBtn.disabled = true;
+        const gpsInfo = document.getElementById('gpsInfo');
+        if (gpsInfo) {
+          gpsInfo.style.display = 'none';
+          gpsInfo.textContent = '';
+        }
+      } else {
+        const captureBtn = document.getElementById('captureAttBtn');
+        if (captureBtn) captureBtn.disabled = true;
+      }
     }
 
     async function getLatestSession(subjectId) {
-      if (activeSessions[subjectId]) return activeSessions[subjectId];
       try {
         const snap = await db.collection('attendanceSessions')
           .where('subjectId', '==', subjectId)
@@ -1366,38 +1440,13 @@
       return R * c;
     }
 
-    async function checkDuplicate(subjectId, sessionId) {
-      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
-      if (!currentAuthUid || !sessionId) return false;
-      try {
-        const queries = [
-          db.collection('attendance')
-            .where('studentUid', '==', currentAuthUid)
-            .where('sessionId', '==', sessionId)
-            .get()
-        ];
-        if (studentId && studentId !== currentAuthUid) {
-          queries.push(
-            db.collection('attendance')
-              .where('studentId', '==', studentId)
-              .where('sessionId', '==', sessionId)
-              .get()
-          );
-        }
-        const snapshots = await Promise.all(queries);
-        return snapshots.some(snap => snap && !snap.empty);
-      } catch (err) {
-        console.error('checkDuplicate error:', err);
-        return false;
-      }
-    }
-
     async function startRegistration() {
       const startBtn = document.getElementById('startRegBtn');
       if (startBtn) startBtn.disabled = true;
       try {
         const ok = await loadModels();
         if (!ok) {
+          setAttendanceState(selectedSession.id, 'FAILED');
           if (startBtn) startBtn.disabled = false;
           return;
         }
@@ -1450,7 +1499,7 @@
 
         const descriptor = Array.from(detections[0].descriptor);
         const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
-        await db.collection('students').doc(studentId || currentAuthUid).update({
+        await db.collection('students').doc(currentAuthUid).update({
           faceDescriptor: descriptor,
           faceRegistered: true
         });
@@ -1492,6 +1541,23 @@
 
     async function startAttendance() {
       const startBtn = document.getElementById('startAttBtn');
+      const selectedSubject = document.getElementById('subjectSelect')?.value;
+      const selectedSession = selectedSubject ? await getLatestSession(selectedSubject) : null;
+      if (!selectedSession) {
+        showMsg('attMsg', 'error', 'No active session found for this subject right now.');
+        return;
+      }
+      const existingSessionState = attendanceStateBySession[selectedSession.id];
+      if (existingSessionState === 'MARKED' || existingSessionState === 'ALREADY_MARKED' || existingSessionState === 'VERIFYING') {
+        if (existingSessionState !== 'VERIFYING') {
+          lockAttendanceControls(existingSessionState);
+        }
+        return;
+      }
+      const attendanceStatus = await checkAttendanceForSession(selectedSubject, selectedSession).catch(() => null);
+      if (attendanceStatus?.exists) return;
+      if (attendanceStateBySession[selectedSession.id] === 'VERIFYING') return;
+      setAttendanceState(selectedSession.id, 'VERIFYING');
       if (startBtn) startBtn.disabled = true;
 
       try {
@@ -1515,19 +1581,163 @@
         const camText = document.getElementById('attCamText');
         if (camText) camText.textContent = 'Camera: Active';
       } catch (err) {
+        setAttendanceState(selectedSession.id, 'FAILED');
+        stopVideoStream(document.getElementById('attVideo'));
+        const wrap = document.getElementById('attScannerWrap');
+        if (wrap) wrap.classList.remove('is-scanning');
+        const camText = document.getElementById('attCamText');
+        if (camText) camText.textContent = 'Camera: Off';
+        const captureBtn = document.getElementById('captureAttBtn');
+        if (captureBtn) captureBtn.disabled = true;
         showMsg('attMsg', 'error', 'Camera access denied: ' + err.message);
         if (startBtn) startBtn.disabled = false;
       }
+    }
+
+    function finishAttendanceDebug(debug) {
+      console.group('[ATTENDANCE DEBUG]');
+      console.log('authUid:', debug.auth.uid);
+      console.log('auth.currentUser exists:', debug.auth.currentUserExists);
+      console.log('auth.currentUser.email:', debug.auth.email);
+      console.log('studentUid:', debug.enrollment.studentUid);
+      console.log('subjectId:', debug.subject.subjectId);
+      console.log('subjectName:', debug.subject.subjectName);
+      console.log('subjectCode:', debug.subject.subjectCode);
+      console.log('sessionId:', debug.session.sessionId);
+      console.log('sessionExists:', debug.session.exists);
+      console.log('sessionActive:', debug.session.active);
+      console.log('sessionSubjectId:', debug.session.subjectId);
+      console.log('sessionFacultyUid:', debug.session.facultyUid);
+      console.log('sessionDate:', debug.session.date);
+      console.log('subjectExists:', debug.enrollment.subjectExists);
+      console.log('subjectFacultyUid:', debug.enrollment.subjectFacultyUid);
+      console.log('subjectFacultyId:', debug.enrollment.subjectFacultyId);
+      console.log('sessionFacultyMatchesSubject:', debug.enrollment.sessionFacultyMatchesSubject);
+      console.log('studentIds contains studentUid:', debug.enrollment.studentIdsContainsStudentUid);
+      console.log('enrollment result:', debug.enrollment.result);
+      console.log('attendanceDocId:', debug.attendanceId.attendanceDocId);
+      console.log('expected format:', debug.attendanceId.expectedFormat);
+      console.log('attendanceExists:', debug.existingAttendance.exists);
+      console.log('faceDetectedCount:', debug.face.detectedCount);
+      console.log('faceVerified:', debug.face.result === 'PASSED');
+      console.log('faceDistance:', debug.face.distance);
+      console.log('faceThreshold:', debug.face.threshold);
+      console.log('faceResult:', debug.face.result);
+      console.log('studentLatitude:', debug.gps.studentLatitude);
+      console.log('studentLongitude:', debug.gps.studentLongitude);
+      console.log('facultyLatitude:', debug.gps.facultyLatitude);
+      console.log('facultyLongitude:', debug.gps.facultyLongitude);
+      console.log('gpsAccuracy:', debug.gps.accuracy);
+      console.log('distanceFromFaculty:', debug.gps.calculatedDistance);
+      console.log('gpsAccuracyThreshold:', debug.gps.accuracyThreshold);
+      console.log('geofenceRadius:', debug.gps.geofenceRadius);
+      console.log('gpsVerified:', debug.gps.result === 'PASSED');
+      console.log('gpsResult:', debug.gps.result);
+      console.log('writeOperation:', debug.write.operation);
+      console.log('writeCollection:', debug.write.collection);
+      console.log('writeDocumentId:', debug.write.documentId);
+      console.log('writeErrorCode:', debug.write.errorCode);
+      console.log('writeErrorMessage:', debug.write.errorMessage);
+      console.log('rule.authenticated:', debug.ruleConditions.authenticated);
+      console.log('rule.studentUidMatchesAuthUid:', debug.ruleConditions.studentUidMatchesAuthUid);
+      console.log('rule.deterministicIdMatches:', debug.ruleConditions.deterministicIdMatches);
+      console.log('rule.sessionExists:', debug.ruleConditions.sessionExists);
+      console.log('rule.subjectExists:', debug.ruleConditions.subjectExists);
+      console.log('rule.sessionActive:', debug.ruleConditions.sessionActive);
+      console.log('rule.sessionSubjectMatchesAttendanceSubject:', debug.ruleConditions.sessionSubjectMatchesAttendanceSubject);
+      console.log('rule.studentEnrolledInSubject:', debug.ruleConditions.studentEnrolledInSubject);
+      console.log('rule.studentCanUpdateAttendance:', debug.ruleConditions.studentCanUpdateAttendance);
+      console.log('rule.studentCanDeleteAttendance:', debug.ruleConditions.studentCanDeleteAttendance);
+      console.groupEnd();
+      console.log('[ATTENDANCE DEBUG END]');
     }
 
     async function markAttendance() {
       const captureBtn = document.getElementById('captureAttBtn');
       const selectedSubject = document.getElementById('subjectSelect').value;
       const failWrap = document.getElementById('faceFailCorrectionWrap');
+      const currentAuthUser = auth.currentUser;
+      const selectedSubjectData = studentSubjectDocs.find(s => s.id === selectedSubject);
+      const attendanceDebug = {
+        auth: {
+          currentUserExists: Boolean(currentAuthUser),
+          uid: currentAuthUser?.uid || null,
+          email: currentAuthUser?.email || null
+        },
+        subject: {
+          subjectId: selectedSubject || null,
+          subjectName: selectedSubjectData?.subjectName || null,
+          subjectCode: selectedSubjectData?.subjectCode || null
+        },
+        session: {
+          sessionId: null,
+          exists: false,
+          active: null,
+          subjectId: null,
+          facultyUid: null,
+          date: null
+        },
+        enrollment: {
+          studentUid: currentAuthUser?.uid || studentUid || null,
+          subjectExists: null,
+          subjectFacultyUid: null,
+          subjectFacultyId: null,
+          sessionFacultyMatchesSubject: null,
+          studentIdsContainsStudentUid: null,
+          result: 'NOT_CHECKED'
+        },
+        attendanceId: {
+          attendanceDocId: null,
+          expectedFormat: null
+        },
+        existingAttendance: {
+          exists: null
+        },
+        face: {
+          detectedCount: null,
+          distance: null,
+          threshold: faceDistanceThreshold,
+          result: 'NOT_CHECKED'
+        },
+        gps: {
+          studentLatitude: null,
+          studentLongitude: null,
+          facultyLatitude: null,
+          facultyLongitude: null,
+          accuracy: null,
+          calculatedDistance: null,
+          timestamp: null,
+          ageMs: null,
+          accuracyThreshold: gpsAccuracyThreshold,
+          geofenceRadius: distanceThreshold,
+          result: 'NOT_CHECKED'
+        },
+        write: {
+          operation: 'CREATE',
+          collection: 'attendance',
+          documentId: null,
+          errorCode: null,
+          errorMessage: null
+        },
+        ruleConditions: {
+          authenticated: Boolean(currentAuthUser),
+          studentUidMatchesAuthUid: null,
+          deterministicIdMatches: null,
+          sessionExists: null,
+          sessionActive: null,
+          sessionSubjectMatchesAttendanceSubject: null,
+          subjectExists: null,
+          studentEnrolledInSubject: null,
+          studentCanUpdateAttendance: false,
+          studentCanDeleteAttendance: false
+        }
+      };
+      console.log('[ATTENDANCE DEBUG START]');
       if (failWrap) failWrap.style.display = 'none';
 
       if (!selectedSubject) {
         showMsg('attMsg', 'error', 'Please select a subject from the active class list first.');
+        finishAttendanceDebug(attendanceDebug);
         return;
       }
       
@@ -1538,15 +1748,19 @@
         const latestSession = await getLatestSession(selectedSubject);
         if (!latestSession) {
           showMsg('attMsg', 'error', 'No active session found for this subject right now. Ask faculty to start the session.');
-          if (captureBtn) captureBtn.disabled = false;
           return;
         }
-        
-        if (await checkDuplicate(selectedSubject, latestSession.id)) {
-          showMsg('attMsg', 'error', 'Attendance has already been verified and marked for this class session.');
-          if (captureBtn) captureBtn.disabled = false;
-          return;
-        }
+        const attendanceStatus = await checkAttendanceForSession(selectedSubject, latestSession);
+        if (attendanceStatus.exists) return;
+        setAttendanceState(latestSession.id, 'VERIFYING');
+        attendanceDebug.session = {
+          sessionId: latestSession.id || null,
+          exists: Boolean(latestSession.id),
+          active: latestSession.active ?? null,
+          subjectId: latestSession.subjectId || null,
+          facultyUid: latestSession.facultyUid || null,
+          date: latestSession.date || null
+        };
         
         const video = document.getElementById('attVideo');
         const canvas = document.getElementById('attCanvas');
@@ -1562,30 +1776,33 @@
         if (faceText) faceText.textContent = 'Face: Matching...';
 
         const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
+        attendanceDebug.face.detectedCount = detections ? detections.length : 0;
         if (!detections || detections.length === 0) {
+          attendanceDebug.face.result = 'FAILED_NO_FACE';
           showMsg('attMsg', 'error', 'Face not detected. Please position your face clearly in the camera frame.');
           const reticle = document.getElementById('attReticle');
           if (reticle) reticle.className = 'hud-reticle error';
           if (faceDot) faceDot.className = 'status-chip-dot error';
-          if (faceText) faceText.textContent = 'Face: Not Found';
+          if (faceText) faceText.textContent = 'Face: Verification Failed';
           showFaceFailCorrectionOption(latestSession, selectedSubject, 'Face verification failed, but I was present in the class.');
           if (captureBtn) captureBtn.disabled = false;
           return;
         }
 
         if (detections.length > 1) {
+          attendanceDebug.face.result = 'FAILED_MULTIPLE_FACES';
           showMsg('attMsg', 'error', 'Multiple faces detected. Only one person is allowed in the camera frame.');
           const reticle = document.getElementById('attReticle');
           if (reticle) reticle.className = 'hud-reticle error';
           if (faceDot) faceDot.className = 'status-chip-dot error';
-          if (faceText) faceText.textContent = 'Face: Multiple Faces';
+          if (faceText) faceText.textContent = 'Face: Verification Failed';
           showFaceFailCorrectionOption(latestSession, selectedSubject, 'Multiple faces in frame during attendance.');
           if (captureBtn) captureBtn.disabled = false;
           return;
         }
 
         const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
-        const doc = await db.collection('students').doc(studentId || currentAuthUid).get();
+        const doc = await db.collection('students').doc(currentAuthUid).get();
         if (!doc.exists || !doc.data().faceDescriptor) {
           showMsg('attMsg', 'error', 'Please complete Face Biometrics Enrollment first.');
           if (captureBtn) captureBtn.disabled = false;
@@ -1596,44 +1813,69 @@
         const currentDescriptor = detections[0].descriptor;
         const distance = faceapi.euclideanDistance(currentDescriptor, storedDescriptor);
         const faceMatchPercent = Math.max(0, Math.round((1 - distance) * 100));
+        attendanceDebug.face.distance = distance;
         
         if (distance > faceDistanceThreshold) {
+          attendanceDebug.face.result = 'FAILED_THRESHOLD';
           showMsg('attMsg', 'error', `Face Verification Failed (${faceMatchPercent}% confidence match). Please look directly at the camera.`);
           const reticle = document.getElementById('attReticle');
           if (reticle) reticle.className = 'hud-reticle error';
           if (faceDot) faceDot.className = 'status-chip-dot error';
-          if (faceText) faceText.textContent = 'Face: Mismatch';
+          if (faceText) faceText.textContent = 'Face: Verification Failed';
           showFaceFailCorrectionOption(latestSession, selectedSubject, 'Face verification failed, but I was present in the class.');
           if (captureBtn) captureBtn.disabled = false;
           return;
         }
 
         if (failWrap) failWrap.style.display = 'none';
+        attendanceDebug.face.result = 'PASSED';
 
         if (faceDot) faceDot.className = 'status-chip-dot active';
-        if (faceText) faceText.textContent = `Face: ${faceMatchPercent}% Match`;
+        if (faceText) faceText.textContent = 'Face: Verified';
         
         const reticle = document.getElementById('attReticle');
         if (reticle) reticle.className = 'hud-reticle verified';
 
         showMsg('attMsg', 'success', `Face Biometrics Verified (${faceMatchPercent}% match). Verifying GPS proximity...`);
-        await captureGPS(selectedSubject, latestSession);
+        await captureGPS(selectedSubject, latestSession, attendanceDebug);
       } catch (err) {
-        showMsg('attMsg', 'error', 'Error: ' + err.message);
-        console.error(err);
-        if (captureBtn) captureBtn.disabled = false;
+        console.error('[ATTENDANCE VERIFICATION ERROR]', err);
+        showMsg('attMsg', 'error', err?.code === 'unavailable'
+          ? 'Network error. Please check your connection and try again.'
+          : 'Face verification failed.');
+      } finally {
+        const sessionId = attendanceDebug.session.sessionId;
+        const state = sessionId ? attendanceStateBySession[sessionId] : null;
+        if (state !== 'MARKED' && state !== 'ALREADY_MARKED') {
+          stopVideoStream(document.getElementById('attVideo'));
+          const wrap = document.getElementById('attScannerWrap');
+          if (wrap) wrap.classList.remove('is-scanning');
+          const startBtn = document.getElementById('startAttBtn');
+          if (startBtn) startBtn.disabled = false;
+          if (captureBtn) captureBtn.disabled = true;
+          const camText = document.getElementById('attCamText');
+          if (camText) camText.textContent = 'Camera: Off';
+          if (sessionId) setAttendanceState(sessionId, 'FAILED');
+        }
+        finishAttendanceDebug(attendanceDebug);
       }
     }
 
-    function captureGPS(subjectId, session) {
+    function captureGPS(subjectId, session, attendanceDebug) {
+      const attemptToken = ++gpsAttemptToken;
       return new Promise((resolve) => {
         const gpsInfo = document.getElementById('gpsInfo');
+        const sessionGeofenceRadius = Number.isFinite(session?.geofenceRadius) ? session.geofenceRadius : distanceThreshold;
+        const sessionAccuracyThreshold = Number.isFinite(session?.gpsAccuracyThreshold) ? session.gpsAccuracyThreshold : gpsAccuracyThreshold;
         const maxAttempts = 3;
         const retryDelayMs = 1200;
         gpsInfo.style.display = 'block';
 
         const gpsDot = document.getElementById('attGpsDot');
         const gpsText = document.getElementById('attGpsText');
+
+        gpsInfo.style.display = 'block';
+        gpsInfo.textContent = 'Preparing current GPS diagnostic...';
 
         if (!navigator.geolocation) {
           gpsInfo.textContent = 'Geolocation is not supported by your browser.';
@@ -1643,7 +1885,7 @@
         }
 
         const getPosition = () => new Promise((resolvePos, rejectPos) => {
-          navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, { enableHighAccuracy: true, timeout: 30000, maximumAge: 15000 });
+          navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 });
         });
 
         (async () => {
@@ -1654,41 +1896,89 @@
 
             try {
               const pos = await getPosition();
+              if (attemptToken !== gpsAttemptToken) {
+                resolve();
+                return;
+              }
               const lat = pos.coords.latitude;
               const lng = pos.coords.longitude;
               const accuracyMeters = typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null;
+              attendanceDebug.gps.studentLatitude = lat;
+              attendanceDebug.gps.studentLongitude = lng;
+              attendanceDebug.gps.facultyLatitude = session?.latitude ?? null;
+              attendanceDebug.gps.facultyLongitude = session?.longitude ?? null;
+              attendanceDebug.gps.accuracy = accuracyMeters;
+              attendanceDebug.gps.timestamp = Number.isFinite(pos.timestamp) ? pos.timestamp : null;
+              attendanceDebug.gps.ageMs = Number.isFinite(pos.timestamp) ? Math.max(0, Date.now() - pos.timestamp) : null;
+              console.log('[STUDENT GPS DIAGNOSTIC]', {
+                latitude: lat,
+                longitude: lng,
+                accuracy: accuracyMeters,
+                timestamp: pos.timestamp,
+                ageMs: attendanceDebug.gps.ageMs
+              });
               const accuracy = accuracyMeters !== null ? accuracyMeters.toFixed(1) : 'N/A';
 
-              const facLat = session?.latitude || 'N/A';
-              const facLng = session?.longitude || 'N/A';
+              const validCoordinates = Number.isFinite(lat) && Number.isFinite(lng) &&
+                lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+              const validAccuracy = Number.isFinite(accuracyMeters) && accuracyMeters >= 0;
+              if (!validCoordinates || !validAccuracy) {
+                if (attempt < maxAttempts) {
+                  continue;
+                }
+                attendanceDebug.gps.result = 'FAILED_INVALID_VALUES';
+                showMsg('attMsg', 'error', 'Location verification failed.');
+                if (gpsDot) gpsDot.className = 'status-chip-dot error';
+                if (gpsText) gpsText.textContent = 'GPS: Invalid Data';
+                resolve();
+                return;
+              }
+
+              const facLat = session?.latitude;
+              const facLng = session?.longitude;
               let dist = null;
-              if (session && session.latitude && session.longitude) {
+              if (Number.isFinite(Number(facLat)) && Number.isFinite(Number(facLng))) {
                 dist = calculateDistance(lat, lng, session.latitude, session.longitude);
               }
+              attendanceDebug.gps.calculatedDistance = dist;
 
-              const facLatDisplay = Number.isFinite(facLat) ? facLat.toFixed(6) : facLat;
-              const facLngDisplay = Number.isFinite(facLng) ? facLng.toFixed(6) : facLng;
-              let debug = `Faculty Location: <strong>${facLatDisplay}, ${facLngDisplay}</strong><br>Student Location: <strong>${lat.toFixed(6)}, ${lng.toFixed(6)}</strong><br>GPS Accuracy: <strong>${accuracy}m</strong> (Required: ≤ ${gpsAccuracyThreshold}m)`;
-              if (dist !== null) {
-                debug += `<br>Distance from Faculty: <strong>${dist.toFixed(1)} meters</strong> (Allowable: ≤ ${distanceThreshold}m)`;
-              }
-              gpsInfo.innerHTML = debug;
+              const facLatDisplay = Number.isFinite(Number(facLat)) ? Number(facLat).toFixed(6) : 'Unavailable';
+              const facLngDisplay = Number.isFinite(Number(facLng)) ? Number(facLng).toFixed(6) : 'Unavailable';
+              const locationLabel = session?.locationSource === 'institution' ? 'Classroom' : 'Faculty Device';
+              const diagnosticBase = `${locationLabel} Location: <strong>${facLatDisplay}, ${facLngDisplay}</strong><br>Student Location: <strong>${lat.toFixed(6)}, ${lng.toFixed(6)}</strong><br>GPS Accuracy: <strong>${accuracy}m</strong> (Required: ≤ ${sessionAccuracyThreshold}m)`;
+              const renderGPSDiagnostic = (distanceText) => {
+                gpsInfo.innerHTML = `${diagnosticBase}<br>${distanceText}`;
+              };
 
-              if (accuracyMeters !== null && accuracyMeters > gpsAccuracyThreshold) {
+              if (accuracyMeters !== null && accuracyMeters > sessionAccuracyThreshold) {
                 if (attempt < maxAttempts) {
-                  gpsInfo.innerHTML = `${debug}<br><span style="color:var(--accent-blue); font-weight:600;">GPS accuracy insufficient. Retrying...</span>`;
+                  renderGPSDiagnostic('<span style="color:var(--accent-blue); font-weight:600;">Distance unavailable because GPS accuracy is insufficient. Retrying...</span>');
                   await new Promise(r => setTimeout(r, retryDelayMs));
                   continue;
                 }
-                showMsg('attMsg', 'error', `GPS accuracy too low (${accuracy}m). Required: ≤ ${gpsAccuracyThreshold}m. Please move to an open area with clear satellite line-of-sight.`);
+                renderGPSDiagnostic('Distance unavailable because GPS accuracy is insufficient.');
+                showMsg('attMsg', 'error', `GPS accuracy too low (${accuracy}m). Required: ≤ ${sessionAccuracyThreshold}m. Please move to an open area with clear satellite line-of-sight.`);
+                attendanceDebug.gps.result = 'FAILED_ACCURACY';
                 if (gpsDot) gpsDot.className = 'status-chip-dot error';
                 if (gpsText) gpsText.textContent = 'GPS: Low Accuracy';
                 resolve();
                 return;
               }
 
-              if (dist !== null && dist > distanceThreshold) {
-                showMsg('attMsg', 'error', `Outside allowable classroom range (${dist.toFixed(1)}m). Must be within ${distanceThreshold} meters of faculty beacon.`);
+              const gpsAccuracyPassed = accuracyMeters <= sessionAccuracyThreshold;
+              console.log('GPS validation:', {
+                accuracy: accuracyMeters,
+                accuracyThreshold: sessionAccuracyThreshold,
+                passed: gpsAccuracyPassed
+              });
+
+              renderGPSDiagnostic(dist === null
+                ? 'Distance unavailable because faculty coordinates are unavailable.'
+                : `Distance from Classroom: <strong>${dist.toFixed(1)} meters</strong> (Allowable: ≤ ${sessionGeofenceRadius}m)`);
+
+              if (dist !== null && dist > sessionGeofenceRadius) {
+                showMsg('attMsg', 'error', `Outside the authorized classroom area (${dist.toFixed(1)}m). You must be within ${sessionGeofenceRadius}m.`);
+                attendanceDebug.gps.result = 'FAILED_GEOFENCE';
                 if (gpsDot) gpsDot.className = 'status-chip-dot error';
                 if (gpsText) gpsText.textContent = 'GPS: Out of Range';
                 showFaceFailCorrectionOption(session, subjectId, `Location out of range (${dist.toFixed(1)}m from beacon), but I was in class.`);
@@ -1698,14 +1988,16 @@
 
               if (gpsDot) gpsDot.className = 'status-chip-dot active';
               if (gpsText) gpsText.textContent = 'GPS: In Range';
+              attendanceDebug.gps.result = 'PASSED';
 
-              await saveAttendance(lat, lng, subjectId, session, dist);
+              await saveAttendance(lat, lng, subjectId, session, dist, attendanceDebug);
               resolve();
               return;
             } catch (err) {
               if (err?.code === 1) { // PERMISSION_DENIED
                 gpsInfo.textContent = 'Location access denied by user. Attendance was not recorded.';
                 showMsg('attMsg', 'error', 'Location permission denied. Please allow location access in your browser settings.');
+                attendanceDebug.gps.result = 'FAILED_PERMISSION';
                 if (gpsDot) gpsDot.className = 'status-chip-dot error';
                 if (gpsText) gpsText.textContent = 'GPS: Denied';
                 resolve();
@@ -1718,6 +2010,7 @@
               }
               gpsInfo.textContent = 'GPS coordinates unavailable.';
               showMsg('attMsg', 'error', 'Location service unavailable or timed out. Attendance was not recorded.');
+              attendanceDebug.gps.result = 'FAILED_UNAVAILABLE';
               if (gpsDot) gpsDot.className = 'status-chip-dot error';
               if (gpsText) gpsText.textContent = 'GPS: Failed';
               resolve();
@@ -1729,7 +2022,7 @@
       });
     }
 
-    async function saveAttendance(lat, lng, subjectId, session, distance) {
+    async function saveAttendance(lat, lng, subjectId, session, distance, attendanceDebug) {
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB');
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -1738,17 +2031,90 @@
       const subjectObj = studentSubjectDocs.find(s => s.id === subjectId);
       const subName = session?.subjectName || subjectObj?.subjectName || studentSubjectsMap[subjectId] || 'Course Subject';
       const subCode = session?.subjectCode || subjectObj?.subjectCode || '';
-      const recordId = `${session?.id}_${currentAuthUid}`;
+      const sessionId = session?.id;
+      const attendanceDocId = `${sessionId}_${currentAuthUid}`;
+      attendanceDebug.attendanceId = {
+        attendanceDocId,
+        expectedFormat: '${sessionId}_${studentUid}'
+      };
+      attendanceDebug.write.documentId = attendanceDocId;
 
       try {
-        const attDocRef = db.collection('attendance').doc(recordId);
-        const existingDoc = await attDocRef.get();
-        if (existingDoc.exists) {
-          showMsg('attMsg', 'info', 'Attendance already marked for this session.');
+        if (!currentAuthUid || !sessionId) {
+          showMsg('attMsg', 'error', 'Invalid attendance session. Please refresh.');
           return;
         }
 
-        await attDocRef.set({
+        const sessionSnap = await db.collection('attendanceSessions').doc(sessionId).get();
+        const currentSession = sessionSnap.exists ? sessionSnap.data() : null;
+        attendanceDebug.session = {
+          sessionId,
+          exists: sessionSnap.exists,
+          active: currentSession?.active ?? null,
+          subjectId: currentSession?.subjectId || null,
+          facultyUid: currentSession?.facultyUid || null,
+          date: currentSession?.date || null
+        };
+        attendanceDebug.ruleConditions.sessionExists = sessionSnap.exists;
+        attendanceDebug.ruleConditions.sessionActive = currentSession?.active === true;
+        attendanceDebug.ruleConditions.sessionSubjectMatchesAttendanceSubject = currentSession?.subjectId === subjectId;
+        if (!currentSession || currentSession.subjectId !== subjectId) {
+          showMsg('attMsg', 'error', 'Invalid attendance session. Please refresh.');
+          return;
+        }
+        if (currentSession.active !== true) {
+          showMsg('attMsg', 'error', 'This attendance session has ended. Please refresh.');
+          return;
+        }
+        let subjectData;
+        try {
+          const subjectSnap = await db.collection('subjects').doc(subjectId).get();
+          subjectData = subjectSnap.exists ? subjectSnap.data() : null;
+          attendanceDebug.enrollment.subjectExists = subjectSnap.exists;
+          attendanceDebug.enrollment.subjectFacultyUid = subjectData?.facultyUid || null;
+          attendanceDebug.enrollment.subjectFacultyId = subjectData?.facultyId || null;
+          attendanceDebug.enrollment.sessionFacultyMatchesSubject = Boolean(
+            currentSession.facultyUid && (
+              subjectData?.facultyUid === currentSession.facultyUid ||
+              subjectData?.facultyId === currentSession.facultyUid
+            )
+          );
+          attendanceDebug.ruleConditions.subjectExists = subjectSnap.exists;
+          attendanceDebug.enrollment.studentIdsContainsStudentUid = Boolean(subjectData?.studentIds?.includes(currentAuthUid));
+          attendanceDebug.enrollment.result = attendanceDebug.enrollment.studentIdsContainsStudentUid ? 'ENROLLED' : 'NOT_ENROLLED';
+        } catch (err) {
+          if (err?.code === 'permission-denied') {
+            attendanceDebug.enrollment.subjectExists = null;
+            attendanceDebug.ruleConditions.subjectExists = null;
+            attendanceDebug.enrollment.studentIdsContainsStudentUid = false;
+            attendanceDebug.enrollment.result = 'READ_REJECTED_NOT_ENROLLED_OR_UNAUTHORIZED';
+            showMsg('attMsg', 'error', 'You are not enrolled in this subject.');
+            return;
+          }
+          throw err;
+        }
+        if (!subjectData || !Array.isArray(subjectData.studentIds) || !subjectData.studentIds.includes(currentAuthUid)) {
+          attendanceDebug.enrollment.studentIdsContainsStudentUid = false;
+          attendanceDebug.enrollment.result = 'NOT_ENROLLED';
+          showMsg('attMsg', 'error', 'You are not enrolled in this subject.');
+          return;
+        }
+        attendanceDebug.ruleConditions.authenticated = Boolean(auth.currentUser);
+        attendanceDebug.ruleConditions.studentUidMatchesAuthUid = currentAuthUid === auth.currentUser?.uid;
+        attendanceDebug.ruleConditions.deterministicIdMatches = attendanceDocId === `${sessionId}_${auth.currentUser?.uid}`;
+        attendanceDebug.ruleConditions.studentEnrolledInSubject = attendanceDebug.enrollment.studentIdsContainsStudentUid;
+
+        const attDocRef = db.collection('attendance').doc(attendanceDocId);
+        const existingDoc = await attDocRef.get();
+        attendanceDebug.existingAttendance.exists = existingDoc.exists;
+        if (existingDoc.exists) {
+          setAttendanceState(sessionId, 'ALREADY_MARKED');
+          lockAttendanceControls('ALREADY_MARKED');
+          showMsg('attMsg', 'error', 'Attendance already marked for this class.');
+          return;
+        }
+
+        const attendancePayload = {
           studentId: studentId || currentAuthUid,
           studentUid: currentAuthUid,
           studentName: studentName || 'Student',
@@ -1760,11 +2126,11 @@
           subjectId,
           subjectName: subName,
           subjectCode: subCode,
-          sessionId: session?.id,
-          classNumber: session?.classNumber || 1,
-          facultyId: session?.facultyId || '',
-          facultyUid: session?.facultyUid || session?.facultyId || '',
-          facultyName: session?.facultyName || subjectObj?.facultyName || 'Faculty',
+          sessionId,
+          classNumber: currentSession.classNumber || 1,
+          facultyId: currentSession.facultyId || '',
+          facultyUid: currentSession.facultyUid || '',
+          facultyName: currentSession.facultyName || subjectObj?.facultyName || 'Faculty',
           date: dateStr,
           time: timeStr,
           latitude: lat,
@@ -1773,7 +2139,10 @@
           status: 'present',
           attendanceMethod: 'biometric_gps',
           timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        };
+        await attDocRef.set(attendancePayload);
+        setAttendanceState(sessionId, 'MARKED');
+        lockAttendanceControls('MARKED', 'Attendance Marked. You have already marked attendance for this class.');
         showMsg('attMsg', 'success', '🎉 Attendance Marked Successfully! Verified with Face Biometrics & GPS proximity.');
         
         // Stop video stream upon successful attendance
@@ -1791,8 +2160,31 @@
         await loadSubjectSessions();
         await loadMyAttendance();
       } catch (err) {
-        if (err?.code === 'permission-denied' || (err?.message && err.message.toLowerCase().includes('permission'))) {
-          showMsg('attMsg', 'error', 'Attendance record already exists for this session or update is not authorized.');
+        attendanceDebug.write.errorCode = err?.code || null;
+        attendanceDebug.write.errorMessage = err?.message || String(err);
+        console.error('[ATTENDANCE WRITE ERROR]', {
+          code: err.code,
+          message: err.message,
+          name: err.name,
+          sessionId,
+          subjectId,
+          authUid: auth.currentUser?.uid || null,
+          studentUid: currentAuthUid,
+          attendanceDocId
+        });
+        if (err?.code === 'already-exists') {
+          showMsg('attMsg', 'error', 'Attendance already marked for this class.');
+        } else if (err?.code === 'permission-denied') {
+          const existingDoc = await db.collection('attendance').doc(attendanceDocId).get().catch(() => null);
+          if (existingDoc?.exists) {
+            setAttendanceState(sessionId, 'ALREADY_MARKED');
+            lockAttendanceControls('ALREADY_MARKED');
+            showMsg('attMsg', 'error', 'Attendance already marked for this class.');
+          } else {
+            showMsg('attMsg', 'error', 'Attendance was rejected by Firestore security rules.');
+          }
+        } else if (err?.code === 'unavailable' || err?.code === 'failed-precondition') {
+          showMsg('attMsg', 'error', 'Network error. Please check your connection and try again.');
         } else {
           showMsg('attMsg', 'error', 'Error: ' + err.message);
         }
@@ -2420,6 +2812,7 @@
 
               if (r.sessionId) {
                 attendanceRecordsBySessionId[r.sessionId] = r;
+                setAttendanceState(r.sessionId, 'MARKED');
               }
 
               // Track counts per subject
@@ -2529,6 +2922,15 @@
       localStorage.clear();
       window.location.href = 'index.html';
     }
+
+    window.addEventListener('pagehide', () => {
+      if (window._studentRefreshInterval) {
+        clearInterval(window._studentRefreshInterval);
+        window._studentRefreshInterval = null;
+      }
+      stopVideoStream(document.getElementById('attVideo'));
+      stopVideoStream(document.getElementById('regVideo'));
+    });
   </script>
 </body>
 </html>

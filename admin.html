@@ -210,6 +210,24 @@
               <label class="form-label" style="margin: 0;">Required GPS Accuracy (meters):</label>
               <input type="number" id="gpsAccuracyThreshold" class="settings-input" min="5" max="500" required />
             </div>
+            <div style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 2px;">
+              <div style="font-weight: 700; margin-bottom: 8px;">Attendance Location</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div style="grid-column: 1 / -1;">
+                  <label class="form-label" for="attendanceLocationName">Location Name</label>
+                  <input type="text" id="attendanceLocationName" placeholder="e.g. Main Campus" maxlength="120" style="width:100%;" />
+                </div>
+                <div>
+                  <label class="form-label" for="attendanceLatitude">Latitude</label>
+                  <input type="number" id="attendanceLatitude" min="-90" max="90" step="any" placeholder="e.g. 13.135471" style="width:100%;" />
+                </div>
+                <div>
+                  <label class="form-label" for="attendanceLongitude">Longitude</label>
+                  <input type="number" id="attendanceLongitude" min="-180" max="180" step="any" placeholder="e.g. 78.118478" style="width:100%;" />
+                </div>
+              </div>
+              <p style="font-size:0.78rem; color:var(--text-muted); margin:8px 0 0;">When both coordinates are configured, new attendance sessions use this classroom location instead of the faculty device.</p>
+            </div>
             <button type="submit" class="btn submit-btn" style="align-self: flex-end; margin-top: 4px;">Save Settings</button>
           </form>
           <div id="settingsMsg" class="msg"></div>
@@ -2119,11 +2137,27 @@
         return;
       }
       try {
+        const locationName = document.getElementById('attendanceLocationName').value.trim();
+        const latitudeInput = document.getElementById('attendanceLatitude').value.trim();
+        const longitudeInput = document.getElementById('attendanceLongitude').value.trim();
+        const latitude = latitudeInput === '' ? null : Number(latitudeInput);
+        const longitude = longitudeInput === '' ? null : Number(longitudeInput);
+        if ((latitudeInput !== '' || longitudeInput !== '') &&
+            (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+             !Number.isFinite(longitude) || longitude < -180 || longitude > 180)) {
+          msg.textContent = 'Enter valid latitude and longitude together, or leave both blank to use the faculty-device fallback.';
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
         await db.collection('settings').doc('attendance').set({
           distanceThreshold: threshold,
           gpsAccuracyThreshold,
+          locationName,
+          latitude,
+          longitude,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        }, { merge: true });
         msg.textContent = 'Geofencing settings saved successfully!';
         msg.className = 'msg success';
         msg.style.display = 'block';
@@ -2139,14 +2173,21 @@
       try {
         const snap = await db.collection('settings').doc('attendance').get();
         if (snap.exists) {
-          document.getElementById('distanceThreshold').value = snap.data().distanceThreshold || 10;
-          document.getElementById('gpsAccuracyThreshold').value = snap.data().gpsAccuracyThreshold || 50;
+          const data = snap.data();
+          document.getElementById('distanceThreshold').value = Number.isFinite(data.distanceThreshold) ? data.distanceThreshold : 50;
+          document.getElementById('gpsAccuracyThreshold').value = Number.isFinite(data.gpsAccuracyThreshold) ? data.gpsAccuracyThreshold : 50;
+          document.getElementById('attendanceLocationName').value = data.locationName || '';
+          document.getElementById('attendanceLatitude').value = Number.isFinite(data.latitude) ? data.latitude : '';
+          document.getElementById('attendanceLongitude').value = Number.isFinite(data.longitude) ? data.longitude : '';
         } else {
-          document.getElementById('distanceThreshold').value = 10;
+          document.getElementById('distanceThreshold').value = 50;
           document.getElementById('gpsAccuracyThreshold').value = 50;
+          document.getElementById('attendanceLocationName').value = '';
+          document.getElementById('attendanceLatitude').value = '';
+          document.getElementById('attendanceLongitude').value = '';
         }
       } catch (err) {
-        document.getElementById('distanceThreshold').value = 10;
+        document.getElementById('distanceThreshold').value = 50;
         document.getElementById('gpsAccuracyThreshold').value = 50;
       }
     }

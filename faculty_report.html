@@ -157,6 +157,7 @@
         allRecords = [];
 
         snapshots.forEach(snap => {
+          if (!snap) return;
           snap.forEach(doc => {
             if (!seenDocIds.has(doc.id)) {
               seenDocIds.add(doc.id);
