@@ -201,9 +201,16 @@
               <div class="hud-corner br"></div>
               <div class="hud-reticle" id="attReticle"></div>
               <div class="scan-laser"></div>
+              <!-- Floating HUD liveness prompt banner -->
+              <div class="hud-liveness-banner" id="hudLivenessBanner" style="display:none;">
+                <span id="hudLivenessIcon">🛡️</span>
+                <span id="hudLivenessText">Align face to start</span>
+              </div>
+              <!-- Floating timer pill -->
+              <div class="hud-timer-badge" id="hudLivenessTimer" style="display:none;">⏱️ 35s</div>
             </div>
           </div>
-          <canvas id="attCanvas"></canvas>
+          <canvas id="attCanvas" style="display:none;"></canvas>
 
           <!-- Status HUD Strip -->
           <div class="hud-status-strip">
@@ -212,17 +219,42 @@
               <span id="attCamText">Camera: Off</span>
             </div>
             <div class="status-chip">
-              <span class="status-chip-dot" id="attGpsDot"></span>
-              <span id="attGpsText">GPS: Ready</span>
+              <span class="status-chip-dot" id="attLiveDot"></span>
+              <span id="attLiveText">Liveness: Standby</span>
             </div>
             <div class="status-chip">
               <span class="status-chip-dot" id="attFaceDot"></span>
               <span id="attFaceText">Face: Standby</span>
             </div>
+            <div class="status-chip">
+              <span class="status-chip-dot" id="attGpsDot"></span>
+              <span id="attGpsText">GPS: Ready</span>
+            </div>
+          </div>
+
+          <!-- Active Liveness Guidance & Progress Card -->
+          <div id="livenessChallengeCard" class="liveness-challenge-card" style="display:none; width: 100%; max-width: 400px;">
+            <div class="liveness-card-header">
+              <span class="liveness-card-badge" id="livenessStepBadge">Challenge 1 of 3</span>
+              <span class="liveness-card-timer" id="livenessCardTimer">⏱️ 35s remaining</span>
+            </div>
+            <div class="liveness-main-prompt" id="livenessMainPrompt">
+              Turn your head to your LEFT (←)
+            </div>
+            <div class="liveness-sub-instruction" id="livenessSubInstruction">
+              Follow on-screen movements to verify active presence
+            </div>
+            <div class="liveness-progress-bar-wrap">
+              <div class="liveness-progress-bar-fill" id="livenessProgressFill" style="width: 0%;"></div>
+            </div>
+            <div class="liveness-checklist" id="livenessChecklist">
+              <!-- Dynamically populated checklist items -->
+            </div>
           </div>
 
           <div class="btn-row" style="justify-content: center; width: 100%;">
             <button type="button" class="btn att-btn" id="startAttBtn" onclick="startAttendance()">📷 Open Camera</button>
+            <button type="button" class="btn att-btn" id="retryAttBtn" onclick="startAttendance()" style="display:none;">🔄 Retry Verification</button>
             <button type="button" class="btn att-btn" id="captureAttBtn" onclick="markAttendance()" disabled>✓ Verify & Mark Attendance</button>
           </div>
         </div>
@@ -622,6 +654,9 @@
     });
 
     function stopVideoStream(videoEl) {
+      if (videoEl && videoEl.id === 'attVideo' && typeof stopActiveLivenessSession === 'function') {
+        stopActiveLivenessSession();
+      }
       if (videoEl && videoEl.srcObject) {
         const stream = videoEl.srcObject;
         if (stream && stream.getTracks) {
@@ -703,8 +738,9 @@
           return true;
         } catch (err) {
           const detail = err?.message || 'Network or CORS issue loading models.';
-          showMsg('regMsg', 'error', 'Failed to load AI models: ' + detail);
-          console.error('Model load error:', err);
+          showMsg('regMsg', 'error', 'Face verification models could not be loaded: ' + detail);
+          showMsg('attMsg', 'error', 'Face verification models could not be loaded. Please check network connection.');
+          console.error('[Face-API Model Load Error]', err);
           modelsLoadingPromise = null;
           return false;
         }
@@ -1446,7 +1482,6 @@
       try {
         const ok = await loadModels();
         if (!ok) {
-          setAttendanceState(selectedSession.id, 'FAILED');
           if (startBtn) startBtn.disabled = false;
           return;
         }
@@ -1480,7 +1515,7 @@
       showMsg('regMsg', 'info', 'Detecting facial biometric landmarks...');
 
       try {
-        const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
+        const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.35 })).withFaceLandmarks().withFaceDescriptors();
         if (!detections || detections.length === 0) {
           showMsg('regMsg', 'error', 'Face not detected. Please position your face clearly in the camera frame.');
           const reticle = document.getElementById('regReticle');
@@ -1539,8 +1574,638 @@
       }
     }
 
+    // =========================================================================
+    // ACTIVE BIOMETRIC LIVENESS & ANTI-SPOOFING SYSTEM
+    // =========================================================================
+    // Multi-challenge temporal verification system to prevent photo/screen spoofing.
+    // Conceptual requirement: faceMatch === true && livenessPassed === true.
+    // Only then: Face: Verified & button unlocked.
+    // Note: Browser-based liveness materially mitigates common photo, screenshot,
+    // and simple replay attacks; advanced deepfake/mask attacks require hardware attestation.
+    // =========================================================================
+
+    const LIVENESS_CHALLENGES = {
+      TURN_LEFT: {
+        id: 'TURN_LEFT',
+        icon: '👈',
+        title: 'Turn head LEFT',
+        instruction: 'Turn head to your LEFT (←) and return to center',
+        shortPrompt: 'Turn your head LEFT (←)',
+        detectedText: '✓ Left turn detected'
+      },
+      TURN_RIGHT: {
+        id: 'TURN_RIGHT',
+        icon: '👉',
+        title: 'Turn head RIGHT',
+        instruction: 'Turn head to your RIGHT (→) and return to center',
+        shortPrompt: 'Turn your head RIGHT (→)',
+        detectedText: '✓ Right turn detected'
+      },
+      BLINK_TWICE: {
+        id: 'BLINK_TWICE',
+        icon: '👁️',
+        title: 'Blink twice',
+        instruction: 'Blink your eyes twice naturally',
+        shortPrompt: 'Blink twice',
+        detectedText: '✓ Blink detected'
+      },
+      SMILE: {
+        id: 'SMILE',
+        icon: '😊',
+        title: 'Smile',
+        instruction: 'Smile at the camera and return to neutral',
+        shortPrompt: 'Smile at the camera',
+        detectedText: '✓ Smile detected'
+      }
+    };
+
+    let livenessSession = null;
+    let livenessLoopTimer = null;
+    let isProcessingLivenessFrame = false;
+    let currentLivenessSessionToken = 0;
+
+    const FaceLivenessState = {
+      FACE_NOT_READY: 'FACE_NOT_READY',
+      FACE_SEARCHING: 'FACE_SEARCHING',
+      FACE_READY: 'FACE_READY',
+      LIVENESS_RUNNING: 'LIVENESS_RUNNING',
+      FACE_MATCHED: 'FACE_MATCHED',
+      VERIFICATION_SUCCESS: 'VERIFICATION_SUCCESS',
+      VERIFICATION_FAILED: 'VERIFICATION_FAILED'
+    };
+
+    function generateRandomChallengeSequence(count = 3) {
+      const keys = ['TURN_LEFT', 'TURN_RIGHT', 'BLINK_TWICE', 'SMILE'];
+      const array = new Uint32Array(keys.length);
+      window.crypto.getRandomValues(array);
+      const shuffled = [...keys];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = array[i] % (i + 1);
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled.slice(0, count);
+    }
+
+    function computeEuclidean(p1, p2) {
+      const dx = p1.x - p2.x;
+      const dy = p1.y - p2.y;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function computeEyeAspectRatio(landmarks) {
+      const pts = landmarks.positions;
+      // Right eye: 36..41
+      const rV1 = computeEuclidean(pts[37], pts[41]);
+      const rV2 = computeEuclidean(pts[38], pts[40]);
+      const rH = computeEuclidean(pts[36], pts[39]);
+      const rightEar = rH > 0 ? (rV1 + rV2) / (2.0 * rH) : 0.3;
+
+      // Left eye: 42..47
+      const lV1 = computeEuclidean(pts[43], pts[47]);
+      const lV2 = computeEuclidean(pts[44], pts[46]);
+      const lH = computeEuclidean(pts[42], pts[45]);
+      const leftEar = lH > 0 ? (lV1 + lV2) / (2.0 * lH) : 0.3;
+
+      return (rightEar + leftEar) / 2.0;
+    }
+
+    function computeFacialYaw(landmarks) {
+      const pts = landmarks.positions;
+      const noseTip = pts[30];
+      const rightJaw = pts[0];  // anatomical right (viewer left in unmirrored canvas)
+      const leftJaw = pts[16];  // anatomical left (viewer right in unmirrored canvas)
+
+      const distRight = Math.abs(noseTip.x - rightJaw.x);
+      const distLeft = Math.abs(leftJaw.x - noseTip.x);
+      const totalWidth = Math.abs(leftJaw.x - rightJaw.x);
+
+      if (totalWidth < 1) return 0;
+      // yaw > 0 => turned to user's left; yaw < 0 => turned to user's right
+      return (distRight - distLeft) / totalWidth;
+    }
+
+    function computeSmileRatio(landmarks) {
+      const pts = landmarks.positions;
+      const mouthWidth = computeEuclidean(pts[48], pts[54]);
+      const eyeDistance = computeEuclidean(pts[36], pts[45]);
+      if (eyeDistance < 1) return 1.0;
+      return mouthWidth / eyeDistance;
+    }
+
+    function stopActiveLivenessSession() {
+      currentLivenessSessionToken++; // Invalidate any pending async frames or timeouts
+      if (livenessLoopTimer) {
+        clearTimeout(livenessLoopTimer);
+        livenessLoopTimer = null;
+      }
+      if (livenessSession) {
+        livenessSession.active = false;
+        livenessSession.state = FaceLivenessState.FACE_NOT_READY;
+      }
+      isProcessingLivenessFrame = false;
+    }
+
+    function resetLivenessUI() {
+      const banner = document.getElementById('hudLivenessBanner');
+      if (banner) {
+        banner.style.display = 'none';
+        banner.className = 'hud-liveness-banner';
+      }
+      const bannerText = document.getElementById('hudLivenessText');
+      if (bannerText) bannerText.textContent = 'Align face to start';
+      const timerBadge = document.getElementById('hudLivenessTimer');
+      if (timerBadge) {
+        timerBadge.style.display = 'none';
+        timerBadge.textContent = '';
+      }
+      const card = document.getElementById('livenessChallengeCard');
+      if (card) {
+        card.style.display = 'none';
+      }
+      const cardTimer = document.getElementById('livenessCardTimer');
+      if (cardTimer) cardTimer.textContent = '';
+      const progressFill = document.getElementById('livenessProgressFill');
+      if (progressFill) progressFill.style.width = '0%';
+      const checklist = document.getElementById('livenessChecklist');
+      if (checklist) checklist.innerHTML = '';
+      const retryBtn = document.getElementById('retryAttBtn');
+      if (retryBtn) retryBtn.style.display = 'none';
+      const startBtn = document.getElementById('startAttBtn');
+      if (startBtn) {
+        startBtn.style.display = 'inline-flex';
+        startBtn.textContent = '📷 Open Camera';
+        startBtn.disabled = false;
+      }
+      const captureBtn = document.getElementById('captureAttBtn');
+      if (captureBtn) {
+        captureBtn.disabled = true;
+        captureBtn.classList.remove('btn-primary-pulse');
+      }
+      const reticle = document.getElementById('attReticle');
+      if (reticle) reticle.className = 'hud-reticle';
+      const liveDot = document.getElementById('attLiveDot');
+      if (liveDot) liveDot.className = 'status-chip-dot';
+      const liveText = document.getElementById('attLiveText');
+      if (liveText) liveText.textContent = 'Liveness: Standby';
+      const faceDot = document.getElementById('attFaceDot');
+      if (faceDot) faceDot.className = 'status-chip-dot';
+      const faceText = document.getElementById('attFaceText');
+      if (faceText) faceText.textContent = 'Face: Standby';
+      const camDot = document.getElementById('attCamDot');
+      if (camDot) camDot.className = 'status-chip-dot';
+      const camText = document.getElementById('attCamText');
+      if (camText) camText.textContent = 'Camera: Off';
+    }
+
+    function renderLivenessChecklist(sequence) {
+      const listEl = document.getElementById('livenessChecklist');
+      if (!listEl) return;
+      listEl.innerHTML = sequence.map((challengeId, idx) => {
+        const c = LIVENESS_CHALLENGES[challengeId];
+        return `
+          <div class="liveness-check-item ${idx === 0 ? 'active' : ''}" id="livenessStepItem_${idx}">
+            <span class="liveness-check-icon" id="livenessStepIcon_${idx}">⚪</span>
+            <span style="flex:1;">Step ${idx + 1}: ${c.title}</span>
+            <span class="badge" id="livenessStepBadge_${idx}" style="font-size:0.7rem;">${idx === 0 ? 'In Progress' : 'Pending'}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function updateChallengePromptUI(challenge, stepNum, totalSteps) {
+      const banner = document.getElementById('hudLivenessBanner');
+      const bannerIcon = document.getElementById('hudLivenessIcon');
+      const bannerText = document.getElementById('hudLivenessText');
+      if (banner) {
+        banner.style.display = 'inline-flex';
+        banner.className = 'hud-liveness-banner';
+      }
+      if (bannerIcon) bannerIcon.textContent = challenge.icon;
+      if (bannerText) bannerText.textContent = challenge.shortPrompt;
+
+      const card = document.getElementById('livenessChallengeCard');
+      if (card) card.style.display = 'flex';
+      const badge = document.getElementById('livenessStepBadge');
+      if (badge) badge.textContent = `Challenge ${stepNum} of ${totalSteps}`;
+      const prompt = document.getElementById('livenessMainPrompt');
+      if (prompt) prompt.textContent = challenge.shortPrompt;
+      const sub = document.getElementById('livenessSubInstruction');
+      if (sub) sub.textContent = challenge.instruction;
+
+      const progressFill = document.getElementById('livenessProgressFill');
+      if (progressFill) {
+        const pct = Math.round(((stepNum - 1) / totalSteps) * 100);
+        progressFill.style.width = `${pct}%`;
+      }
+
+      for (let i = 0; i < totalSteps; i++) {
+        const item = document.getElementById(`livenessStepItem_${i}`);
+        const badgeEl = document.getElementById(`livenessStepBadge_${i}`);
+        const iconEl = document.getElementById(`livenessStepIcon_${i}`);
+        if (!item || !badgeEl) continue;
+        if (i < stepNum - 1) {
+          item.className = 'liveness-check-item completed';
+          badgeEl.textContent = '✓ Done';
+          badgeEl.className = 'badge green';
+          if (iconEl) iconEl.textContent = '✓';
+        } else if (i === stepNum - 1) {
+          item.className = 'liveness-check-item active';
+          badgeEl.textContent = 'In Progress';
+          badgeEl.className = 'badge amber';
+          if (iconEl) iconEl.textContent = challenge.icon;
+        } else {
+          item.className = 'liveness-check-item';
+          badgeEl.textContent = 'Pending';
+          badgeEl.className = 'badge';
+          if (iconEl) iconEl.textContent = '⚪';
+        }
+      }
+    }
+
+    function markChallengeCompletedUI(challengeId, stepIndex) {
+      const c = LIVENESS_CHALLENGES[challengeId];
+      const item = document.getElementById(`livenessStepItem_${stepIndex}`);
+      const badgeEl = document.getElementById(`livenessStepBadge_${stepIndex}`);
+      const iconEl = document.getElementById(`livenessStepIcon_${stepIndex}`);
+      if (item) item.className = 'liveness-check-item completed';
+      if (badgeEl) {
+        badgeEl.textContent = '✓ Done';
+        badgeEl.className = 'badge green';
+      }
+      if (iconEl) iconEl.textContent = '✓';
+
+      const banner = document.getElementById('hudLivenessBanner');
+      const bannerText = document.getElementById('hudLivenessText');
+      if (banner) banner.className = 'hud-liveness-banner success';
+      if (bannerText) bannerText.textContent = c.detectedText;
+    }
+
+    function updateLivenessTimerUI(remainingSec) {
+      const timerBadge = document.getElementById('hudLivenessTimer');
+      if (timerBadge) {
+        timerBadge.style.display = 'inline-flex';
+        timerBadge.textContent = `⏱️ ${remainingSec}s`;
+      }
+      const cardTimer = document.getElementById('livenessCardTimer');
+      if (cardTimer) cardTimer.textContent = `⏱️ ${remainingSec}s remaining`;
+    }
+
+    function updateLivenessHUDStatus(type, message) {
+      const banner = document.getElementById('hudLivenessBanner');
+      const bannerText = document.getElementById('hudLivenessText');
+      const bannerIcon = document.getElementById('hudLivenessIcon');
+      const reticle = document.getElementById('attReticle');
+      const faceDot = document.getElementById('attFaceDot');
+      const faceText = document.getElementById('attFaceText');
+
+      if (banner && bannerText) {
+        banner.style.display = 'inline-flex';
+        bannerText.textContent = message;
+      }
+
+      if (type === 'NO_FACE') {
+        if (banner) banner.className = 'hud-liveness-banner warning';
+        if (bannerIcon) bannerIcon.textContent = '🔍';
+        if (reticle) reticle.className = 'hud-reticle';
+        if (faceDot) faceDot.className = 'status-chip-dot warning';
+        if (faceText) faceText.textContent = 'Face: Searching...';
+      } else if (type === 'FACE_DETECTING') {
+        if (banner) banner.className = 'hud-liveness-banner';
+        if (bannerIcon) bannerIcon.textContent = '👤';
+        if (reticle) reticle.className = 'hud-reticle active';
+        if (faceDot) faceDot.className = 'status-chip-dot active';
+        if (faceText) faceText.textContent = 'Face: Detecting';
+      } else if (type === 'FACE_DETECTED') {
+        if (banner) banner.className = 'hud-liveness-banner success';
+        if (bannerIcon) bannerIcon.textContent = '✓';
+        if (reticle) reticle.className = 'hud-reticle active';
+        if (faceDot) faceDot.className = 'status-chip-dot active';
+        if (faceText) faceText.textContent = 'Face: Detected';
+      } else if (type === 'TOO_SMALL') {
+        if (banner) banner.className = 'hud-liveness-banner warning';
+        if (bannerIcon) bannerIcon.textContent = '🔍';
+        if (reticle) reticle.className = 'hud-reticle';
+        if (faceDot) faceDot.className = 'status-chip-dot warning';
+        if (faceText) faceText.textContent = 'Face: Move Closer';
+      } else if (type === 'MULTIPLE_FACES') {
+        if (banner) banner.className = 'hud-liveness-banner error';
+        if (bannerIcon) bannerIcon.textContent = '⚠️';
+        if (reticle) reticle.className = 'hud-reticle error';
+        if (faceDot) faceDot.className = 'status-chip-dot error';
+        if (faceText) faceText.textContent = 'Face: Multiple Faces';
+      } else if (type === 'FACE_LOST') {
+        if (banner) banner.className = 'hud-liveness-banner warning';
+        if (bannerIcon) bannerIcon.textContent = '⚠️';
+        if (reticle) reticle.className = 'hud-reticle';
+        if (faceDot) faceDot.className = 'status-chip-dot warning';
+        if (faceText) faceText.textContent = 'Face: Lost';
+      }
+    }
+
+    function evaluateChallengeStep(challengeId, landmarks, session) {
+      const yaw = computeFacialYaw(landmarks);
+      const ear = computeEyeAspectRatio(landmarks);
+      const smile = computeSmileRatio(landmarks);
+
+      switch (challengeId) {
+        case 'TURN_LEFT': {
+          if (!session.stepState || session.stepState === 'INIT' || session.stepState === 'WAIT_NEUTRAL') {
+            if (Math.abs(yaw) <= 0.14) {
+              session.stepFrames = (session.stepFrames || 0) + 1;
+              if (session.stepFrames >= 2) {
+                session.stepState = 'WAIT_TURN';
+                session.stepFrames = 0;
+              }
+            } else {
+              session.stepFrames = 0;
+            }
+          } else if (session.stepState === 'WAIT_TURN') {
+            if (yaw >= 0.18) {
+              session.stepFrames = (session.stepFrames || 0) + 1;
+              const sub = document.getElementById('livenessSubInstruction');
+              if (sub) sub.textContent = '✓ Left turn detected! Now return head to center';
+              if (session.stepFrames >= 2) {
+                session.stepState = 'WAIT_RETURN';
+                session.stepFrames = 0;
+              }
+            }
+          } else if (session.stepState === 'WAIT_RETURN') {
+            if (Math.abs(yaw) <= 0.14) {
+              return true;
+            }
+          }
+          break;
+        }
+
+        case 'TURN_RIGHT': {
+          if (!session.stepState || session.stepState === 'INIT' || session.stepState === 'WAIT_NEUTRAL') {
+            if (Math.abs(yaw) <= 0.14) {
+              session.stepFrames = (session.stepFrames || 0) + 1;
+              if (session.stepFrames >= 2) {
+                session.stepState = 'WAIT_TURN';
+                session.stepFrames = 0;
+              }
+            } else {
+              session.stepFrames = 0;
+            }
+          } else if (session.stepState === 'WAIT_TURN') {
+            if (yaw <= -0.18) {
+              session.stepFrames = (session.stepFrames || 0) + 1;
+              const sub = document.getElementById('livenessSubInstruction');
+              if (sub) sub.textContent = '✓ Right turn detected! Now return head to center';
+              if (session.stepFrames >= 2) {
+                session.stepState = 'WAIT_RETURN';
+                session.stepFrames = 0;
+              }
+            }
+          } else if (session.stepState === 'WAIT_RETURN') {
+            if (Math.abs(yaw) <= 0.14) {
+              return true;
+            }
+          }
+          break;
+        }
+
+        case 'BLINK_TWICE': {
+          const baseEar = session.openEarBaseline || 0.26;
+          const openThresh = Math.max(0.20, baseEar * 0.80);
+          const closeThresh = Math.min(0.18, baseEar * 0.65);
+
+          if (!session.stepState || session.stepState === 'INIT' || session.stepState === 'WAIT_OPEN_1') {
+            if (ear >= openThresh) {
+              session.stepFrames = (session.stepFrames || 0) + 1;
+              if (session.stepFrames >= 2) {
+                session.stepState = 'WAIT_CLOSE_1';
+                session.stepFrames = 0;
+              }
+            }
+          } else if (session.stepState === 'WAIT_CLOSE_1') {
+            if (ear <= closeThresh) {
+              session.stepState = 'WAIT_REOPEN_1';
+              session.stepFrames = 0;
+            }
+          } else if (session.stepState === 'WAIT_REOPEN_1') {
+            if (ear >= openThresh) {
+              session.stepState = 'WAIT_CLOSE_2';
+              session.stepFrames = 0;
+              const sub = document.getElementById('livenessSubInstruction');
+              if (sub) sub.textContent = '✓ 1st blink detected! Blink once more...';
+            }
+          } else if (session.stepState === 'WAIT_CLOSE_2') {
+            if (ear <= closeThresh) {
+              session.stepState = 'WAIT_REOPEN_2';
+              session.stepFrames = 0;
+            }
+          } else if (session.stepState === 'WAIT_REOPEN_2') {
+            if (ear >= openThresh) {
+              return true;
+            }
+          }
+          break;
+        }
+
+        case 'SMILE': {
+          if (!session.stepState || session.stepState === 'INIT' || session.stepState === 'WAIT_NEUTRAL') {
+            if (Math.abs(yaw) <= 0.16) {
+              session.baselineMetric = session.baselineMetric ? (session.baselineMetric * 0.7 + smile * 0.3) : smile;
+              session.stepFrames = (session.stepFrames || 0) + 1;
+              if (session.stepFrames >= 2) {
+                session.stepState = 'WAIT_SMILE';
+                session.stepFrames = 0;
+              }
+            }
+          } else if (session.stepState === 'WAIT_SMILE') {
+            const baseSmile = session.baselineMetric || 0.88;
+            const target = Math.max(baseSmile * 1.08, baseSmile + 0.05);
+            if (smile >= target) {
+              session.stepFrames = (session.stepFrames || 0) + 1;
+              const sub = document.getElementById('livenessSubInstruction');
+              if (sub) sub.textContent = '✓ Smile detected! Now relax expression';
+              if (session.stepFrames >= 2) {
+                session.stepState = 'WAIT_RELAX';
+                session.stepFrames = 0;
+              }
+            }
+          } else if (session.stepState === 'WAIT_RELAX') {
+            const baseSmile = session.baselineMetric || 0.88;
+            if (smile <= baseSmile * 1.04) {
+              return true;
+            }
+          }
+          break;
+        }
+      }
+
+      return false;
+    }
+
+    function handleLivenessSuccess() {
+      if (!livenessSession) return;
+      livenessSession.livenessPassed = true;
+      livenessSession.faceVerified = true;
+      livenessSession.active = false;
+      livenessSession.state = FaceLivenessState.VERIFICATION_SUCCESS;
+      if (livenessLoopTimer) {
+        clearTimeout(livenessLoopTimer);
+        livenessLoopTimer = null;
+      }
+
+      const progressFill = document.getElementById('livenessProgressFill');
+      if (progressFill) progressFill.style.width = '100%';
+
+      const reticle = document.getElementById('attReticle');
+      if (reticle) reticle.className = 'hud-reticle verified';
+
+      const faceDot = document.getElementById('attFaceDot');
+      if (faceDot) faceDot.className = 'status-chip-dot active';
+      const faceText = document.getElementById('attFaceText');
+      if (faceText) faceText.textContent = 'Face: Verified';
+
+      const liveDot = document.getElementById('attLiveDot');
+      if (liveDot) liveDot.className = 'status-chip-dot active';
+      const liveText = document.getElementById('attLiveText');
+      if (liveText) liveText.textContent = 'Liveness: Verified';
+
+      const timerBadge = document.getElementById('hudLivenessTimer');
+      if (timerBadge) timerBadge.style.display = 'none';
+
+      const banner = document.getElementById('hudLivenessBanner');
+      const bannerIcon = document.getElementById('hudLivenessIcon');
+      const bannerText = document.getElementById('hudLivenessText');
+      if (banner) banner.className = 'hud-liveness-banner success';
+      if (bannerIcon) bannerIcon.textContent = '✓';
+      if (bannerText) bannerText.textContent = 'Face & Liveness Verified';
+
+      const prompt = document.getElementById('livenessMainPrompt');
+      if (prompt) prompt.textContent = '✓ Biometric Verification Passed';
+      const sub = document.getElementById('livenessSubInstruction');
+      if (sub) sub.textContent = 'Active presence verified. Click "Verify & Mark Attendance" to finalize GPS validation.';
+
+      const captureBtn = document.getElementById('captureAttBtn');
+      if (captureBtn) {
+        captureBtn.disabled = false;
+        captureBtn.classList.add('btn-primary-pulse');
+      }
+
+      const matchPercent = Math.max(0, Math.round((1 - (livenessSession.bestDistance || 0)) * 100));
+      showMsg('attMsg', 'success', `✓ Face Biometrics & Active Liveness Verified (${matchPercent}% match). Click "Verify & Mark Attendance" to complete GPS validation.`);
+    }
+
+    function handleLivenessFailure(reason) {
+      stopActiveLivenessSession();
+      stopVideoStream(document.getElementById('attVideo'));
+
+      const wrap = document.getElementById('attScannerWrap');
+      if (wrap) wrap.classList.remove('is-scanning');
+
+      const reticle = document.getElementById('attReticle');
+      if (reticle) reticle.className = 'hud-reticle error';
+
+      const faceDot = document.getElementById('attFaceDot');
+      if (faceDot) faceDot.className = 'status-chip-dot error';
+      const faceText = document.getElementById('attFaceText');
+      if (faceText) faceText.textContent = 'Face: Verification Failed';
+
+      const liveDot = document.getElementById('attLiveDot');
+      if (liveDot) liveDot.className = 'status-chip-dot error';
+      const liveText = document.getElementById('attLiveText');
+      if (liveText) liveText.textContent = 'Liveness: Failed';
+
+      const camDot = document.getElementById('attCamDot');
+      if (camDot) camDot.className = 'status-chip-dot';
+      const camText = document.getElementById('attCamText');
+      if (camText) camText.textContent = 'Camera: Off';
+
+      const timerBadge = document.getElementById('hudLivenessTimer');
+      if (timerBadge) {
+        timerBadge.style.display = 'none';
+        timerBadge.textContent = '';
+      }
+
+      const cardTimer = document.getElementById('livenessCardTimer');
+      if (cardTimer) cardTimer.textContent = '';
+
+      const banner = document.getElementById('hudLivenessBanner');
+      const bannerIcon = document.getElementById('hudLivenessIcon');
+      const bannerText = document.getElementById('hudLivenessText');
+      if (banner) banner.className = 'hud-liveness-banner error';
+      if (bannerIcon) bannerIcon.textContent = '✕';
+      if (bannerText) bannerText.textContent = 'Verification Failed';
+
+      const prompt = document.getElementById('livenessMainPrompt');
+      if (prompt) prompt.textContent = 'Verification Unsuccessful';
+      const sub = document.getElementById('livenessSubInstruction');
+      if (sub) sub.textContent = reason || 'Liveness check did not pass. Please click "Retry Verification".';
+
+      const captureBtn = document.getElementById('captureAttBtn');
+      if (captureBtn) {
+        captureBtn.disabled = true;
+        captureBtn.classList.remove('btn-primary-pulse');
+      }
+
+      const startBtn = document.getElementById('startAttBtn');
+      if (startBtn) startBtn.style.display = 'none';
+
+      const retryBtn = document.getElementById('retryAttBtn');
+      if (retryBtn) {
+        retryBtn.style.display = 'inline-flex';
+        retryBtn.disabled = false;
+      }
+
+      showMsg('attMsg', 'error', reason || 'Liveness verification failed. Please try again.');
+
+      if (livenessSession?.sessionId) {
+        setAttendanceState(livenessSession.sessionId, 'FAILED');
+        showFaceFailCorrectionOption(
+          activeSessions[livenessSession.subjectId] || { id: livenessSession.sessionId },
+          livenessSession.subjectId,
+          reason || 'Biometric liveness verification failed, but I was present in class.'
+        );
+      }
+    }
+
+    async function waitForVideoReady(video, token) {
+      if (!video) return false;
+      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        return true;
+      }
+      return new Promise((resolve) => {
+        let resolved = false;
+        const cleanup = () => {
+          video.removeEventListener('playing', onReady);
+          video.removeEventListener('loadedmetadata', onReady);
+          video.removeEventListener('canplay', onReady);
+        };
+        const onReady = () => {
+          if (resolved) return;
+          if (video.videoWidth > 0 && video.videoHeight > 0) {
+            resolved = true;
+            cleanup();
+            resolve(true);
+          }
+        };
+        video.addEventListener('playing', onReady);
+        video.addEventListener('loadedmetadata', onReady);
+        video.addEventListener('canplay', onReady);
+
+        video.play().catch(err => {
+          console.warn('Camera video auto-trigger play notice:', err);
+        });
+
+        setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            cleanup();
+            resolve(video.videoWidth > 0 && video.videoHeight > 0);
+          }
+        }, 3500);
+      });
+    }
+
     async function startAttendance() {
       const startBtn = document.getElementById('startAttBtn');
+      const retryBtn = document.getElementById('retryAttBtn');
+      const captureBtn = document.getElementById('captureAttBtn');
       const selectedSubject = document.getElementById('subjectSelect')?.value;
       const selectedSession = selectedSubject ? await getLatestSession(selectedSubject) : null;
       if (!selectedSession) {
@@ -1556,30 +2221,116 @@
       }
       const attendanceStatus = await checkAttendanceForSession(selectedSubject, selectedSession).catch(() => null);
       if (attendanceStatus?.exists) return;
-      if (attendanceStateBySession[selectedSession.id] === 'VERIFYING') return;
+
+      // 1. Completely reset old state, loop, and timers
+      stopActiveLivenessSession();
+      stopVideoStream(document.getElementById('attVideo'));
+      resetLivenessUI();
+
       setAttendanceState(selectedSession.id, 'VERIFYING');
       if (startBtn) startBtn.disabled = true;
+      if (retryBtn) retryBtn.disabled = true;
+      if (captureBtn) captureBtn.disabled = true;
 
       try {
+        // 2. Load models
         const ok = await loadModels();
         if (!ok) {
+          showMsg('attMsg', 'error', 'Face verification models could not be loaded. Please check your internet connection.');
           if (startBtn) startBtn.disabled = false;
           return;
         }
+
+        // 3. Stored biometric descriptor verification
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        const studentDoc = await db.collection('students').doc(currentAuthUid).get();
+        if (!studentDoc.exists || !studentDoc.data().faceDescriptor) {
+          showMsg('attMsg', 'error', 'Please complete Face Biometrics Enrollment first.');
+          if (startBtn) startBtn.disabled = false;
+          return;
+        }
+        const storedDescriptor = new Float32Array(studentDoc.data().faceDescriptor);
+
         const failWrap = document.getElementById('faceFailCorrectionWrap');
         if (failWrap) failWrap.style.display = 'none';
 
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        // 4. Open Camera
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
+        });
         const video = document.getElementById('attVideo');
         video.srcObject = stream;
-        document.getElementById('captureAttBtn').disabled = false;
-        
+
+        // 5. Generate fresh session token & randomized sequence
+        const sessionToken = ++currentLivenessSessionToken;
+        const challengeSequence = generateRandomChallengeSequence(3);
+
+        livenessSession = {
+          token: sessionToken,
+          sessionId: selectedSession.id,
+          subjectId: selectedSubject,
+          storedDescriptor: storedDescriptor,
+          sequence: challengeSequence,
+          currentIndex: 0,
+          state: FaceLivenessState.FACE_NOT_READY,
+          stableFaceCount: 0,
+          challengeStartedAt: 0,
+          challengeDeadline: 0,
+          challengeTimeoutMs: 12000,
+          stepState: 'INIT',
+          stepFrames: 0,
+          baselineMetric: null,
+          baselineEar: null,
+          baselineSmile: null,
+          openEarBaseline: null,
+          completedChallenges: [],
+          faceMatched: false,
+          livenessPassed: false,
+          faceVerified: false,
+          bestDistance: 1.0,
+          mismatchFrames: 0,
+          noFaceFrames: 0,
+          multipleFacesFrames: 0,
+          active: true
+        };
+
+        // 6. Wait for camera video readiness (videoWidth > 0, readyState >= 2)
+        await waitForVideoReady(video, sessionToken);
+
+        if (sessionToken !== currentLivenessSessionToken || !livenessSession?.active) {
+          return; // Canceled / retried while camera was starting
+        }
+
+        // 7. Transition to FACE_SEARCHING
+        livenessSession.state = FaceLivenessState.FACE_SEARCHING;
+
         const wrap = document.getElementById('attScannerWrap');
         if (wrap) wrap.classList.add('is-scanning');
+
         const camDot = document.getElementById('attCamDot');
         if (camDot) camDot.className = 'status-chip-dot active';
         const camText = document.getElementById('attCamText');
         if (camText) camText.textContent = 'Camera: Active';
+
+        const faceDot = document.getElementById('attFaceDot');
+        if (faceDot) faceDot.className = 'status-chip-dot warning';
+        const faceText = document.getElementById('attFaceText');
+        if (faceText) faceText.textContent = 'Face: Searching...';
+
+        const liveDot = document.getElementById('attLiveDot');
+        if (liveDot) liveDot.className = 'status-chip-dot';
+        const liveText = document.getElementById('attLiveText');
+        if (liveText) liveText.textContent = 'Liveness: Standby';
+
+        updateLivenessHUDStatus('NO_FACE', 'Position your face in the camera frame');
+        showMsg('attMsg', 'info', 'Camera active. Please look directly at the camera to detect your face.');
+
+        // 8. Start detection loop (challenge timer NOT running yet!)
+        scheduleNextLivenessFrame(80);
       } catch (err) {
         setAttendanceState(selectedSession.id, 'FAILED');
         stopVideoStream(document.getElementById('attVideo'));
@@ -1587,11 +2338,274 @@
         if (wrap) wrap.classList.remove('is-scanning');
         const camText = document.getElementById('attCamText');
         if (camText) camText.textContent = 'Camera: Off';
-        const captureBtn = document.getElementById('captureAttBtn');
+        const camDot = document.getElementById('attCamDot');
+        if (camDot) camDot.className = 'status-chip-dot';
         if (captureBtn) captureBtn.disabled = true;
         showMsg('attMsg', 'error', 'Camera access denied: ' + err.message);
         if (startBtn) startBtn.disabled = false;
       }
+    }
+
+    function scheduleNextLivenessFrame(delayMs = 100) {
+      if (!livenessSession || !livenessSession.active) return;
+      if (livenessLoopTimer) clearTimeout(livenessLoopTimer);
+      livenessLoopTimer = setTimeout(processLivenessFrame, delayMs);
+    }
+
+    async function processLivenessFrame() {
+      const session = livenessSession;
+      if (!session || !session.active || session.token !== currentLivenessSessionToken) return;
+      if (isProcessingLivenessFrame) {
+        scheduleNextLivenessFrame(40);
+        return;
+      }
+
+      isProcessingLivenessFrame = true;
+      try {
+        const video = document.getElementById('attVideo');
+        if (!video || video.readyState < 2 || video.videoWidth === 0) {
+          isProcessingLivenessFrame = false;
+          scheduleNextLivenessFrame(80);
+          return;
+        }
+
+        const canvas = document.getElementById('attCanvas');
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+          canvas.width = video.videoWidth || 640;
+          canvas.height = video.videoHeight || 480;
+        }
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Optimized TinyFaceDetector options for normal webcams
+        const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.35 });
+        const detections = await faceapi.detectAllFaces(canvas, detectorOptions).withFaceLandmarks().withFaceDescriptors();
+
+        if (!session.active || session.token !== currentLivenessSessionToken) {
+          isProcessingLivenessFrame = false;
+          return;
+        }
+
+        // =====================================================================
+        // CASE 0 FACES
+        // =====================================================================
+        if (!detections || detections.length === 0) {
+          session.noFaceFrames = (session.noFaceFrames || 0) + 1;
+          session.stableFaceCount = 0;
+
+          if (session.state === FaceLivenessState.FACE_SEARCHING) {
+            updateLivenessHUDStatus('NO_FACE', 'Position your face in the camera frame');
+          } else if (session.state === FaceLivenessState.LIVENESS_RUNNING) {
+            const remainingMs = Math.max(0, session.challengeDeadline - Date.now());
+            const remainingSec = Math.ceil(remainingMs / 1000);
+            updateLivenessTimerUI(remainingSec);
+            if (remainingMs <= 0) {
+              handleLivenessFailure('Liveness verification timed out. Please try again.');
+              return;
+            }
+            if (session.noFaceFrames >= 12) {
+              updateLivenessHUDStatus('FACE_LOST', 'Face lost. Look directly at the camera.');
+            }
+          }
+
+          isProcessingLivenessFrame = false;
+          scheduleNextLivenessFrame(100);
+          return;
+        }
+
+        // =====================================================================
+        // CASE 2+ FACES
+        // =====================================================================
+        if (detections.length > 1) {
+          session.multipleFacesFrames = (session.multipleFacesFrames || 0) + 1;
+          session.stableFaceCount = 0;
+          updateLivenessHUDStatus('MULTIPLE_FACES', 'Multiple faces detected. Only one student allowed.');
+
+          if (session.state === FaceLivenessState.LIVENESS_RUNNING) {
+            const remainingMs = Math.max(0, session.challengeDeadline - Date.now());
+            const remainingSec = Math.ceil(remainingMs / 1000);
+            updateLivenessTimerUI(remainingSec);
+            if (remainingMs <= 0) {
+              handleLivenessFailure('Liveness verification timed out. Please try again.');
+              return;
+            }
+          }
+
+          if (session.multipleFacesFrames >= 8) {
+            handleLivenessFailure('Verification blocked: Multiple faces detected in camera.');
+            return;
+          }
+
+          isProcessingLivenessFrame = false;
+          scheduleNextLivenessFrame(100);
+          return;
+        }
+
+        // =====================================================================
+        // CASE EXACTLY 1 FACE
+        // =====================================================================
+        session.noFaceFrames = 0;
+        session.multipleFacesFrames = 0;
+
+        const detection = detections[0];
+        const box = detection.box || detection.detection?.box;
+        const landmarks = detection.landmarks;
+        const descriptor = detection.descriptor;
+        const yaw = computeFacialYaw(landmarks);
+        const ear = computeEyeAspectRatio(landmarks);
+        const smile = computeSmileRatio(landmarks);
+
+        // Check if face size is reasonable (at least 16% of camera frame)
+        const minFaceWidth = (canvas.width || 640) * 0.16;
+        if (box && box.width < minFaceWidth) {
+          session.stableFaceCount = 0;
+          updateLivenessHUDStatus('TOO_SMALL', 'Move closer to the camera.');
+          if (session.state === FaceLivenessState.LIVENESS_RUNNING) {
+            const remainingMs = Math.max(0, session.challengeDeadline - Date.now());
+            const remainingSec = Math.ceil(remainingMs / 1000);
+            updateLivenessTimerUI(remainingSec);
+            if (remainingMs <= 0) {
+              handleLivenessFailure('Liveness verification timed out. Please try again.');
+              return;
+            }
+          }
+          isProcessingLivenessFrame = false;
+          scheduleNextLivenessFrame(100);
+          return;
+        }
+
+        // =====================================================================
+        // STATE: FACE_SEARCHING -> Check for 3 consecutive stable frames
+        // =====================================================================
+        if (session.state === FaceLivenessState.FACE_SEARCHING) {
+          session.stableFaceCount = (session.stableFaceCount || 0) + 1;
+          updateLivenessHUDStatus('FACE_DETECTING', `Face detected — hold still (${session.stableFaceCount}/3)...`);
+
+          if (session.stableFaceCount >= 3) {
+            // FACE IS STABLE!
+            session.state = FaceLivenessState.FACE_READY;
+            updateLivenessHUDStatus('FACE_DETECTED', 'Face detected! Starting liveness check...');
+
+            const liveDot = document.getElementById('attLiveDot');
+            if (liveDot) liveDot.className = 'status-chip-dot warning';
+            const liveText = document.getElementById('attLiveText');
+            if (liveText) liveText.textContent = 'Liveness: Checking...';
+
+            renderLivenessChecklist(session.sequence);
+            const firstChallenge = LIVENESS_CHALLENGES[session.sequence[0]];
+            updateChallengePromptUI(firstChallenge, 1, session.sequence.length);
+
+            session.openEarBaseline = ear;
+            session.baselineEar = ear;
+            session.baselineSmile = smile;
+
+            // START TIMER NOW (AND ONLY NOW!)
+            session.state = FaceLivenessState.LIVENESS_RUNNING;
+            session.challengeStartedAt = Date.now();
+            session.challengeDeadline = Date.now() + session.challengeTimeoutMs;
+            session.stepState = 'INIT';
+            session.stepFrames = 0;
+
+            const remainingSec = Math.ceil(session.challengeTimeoutMs / 1000);
+            updateLivenessTimerUI(remainingSec);
+            showMsg('attMsg', 'info', `Challenge 1 of 3: ${firstChallenge.shortPrompt}. Please follow prompt.`);
+          }
+
+          isProcessingLivenessFrame = false;
+          scheduleNextLivenessFrame(90);
+          return;
+        }
+
+        // =====================================================================
+        // STATE: LIVENESS_RUNNING
+        // =====================================================================
+        if (session.state === FaceLivenessState.LIVENESS_RUNNING) {
+          // Keep Face status chip marked as Detected
+          const faceDot = document.getElementById('attFaceDot');
+          if (faceDot) faceDot.className = 'status-chip-dot active';
+          const faceText = document.getElementById('attFaceText');
+          if (faceText) faceText.textContent = 'Face: Detected';
+          const reticle = document.getElementById('attReticle');
+          if (reticle) reticle.className = 'hud-reticle active';
+
+          // Timer calculation
+          const remainingMs = Math.max(0, session.challengeDeadline - Date.now());
+          const remainingSec = Math.ceil(remainingMs / 1000);
+          updateLivenessTimerUI(remainingSec);
+
+          if (remainingMs <= 0) {
+            handleLivenessFailure('Liveness verification timed out. Please try again.');
+            return;
+          }
+
+          // Face identity matching (checked on frontal frames)
+          if (session.storedDescriptor) {
+            const distance = faceapi.euclideanDistance(descriptor, session.storedDescriptor);
+            if (distance < session.bestDistance) {
+              session.bestDistance = distance;
+            }
+
+            if (Math.abs(yaw) <= 0.18) {
+              if (distance <= faceDistanceThreshold) {
+                session.faceMatched = true;
+                session.mismatchFrames = 0;
+              } else {
+                session.mismatchFrames = (session.mismatchFrames || 0) + 1;
+                if (session.mismatchFrames >= 12) {
+                  const matchPct = Math.max(0, Math.round((1 - distance) * 100));
+                  handleLivenessFailure(`Face does not match the registered student (${matchPct}% confidence match).`);
+                  return;
+                }
+              }
+            }
+          }
+
+          // Evaluate active challenge step
+          const currentChallengeId = session.sequence[session.currentIndex];
+          const challengePassed = evaluateChallengeStep(currentChallengeId, landmarks, session);
+
+          if (challengePassed) {
+            session.completedChallenges.push(currentChallengeId);
+            markChallengeCompletedUI(currentChallengeId, session.currentIndex);
+            session.currentIndex++;
+            session.stepState = 'INIT';
+            session.stepFrames = 0;
+            session.baselineMetric = null;
+
+            if (session.currentIndex >= session.sequence.length) {
+              // ALL 3 CHALLENGES PASSED!
+              session.livenessPassed = true;
+              if (session.faceMatched) {
+                session.state = FaceLivenessState.VERIFICATION_SUCCESS;
+                handleLivenessSuccess();
+                return;
+              } else {
+                handleLivenessFailure('Face matching verification failed. Look directly at camera.');
+                return;
+              }
+            } else {
+              // ADVANCE TO NEXT CHALLENGE -> RESET TIMER FOR NEXT CHALLENGE!
+              session.challengeStartedAt = Date.now();
+              session.challengeDeadline = Date.now() + session.challengeTimeoutMs;
+              session.openEarBaseline = ear;
+              session.baselineEar = ear;
+              session.baselineSmile = smile;
+
+              const nextChallenge = LIVENESS_CHALLENGES[session.sequence[session.currentIndex]];
+              updateChallengePromptUI(nextChallenge, session.currentIndex + 1, session.sequence.length);
+              const nextSec = Math.ceil(session.challengeTimeoutMs / 1000);
+              updateLivenessTimerUI(nextSec);
+              showMsg('attMsg', 'info', `Challenge ${session.currentIndex + 1} of ${session.sequence.length}: ${nextChallenge.shortPrompt}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Liveness detection frame error:', err);
+      } finally {
+        isProcessingLivenessFrame = false;
+      }
+
+      scheduleNextLivenessFrame(90);
     }
 
     function finishAttendanceDebug(debug) {
@@ -1619,6 +2633,9 @@
       console.log('expected format:', debug.attendanceId.expectedFormat);
       console.log('attendanceExists:', debug.existingAttendance.exists);
       console.log('faceDetectedCount:', debug.face.detectedCount);
+      console.log('faceIdentityMatched:', debug.face.identityMatched);
+      console.log('livenessPassed:', debug.face.livenessPassed);
+      console.log('challengesCompleted:', debug.face.challengesCompleted);
       console.log('faceVerified:', debug.face.result === 'PASSED');
       console.log('faceDistance:', debug.face.distance);
       console.log('faceThreshold:', debug.face.threshold);
@@ -1658,6 +2675,17 @@
       const failWrap = document.getElementById('faceFailCorrectionWrap');
       const currentAuthUser = auth.currentUser;
       const selectedSubjectData = studentSubjectDocs.find(s => s.id === selectedSubject);
+
+      // CRITICAL SECURITY ASSERTION:
+      // Final attendance authorization REQUIRES BOTH faceMatch === true AND livenessPassed === true
+      if (!livenessSession || !livenessSession.livenessPassed || !livenessSession.faceVerified || !livenessSession.faceMatched) {
+        showMsg('attMsg', 'error', 'Security constraint: Face identity matching and active liveness detection must both pass before marking attendance.');
+        if (captureBtn) captureBtn.disabled = true;
+        return;
+      }
+
+      if (captureBtn) captureBtn.disabled = true;
+
       const attendanceDebug = {
         auth: {
           currentUserExists: Boolean(currentAuthUser),
@@ -1694,10 +2722,13 @@
           exists: null
         },
         face: {
-          detectedCount: null,
-          distance: null,
+          detectedCount: 1,
+          distance: livenessSession.bestDistance,
           threshold: faceDistanceThreshold,
-          result: 'NOT_CHECKED'
+          livenessPassed: true,
+          challengesCompleted: [...livenessSession.completedChallenges],
+          identityMatched: true,
+          result: 'PASSED'
         },
         gps: {
           studentLatitude: null,
@@ -1732,6 +2763,7 @@
           studentCanDeleteAttendance: false
         }
       };
+
       console.log('[ATTENDANCE DEBUG START]');
       if (failWrap) failWrap.style.display = 'none';
 
@@ -1740,8 +2772,6 @@
         finishAttendanceDebug(attendanceDebug);
         return;
       }
-      
-      if (captureBtn) captureBtn.disabled = true;
 
       try {
         await loadSettings();
@@ -1761,93 +2791,20 @@
           facultyUid: latestSession.facultyUid || null,
           date: latestSession.date || null
         };
-        
-        const video = document.getElementById('attVideo');
-        const canvas = document.getElementById('attCanvas');
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        showMsg('attMsg', 'info', 'Analyzing facial biometrics...');
-        
-        const faceDot = document.getElementById('attFaceDot');
-        if (faceDot) faceDot.className = 'status-chip-dot warning';
-        const faceText = document.getElementById('attFaceText');
-        if (faceText) faceText.textContent = 'Face: Matching...';
 
-        const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
-        attendanceDebug.face.detectedCount = detections ? detections.length : 0;
-        if (!detections || detections.length === 0) {
-          attendanceDebug.face.result = 'FAILED_NO_FACE';
-          showMsg('attMsg', 'error', 'Face not detected. Please position your face clearly in the camera frame.');
-          const reticle = document.getElementById('attReticle');
-          if (reticle) reticle.className = 'hud-reticle error';
-          if (faceDot) faceDot.className = 'status-chip-dot error';
-          if (faceText) faceText.textContent = 'Face: Verification Failed';
-          showFaceFailCorrectionOption(latestSession, selectedSubject, 'Face verification failed, but I was present in the class.');
-          if (captureBtn) captureBtn.disabled = false;
-          return;
-        }
-
-        if (detections.length > 1) {
-          attendanceDebug.face.result = 'FAILED_MULTIPLE_FACES';
-          showMsg('attMsg', 'error', 'Multiple faces detected. Only one person is allowed in the camera frame.');
-          const reticle = document.getElementById('attReticle');
-          if (reticle) reticle.className = 'hud-reticle error';
-          if (faceDot) faceDot.className = 'status-chip-dot error';
-          if (faceText) faceText.textContent = 'Face: Verification Failed';
-          showFaceFailCorrectionOption(latestSession, selectedSubject, 'Multiple faces in frame during attendance.');
-          if (captureBtn) captureBtn.disabled = false;
-          return;
-        }
-
-        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
-        const doc = await db.collection('students').doc(currentAuthUid).get();
-        if (!doc.exists || !doc.data().faceDescriptor) {
-          showMsg('attMsg', 'error', 'Please complete Face Biometrics Enrollment first.');
-          if (captureBtn) captureBtn.disabled = false;
-          return;
-        }
-
-        const storedDescriptor = new Float32Array(doc.data().faceDescriptor);
-        const currentDescriptor = detections[0].descriptor;
-        const distance = faceapi.euclideanDistance(currentDescriptor, storedDescriptor);
-        const faceMatchPercent = Math.max(0, Math.round((1 - distance) * 100));
-        attendanceDebug.face.distance = distance;
-        
-        if (distance > faceDistanceThreshold) {
-          attendanceDebug.face.result = 'FAILED_THRESHOLD';
-          showMsg('attMsg', 'error', `Face Verification Failed (${faceMatchPercent}% confidence match). Please look directly at the camera.`);
-          const reticle = document.getElementById('attReticle');
-          if (reticle) reticle.className = 'hud-reticle error';
-          if (faceDot) faceDot.className = 'status-chip-dot error';
-          if (faceText) faceText.textContent = 'Face: Verification Failed';
-          showFaceFailCorrectionOption(latestSession, selectedSubject, 'Face verification failed, but I was present in the class.');
-          if (captureBtn) captureBtn.disabled = false;
-          return;
-        }
-
-        if (failWrap) failWrap.style.display = 'none';
-        attendanceDebug.face.result = 'PASSED';
-
-        if (faceDot) faceDot.className = 'status-chip-dot active';
-        if (faceText) faceText.textContent = 'Face: Verified';
-        
-        const reticle = document.getElementById('attReticle');
-        if (reticle) reticle.className = 'hud-reticle verified';
-
-        showMsg('attMsg', 'success', `Face Biometrics Verified (${faceMatchPercent}% match). Verifying GPS proximity...`);
+        showMsg('attMsg', 'info', '✓ Face Biometrics & Active Liveness Verified. Validating GPS proximity...');
         await captureGPS(selectedSubject, latestSession, attendanceDebug);
       } catch (err) {
         console.error('[ATTENDANCE VERIFICATION ERROR]', err);
         showMsg('attMsg', 'error', err?.code === 'unavailable'
           ? 'Network error. Please check your connection and try again.'
-          : 'Face verification failed.');
+          : 'Attendance verification failed.');
       } finally {
         const sessionId = attendanceDebug.session.sessionId;
         const state = sessionId ? attendanceStateBySession[sessionId] : null;
         if (state !== 'MARKED' && state !== 'ALREADY_MARKED') {
           stopVideoStream(document.getElementById('attVideo'));
+          stopActiveLivenessSession();
           const wrap = document.getElementById('attScannerWrap');
           if (wrap) wrap.classList.remove('is-scanning');
           const startBtn = document.getElementById('startAttBtn');
@@ -2143,11 +3100,13 @@
         await attDocRef.set(attendancePayload);
         setAttendanceState(sessionId, 'MARKED');
         lockAttendanceControls('MARKED', 'Attendance Marked. You have already marked attendance for this class.');
-        showMsg('attMsg', 'success', '🎉 Attendance Marked Successfully! Verified with Face Biometrics & GPS proximity.');
+        showMsg('attMsg', 'success', '🎉 Attendance Marked Successfully! Verified with Face Biometrics, Active Liveness & GPS proximity.');
         
-        // Stop video stream upon successful attendance
+        // Stop video stream and reset liveness UI upon successful attendance
         const video = document.getElementById('attVideo');
         stopVideoStream(video);
+        stopActiveLivenessSession();
+        resetLivenessUI();
         const wrap = document.getElementById('attScannerWrap');
         if (wrap) wrap.classList.remove('is-scanning');
         const camDot = document.getElementById('attCamDot');
@@ -2923,14 +3882,17 @@
       window.location.href = 'index.html';
     }
 
-    window.addEventListener('pagehide', () => {
+    function handlePageTeardown() {
       if (window._studentRefreshInterval) {
         clearInterval(window._studentRefreshInterval);
         window._studentRefreshInterval = null;
       }
       stopVideoStream(document.getElementById('attVideo'));
       stopVideoStream(document.getElementById('regVideo'));
-    });
+    }
+
+    window.addEventListener('pagehide', handlePageTeardown);
+    window.addEventListener('beforeunload', handlePageTeardown);
   </script>
 </body>
 </html>

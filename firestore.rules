@@ -92,7 +92,7 @@ service cloud.firestore {
     // =========================================================================
     match /departments/{deptId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     // =========================================================================
@@ -136,7 +136,7 @@ service cloud.firestore {
           isEnrolledStudent()
         )
       );
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     // =========================================================================
@@ -494,7 +494,7 @@ service cloud.firestore {
     // =========================================================================
     match /timetable/{timetableId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     // =========================================================================

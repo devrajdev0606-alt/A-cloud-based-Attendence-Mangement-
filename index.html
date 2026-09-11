@@ -259,6 +259,7 @@
             </div>
           </div>
 
+
           <button type="submit" id="regTeacherSubmitBtn" class="btn btn-teacher" style="width: 100%; height: 44px; margin-top: 4px;">Register Faculty Account</button>
         </form>
         <div id="teacherRegMsg" class="msg"></div>
@@ -378,6 +379,12 @@
         }
 
         if (student) {
+          if (student.active === false || student.status === 'inactive') {
+            await auth.signOut();
+            localStorage.clear();
+            showLoginMessage('studentLoginMsg', 'This student account is inactive. Please contact the administration.');
+            return;
+          }
           localStorage.setItem('studentId', studentId);
           localStorage.setItem('studentUid', user.uid);
           localStorage.setItem('studentName', student.name || 'Student');
@@ -473,6 +480,12 @@
         }
 
         if (faculty) {
+          if (faculty.active === false || faculty.status === 'inactive') {
+            await auth.signOut();
+            localStorage.clear();
+            showLoginMessage('facultyLoginMsg', 'This faculty account is inactive. Please contact the administration.');
+            return;
+          }
           localStorage.setItem('facultyId', facultyId);
           localStorage.setItem('facultyUid', user.uid);
           localStorage.setItem('facultyName', faculty.name || 'Faculty');

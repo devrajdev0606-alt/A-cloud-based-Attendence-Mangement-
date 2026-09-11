@@ -25,9 +25,23 @@ Deploy the checked-in rules from the project directory:
 firebase deploy --only firestore:rules
 ```
 
-The current rules are intentionally permissive for this legacy demo login flow. Do not use them for sensitive production data until Firebase Authentication and role-based rules are added.
+The rules keep all administrative deletes restricted to `isAdmin()`.
 
-### 5. Run the App
+### 5. Deploy the Permanent-Delete Backend (Required)
+Student and faculty deletion includes Firebase Authentication deletion, which must run through the trusted Firebase Functions endpoint. The browser never receives Admin SDK credentials.
+
+Firebase Functions deployment requires the Firebase project to use the Blaze (pay-as-you-go) plan because Firebase enables Cloud Functions, Cloud Build, and Artifact Registry APIs during deployment. The project owner must upgrade the project and enable those APIs before deployment.
+
+From the project directory:
+
+```bash
+npm --prefix functions install
+firebase deploy --only functions,firestore:rules,hosting
+```
+
+The Admin Portal calls `deleteAdminEntity` only after the signed-in Admin has entered the exact confirmation value. Do not test permanent deletion against production data; create test records first.
+
+### 6. Run the App
 Open `index.html` in a browser:
 - **Option 1:** Double-click `index.html`
 - **Option 2:** Use a local server:

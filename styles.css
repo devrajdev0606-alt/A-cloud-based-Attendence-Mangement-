@@ -690,6 +690,12 @@ canvas {
   transition: all 0.3s ease;
 }
 
+.hud-reticle.active {
+  border-color: #38bdf8;
+  border-style: solid;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+}
+
 .hud-reticle.verified {
   border-color: #10b981;
   border-style: solid;
@@ -761,6 +767,181 @@ canvas {
 .status-chip-dot.active { background: #10b981; }
 .status-chip-dot.warning { background: #f59e0b; }
 .status-chip-dot.error { background: #ef4444; }
+
+/* ==========================================================================
+   ACTIVE LIVENESS DETECTION HUD & CARDS
+   ========================================================================== */
+.hud-liveness-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(7, 16, 30, 0.88);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  padding: 6px 14px;
+  border-radius: 20px;
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  z-index: 10;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  transition: all 0.25s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.hud-liveness-banner.success {
+  border-color: #10b981;
+  background: rgba(6, 78, 59, 0.9);
+  color: #a7f3d0;
+}
+
+.hud-liveness-banner.warning {
+  border-color: #f59e0b;
+  background: rgba(120, 53, 15, 0.9);
+  color: #fde68a;
+}
+
+.hud-liveness-banner.error {
+  border-color: #ef4444;
+  background: rgba(127, 29, 29, 0.9);
+  color: #fecaca;
+}
+
+.hud-timer-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f1f5f9;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 12px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.liveness-challenge-card {
+  background: #ffffff;
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.liveness-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.76rem;
+}
+
+.liveness-card-badge {
+  background: rgba(31, 109, 255, 0.1);
+  color: var(--accent-blue);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.liveness-card-timer {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.liveness-main-prompt {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--primary-navy);
+  text-align: center;
+  margin: 4px 0 2px 0;
+  letter-spacing: -0.2px;
+}
+
+.liveness-sub-instruction {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.liveness-progress-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-neutral);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 6px 0;
+}
+
+.liveness-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1f6dff 0%, #10b981 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.liveness-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.liveness-check-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-neutral);
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+}
+
+.liveness-check-item.active {
+  background: rgba(31, 109, 255, 0.08);
+  color: var(--accent-blue);
+  font-weight: 700;
+  border: 1px solid rgba(31, 109, 255, 0.25);
+}
+
+.liveness-check-item.completed {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+  font-weight: 600;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.liveness-check-icon {
+  font-size: 0.9rem;
+  width: 18px;
+  text-align: center;
+}
+
+.btn-primary-pulse {
+  animation: pulsePrimary 1.6s infinite ease-in-out;
+}
+
+@keyframes pulsePrimary {
+  0% { box-shadow: 0 0 0 0 rgba(31, 109, 255, 0.5); }
+  70% { box-shadow: 0 0 0 10px rgba(31, 109, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(31, 109, 255, 0); }
+}
 
 /* ==========================================================================
    FORM INPUTS, SELECTS & LABELS

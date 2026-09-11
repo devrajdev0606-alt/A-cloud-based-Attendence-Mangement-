@@ -228,7 +228,10 @@
               </div>
               <p style="font-size:0.78rem; color:var(--text-muted); margin:8px 0 0;">When both coordinates are configured, new attendance sessions use this classroom location instead of the faculty device.</p>
             </div>
-            <button type="submit" class="btn submit-btn" style="align-self: flex-end; margin-top: 4px;">Save Settings</button>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px; flex-wrap:wrap;">
+              <button type="submit" class="btn submit-btn">Save Settings</button>
+              <button type="button" class="btn btn-reject" onclick="promptAdminDelete('settings', 'attendance', {name:'Attendance settings'})">Delete Settings Permanently</button>
+            </div>
           </form>
           <div id="settingsMsg" class="msg"></div>
         </div>
@@ -423,6 +426,29 @@
     </div>
   </div>
 
+  <!-- Confirmation Modal for Admin Permanent Delete Actions -->
+  <div id="adminDeleteModal" class="modal-overlay" style="display:none;" onclick="closeAdminDeleteModalOnBackdrop(event)">
+    <div class="modal-card" style="max-width: 520px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="badge red">Permanent Delete</span>
+          <h2 id="adminDeleteModalTitle" style="margin-top:4px;">Confirm action</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeAdminDeleteModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="adminDeleteModalText" style="font-size: 0.92rem; color: var(--text-main); margin-bottom: 14px; line-height: 1.5;"></p>
+        <div id="adminDeleteDetails" class="info-box" style="margin-bottom: 16px;"></div>
+        <label for="adminDeleteConfirmInput" style="display:block; font-size:0.82rem; font-weight:700; margin-bottom:6px;">Type <span id="adminDeleteConfirmToken"></span> to confirm</label>
+        <input type="text" id="adminDeleteConfirmInput" autocomplete="off" oninput="validateAdminDeleteConfirmation()" style="width:100%; margin-bottom:16px;" />
+        <div class="btn-row" style="justify-content: flex-end; width: 100%;">
+          <button type="button" class="btn back-btn" onclick="closeAdminDeleteModal()">Cancel</button>
+          <button type="button" id="adminDeleteSubmitBtn" class="btn btn-reject" disabled onclick="executeAdminDelete()">Delete Permanently</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Enrolled Roster Modal -->
   <div id="rosterModal" class="modal-overlay" style="display:none;" onclick="closeRosterModalOnBackdrop(event)">
     <div class="modal-card" style="max-width: 520px;" onclick="event.stopPropagation()">
@@ -579,10 +605,12 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script>
     const db = firebase.firestore();
     const auth = firebase.auth();
+    const functions = firebase.app().functions('us-central1');
 
     // =========================================================================
     // ADMIN AUTHENTICATION GUARD
@@ -791,7 +819,7 @@
         deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
         let rows = [];
         if (currentTab === 'students') {
-          thead.innerHTML = '<tr><th>Student Name</th><th>USN</th><th>Email</th><th>Department</th><th>Sem / Sec</th><th>Biometric Face Status</th></tr>';
+          thead.innerHTML = '<tr><th>Student Name</th><th>USN</th><th>Email</th><th>Department</th><th>Sem / Sec</th><th>Biometric Face Status</th><th>Actions</th></tr>';
           stuSnap.forEach(doc => {
             const s = doc.data();
             const deptName = deptMap[s.dept] || s.dept || '-';
@@ -801,17 +829,17 @@
             const semSecBadge = s.semester 
               ? `<span class="badge blue">Sem ${s.semester} • Sec ${s.section || 'A'}</span>` 
               : '<span class="badge">-</span>';
-            rows.push(`<tr><td><strong>${s.name}</strong></td><td><strong>${s.usn || '-'}</strong></td><td>${s.email}</td><td><span class="badge">${deptName}</span></td><td>${semSecBadge}</td><td>${faceBadge}</td></tr>`);
+            rows.push(`<tr><td><strong>${escapeAdminHtml(s.name)}</strong></td><td><strong>${escapeAdminHtml(s.usn || '-')}</strong></td><td>${escapeAdminHtml(s.email)}</td><td><span class="badge">${escapeAdminHtml(deptName)}</span></td><td>${semSecBadge}</td><td>${faceBadge}</td><td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('student', '${doc.id}', '${encodeURIComponent(JSON.stringify(s))}')">🗑️ Delete</button></td></tr>`);
           });
         } else if (currentTab === 'faculty') {
-          thead.innerHTML = '<tr><th>Faculty Name</th><th>Email</th><th>Department</th></tr>';
+          thead.innerHTML = '<tr><th>Faculty Name</th><th>Email</th><th>Department</th><th>Actions</th></tr>';
           facSnap.forEach(doc => {
             const f = doc.data();
             const deptName = deptMap[f.department] || f.department || '-';
-            rows.push(`<tr><td><strong>${f.name}</strong></td><td>${f.email}</td><td><span class="badge blue">${deptName}</span></td></tr>`);
+            rows.push(`<tr><td><strong>${escapeAdminHtml(f.name)}</strong></td><td>${escapeAdminHtml(f.email)}</td><td><span class="badge blue">${escapeAdminHtml(deptName)}</span></td><td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('faculty', '${doc.id}', '${encodeURIComponent(JSON.stringify(f))}')">🗑️ Delete</button></td></tr>`);
           });
         } else {
-          thead.innerHTML = '<tr><th>Subject Name</th><th>Code</th><th>Department</th><th>Sem / Sec</th><th>Planned Classes</th><th>Assigned Faculty</th><th>Enrolled Students</th></tr>';
+          thead.innerHTML = '<tr><th>Subject Name</th><th>Code</th><th>Department</th><th>Sem / Sec</th><th>Planned Classes</th><th>Assigned Faculty</th><th>Enrolled Students</th><th>Actions</th></tr>';
           const facMap = {};
           facSnap.forEach(doc => { facMap[doc.id] = doc.data().name; });
           subSnap.forEach(doc => {
@@ -827,7 +855,7 @@
               ? `<span class="badge" style="font-weight:600;">${plannedNum} classes <span style="font-size:10px; color:var(--emerald-dark);">(${minReq}% min)</span></span>`
               : '<span class="badge" style="opacity:0.6;">Not configured</span>';
             const enrolledCount = (s.studentIds || []).length;
-            rows.push(`<tr><td><strong>${s.subjectName}</strong></td><td><span class="badge">${s.subjectCode}</span></td><td>${deptName}</td><td>${semSecBadge}</td><td>${hoursBadge}</td><td>${facName}</td><td><button type="button" class="badge green" style="cursor:pointer; border:none; font-weight:600;" onclick="viewSubjectRoster('${doc.id}')" title="Click to view enrolled roster">👥 ${enrolledCount} students</button></td></tr>`);
+            rows.push(`<tr><td><strong>${escapeAdminHtml(s.subjectName)}</strong></td><td><span class="badge">${escapeAdminHtml(s.subjectCode)}</span></td><td>${escapeAdminHtml(deptName)}</td><td>${semSecBadge}</td><td>${hoursBadge}</td><td>${escapeAdminHtml(facName)}</td><td><button type="button" class="badge green" style="cursor:pointer; border:none; font-weight:600;" onclick="viewSubjectRoster('${doc.id}')" title="Click to view enrolled roster">👥 ${enrolledCount} students</button></td><td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('subject', '${doc.id}', '${encodeURIComponent(JSON.stringify(s))}')">🗑️ Delete</button></td></tr>`);
           });
         }
         tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="7" class="empty">No records found.</td></tr>' : rows.join('');
@@ -1035,6 +1063,7 @@
               <button type="button" class="btn-dept-action" onclick="openDeptDetail('${doc.id}', '${escapedName}', 'students')">👥 View Students</button>
               <button type="button" class="btn-dept-action" onclick="openDeptDetail('${doc.id}', '${escapedName}', 'faculty')">👩‍🏫 View Faculty</button>
               <button type="button" class="btn-dept-action" onclick="openDeptDetail('${doc.id}', '${escapedName}', 'subjects')">📚 View Subjects</button>
+              <button type="button" class="btn-dept-action" style="color:var(--crimson-dark);" onclick="promptAdminDelete('department', '${doc.id}', '${encodeURIComponent(JSON.stringify(d))}')">🗑️ Delete Department</button>
             </div>
           `;
           accordion.appendChild(item);
@@ -1136,9 +1165,9 @@
       const pagedRecords = filteredRecords.slice(startIndex, endIndex);
 
       if (type === 'students') {
-        thead.innerHTML = '<tr><th>Student Name</th><th>USN</th><th>Email</th><th>Sem / Sec</th><th>Face Status</th></tr>';
+        thead.innerHTML = '<tr><th>Student Name</th><th>USN</th><th>Email</th><th>Sem / Sec</th><th>Face Status</th><th>Actions</th></tr>';
         if (pagedRecords.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="empty">No students found matching query.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" class="empty">No students found matching query.</td></tr>';
         } else {
           tbody.innerHTML = pagedRecords.map(s => `
             <tr>
@@ -1147,25 +1176,27 @@
               <td>${s.email || '-'}</td>
               <td><span class="badge blue">Sem ${s.semester || 1} • Sec ${s.section || 'A'}</span></td>
               <td>${s.faceRegistered ? '<span class="badge green">● Registered</span>' : '<span class="badge">Pending</span>'}</td>
+              <td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('student', '${s.id}', '${encodeURIComponent(JSON.stringify(s))}')">🗑️ Delete</button></td>
             </tr>
           `).join('');
         }
       } else if (type === 'faculty') {
-        thead.innerHTML = '<tr><th>Faculty Name</th><th>Email</th></tr>';
+        thead.innerHTML = '<tr><th>Faculty Name</th><th>Email</th><th>Actions</th></tr>';
         if (pagedRecords.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="2" class="empty">No faculty found matching query.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="3" class="empty">No faculty found matching query.</td></tr>';
         } else {
           tbody.innerHTML = pagedRecords.map(f => `
             <tr>
               <td><strong>${f.name || 'Unknown'}</strong></td>
               <td>${f.email || '-'}</td>
+              <td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('faculty', '${f.id}', '${encodeURIComponent(JSON.stringify(f))}')">🗑️ Delete</button></td>
             </tr>
           `).join('');
         }
       } else {
-        thead.innerHTML = '<tr><th>Subject Name</th><th>Course Code</th><th>Sem / Sec</th><th>Total Hours</th><th>Assigned Faculty</th><th>Enrolled Students</th></tr>';
+        thead.innerHTML = '<tr><th>Subject Name</th><th>Course Code</th><th>Sem / Sec</th><th>Total Hours</th><th>Assigned Faculty</th><th>Enrolled Students</th><th>Actions</th></tr>';
         if (pagedRecords.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="empty">No subjects found matching query.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" class="empty">No subjects found matching query.</td></tr>';
         } else {
           tbody.innerHTML = pagedRecords.map(sub => {
             const hoursBadge = sub.totalHours
@@ -1179,6 +1210,7 @@
                 <td>${hoursBadge}</td>
                 <td>${sub.facultyName || '-'}</td>
                 <td><button type="button" class="badge green" style="cursor:pointer; border:none; font-weight:600;" onclick="viewSubjectRoster('${sub.id}')" title="Click to view enrolled roster">👥 ${(sub.studentIds || []).length} students</button></td>
+                <td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('subject', '${sub.id}', '${encodeURIComponent(JSON.stringify(sub))}')">🗑️ Delete</button></td>
               </tr>
             `;
           }).join('');
@@ -1429,6 +1461,140 @@
     function closeConfirmModalOnBackdrop(e) {
       if (e.target.id === 'confirmActionModal') {
         closeConfirmModal();
+      }
+    }
+
+    let pendingAdminDelete = null;
+
+    function escapeAdminHtml(value) {
+      return String(value ?? '').replace(/[&<>'"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[character]));
+    }
+
+    function adminRecordDetails(type, data) {
+      const dept = getDepartmentDisplayName(data.dept || data.department || data.departmentId);
+      if (type === 'student') {
+        return `<div><strong>Name:</strong> ${escapeAdminHtml(data.name || '-')}</div>
+          <div><strong>USN:</strong> ${escapeAdminHtml(data.usn || '-')}</div>
+          <div><strong>Email:</strong> ${escapeAdminHtml(data.email || '-')}</div>
+          <div><strong>Department:</strong> ${escapeAdminHtml(dept)}</div>
+          <div><strong>Semester / Section:</strong> ${escapeAdminHtml(data.semester || '-')} / ${escapeAdminHtml(data.section || '-')}</div>`;
+      }
+      if (type === 'faculty') {
+        return `<div><strong>Name:</strong> ${escapeAdminHtml(data.name || '-')}</div>
+          <div><strong>Faculty ID:</strong> ${escapeAdminHtml(data.uid || data.id || '-')}</div>
+          <div><strong>Email:</strong> ${escapeAdminHtml(data.email || '-')}</div>
+          <div><strong>Department:</strong> ${escapeAdminHtml(dept)}</div>`;
+      }
+      if (type === 'subject') {
+        return `<div><strong>Subject:</strong> ${escapeAdminHtml(data.subjectName || '-')}</div>
+          <div><strong>Code:</strong> ${escapeAdminHtml(data.subjectCode || '-')}</div>
+          <div><strong>Department:</strong> ${escapeAdminHtml(dept)}</div>
+          <div><strong>Semester / Section:</strong> ${escapeAdminHtml(data.semester || '-')} / ${escapeAdminHtml(data.section || '-')}</div>
+          <div><strong>Assigned Faculty:</strong> ${escapeAdminHtml(data.facultyName || '-')}</div>`;
+      }
+      if (type === 'department') {
+        return `<div><strong>Department:</strong> ${escapeAdminHtml(data.name || '-')}</div>`;
+      }
+      return `<div><strong>Day:</strong> ${escapeAdminHtml(data.day || '-')}</div>
+        <div><strong>Time:</strong> ${escapeAdminHtml(data.startTime || '-')} - ${escapeAdminHtml(data.endTime || '-')}</div>
+        <div><strong>Subject / Activity:</strong> ${escapeAdminHtml(data.subjectName || data.title || '-')}</div>
+        <div><strong>Faculty:</strong> ${escapeAdminHtml(data.facultyName || '-')}</div>
+        <div><strong>Section:</strong> ${escapeAdminHtml(data.section || '-')}</div>`;
+    }
+
+    function promptAdminDelete(type, id, data) {
+      if (!id || !data) return;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(decodeURIComponent(data)); } catch (err) { return; }
+      }
+      const labels = {
+        student: ['Delete this student permanently?', 'USN'],
+        faculty: ['Delete this faculty member permanently?', 'Faculty ID or email'],
+        subject: ['Delete this subject permanently?', 'Subject code'],
+        department: ['Delete this department permanently?', 'Department name'],
+        timetable: ['Delete this timetable entry permanently?', 'Document ID'],
+        settings: ['Delete attendance settings permanently?', 'attendance']
+      };
+      pendingAdminDelete = { type, id, data };
+      document.getElementById('adminDeleteModalTitle').textContent = labels[type][0];
+      document.getElementById('adminDeleteModalText').textContent = 'This permanently deletes the selected record and entity-owned data. This action cannot be undone.';
+      document.getElementById('adminDeleteDetails').innerHTML = adminRecordDetails(type, data);
+      const token = type === 'student' ? String(data.usn || '')
+        : type === 'faculty' ? String(data.uid || data.email || id)
+        : type === 'subject' ? String(data.subjectCode || '')
+        : type === 'department' ? String(data.name || '')
+        : type === 'settings' ? 'attendance' : String(id);
+      pendingAdminDelete.confirmToken = token;
+      document.getElementById('adminDeleteConfirmToken').textContent = token || labels[type][1];
+      const input = document.getElementById('adminDeleteConfirmInput');
+      input.value = '';
+      const button = document.getElementById('adminDeleteSubmitBtn');
+      button.textContent = 'Delete Permanently';
+      button.disabled = false;
+      validateAdminDeleteConfirmation();
+      document.getElementById('adminDeleteModal').style.display = 'flex';
+    }
+
+    function validateAdminDeleteConfirmation() {
+      const input = document.getElementById('adminDeleteConfirmInput');
+      const button = document.getElementById('adminDeleteSubmitBtn');
+      button.disabled = !pendingAdminDelete || input.value !== pendingAdminDelete.confirmToken;
+    }
+
+    function closeAdminDeleteModal() {
+      document.getElementById('adminDeleteModal').style.display = 'none';
+      pendingAdminDelete = null;
+      document.getElementById('adminDeleteConfirmInput').value = '';
+    }
+
+    function closeAdminDeleteModalOnBackdrop(e) {
+      if (e.target.id === 'adminDeleteModal') closeAdminDeleteModal();
+    }
+
+    async function executeAdminDelete() {
+      if (!pendingAdminDelete) return;
+      const action = pendingAdminDelete;
+      const button = document.getElementById('adminDeleteSubmitBtn');
+      button.disabled = true;
+      button.textContent = 'Deleting...';
+
+      try {
+        if (action.confirmToken !== document.getElementById('adminDeleteConfirmInput').value) {
+          throw new Error('Confirmation text does not match. Nothing was deleted.');
+        }
+        const result = await functions.httpsCallable('deleteAdminEntity')({ type: action.type, id: action.id });
+        if (!result.data || result.data.deletedId !== action.id || (action.type === 'student' || action.type === 'faculty') && result.data.authDeleted !== true) {
+          throw new Error('The server did not confirm complete permanent deletion.');
+        }
+
+        closeAdminDeleteModal();
+        invalidateDepartmentCache();
+        cachedSubjectsList = [];
+        cachedFacultyList = [];
+        await loadDepartments(true);
+        await loadFacultyOptions();
+        await updateStats();
+        await renderListing();
+        await loadAdminTimetable();
+        alert('Successfully deleted permanently.');
+      } catch (err) {
+        console.error('[AdminDelete] deleteAdminEntity failed', {
+          code: err.code || 'unknown',
+          message: err.message || 'No error message returned',
+          details: err.details || null
+        });
+        const code = err.code || '';
+        let safeMessage = err.message || 'Nothing was deleted.';
+        if (code.includes('permission-denied')) safeMessage = 'Administrator authorization failed.';
+        else if (code.includes('not-found')) safeMessage = 'The selected record was not found.';
+        else if (code.includes('unavailable') || code.includes('deadline-exceeded')) safeMessage = 'Unable to reach the deletion service. Please try again.';
+        else if (code.includes('internal')) safeMessage = 'The deletion service is unavailable or not deployed. Deploy deleteAdminEntity in Firebase Functions and try again.';
+        alert(`Deletion failed (${code || 'unknown'}). ${safeMessage}`);
+        button.disabled = false;
+        button.textContent = 'Delete Permanently';
+        validateAdminDeleteConfirmation();
       }
     }
 
@@ -2220,7 +2386,8 @@
           if (subSnap) {
             cachedSubjectsList = [];
             subSnap.forEach(doc => {
-              cachedSubjectsList.push({ id: doc.id, ...doc.data() });
+              const data = doc.data();
+              cachedSubjectsList.push({ id: doc.id, ...data });
             });
           }
         }
@@ -2230,7 +2397,8 @@
           if (facSnap) {
             cachedFacultyList = [];
             facSnap.forEach(doc => {
-              cachedFacultyList.push({ id: doc.id, ...doc.data() });
+              const data = doc.data();
+              cachedFacultyList.push({ id: doc.id, ...data });
             });
           }
         }
@@ -2377,7 +2545,7 @@
             <td>
               <div style="display:flex; gap:6px;">
                 <button type="button" class="btn btn-primary" style="padding:4px 10px; font-size:0.78rem;" onclick="openTimetableModal(decodeURIComponent('${safeItemJson}'))">✏️ Edit</button>
-                <button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="deleteTimetableEntry('${item.id}')">🗑️ Delete</button>
+                <button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('timetable', '${item.id}', '${safeItemJson}')">🗑️ Delete</button>
               </div>
             </td>
           </tr>
@@ -2834,16 +3002,6 @@
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Save Timetable Entry';
-      }
-    }
-
-    async function deleteTimetableEntry(id) {
-      if (!confirm('Are you sure you want to delete this timetable entry?')) return;
-      try {
-        await db.collection('timetable').doc(id).delete();
-        await loadAdminTimetable();
-      } catch (err) {
-        alert('Error deleting timetable entry: ' + err.message);
       }
     }
 
