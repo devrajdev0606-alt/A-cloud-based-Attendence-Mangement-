@@ -1619,6 +1619,59 @@
       }
     };
 
+    const BLINK_CONFIG = {
+      MIN_CALIBRATION_FRAMES: 8,         // 8 valid frontal frames (~400-600ms)
+      MAX_CALIBRATION_YAW: 0.22,         // Face reasonably frontal
+      MIN_VALID_OPEN_EAR: 0.20,          // Minimum EAR to consider eye open during baseline
+      CLOSE_RATIO: 0.76,                 // Drop of ~24% below baseline indicates closure
+      OPEN_RATIO: 0.86,                  // Return to >= 86% of baseline indicates open
+      MIN_CLOSE_THRESH: 0.16,            // Hard safety floor for close threshold
+      MAX_CLOSE_THRESH: 0.24,            // Hard safety ceiling for close threshold
+      MIN_OPEN_THRESH: 0.20,             // Hard safety floor for open threshold
+      MIN_CLOSED_DURATION_MS: 40,        // Natural blink closing phase
+      MAX_CLOSED_DURATION_MS: 1100,      // Max duration eyes can stay shut (<1.1s, avoids sleep/shut eyes)
+      MIN_TIME_BETWEEN_BLINKS_MS: 150,   // Eyes must reopen and stay open before 2nd blink begins
+      SMOOTHING_ALPHA: 0.70              // Responsive EMA
+    };
+
+    const HEAD_TURN_CONFIG = {
+      BASELINE_FRAMES: 6,
+      SMOOTHING_WINDOW: 5,
+      TURN_THRESHOLD: 0.14,
+      RETURN_THRESHOLD: 0.08,
+      NEUTRAL_THRESHOLD: 0.07,
+      REQUIRED_TURN_FRAMES: 3,
+      REQUIRED_RETURN_FRAMES: 2
+    };
+
+    function isHeadTurnChallenge(challengeId) {
+      return challengeId === 'TURN_LEFT' || challengeId === 'TURN_RIGHT';
+    }
+
+    function resetChallengeState(session, challengeId) {
+      session.stepState = 'INIT';
+      session.stepFrames = 0;
+      session.baselineMetric = null;
+      session.baselineYawSamples = [];
+      session.baselineYaw = null;
+      session.yawHistory = [];
+      session.smoothedYaw = null;
+      session.turnFrames = 0;
+      session.returnFrames = 0;
+      session.blinkState = 'CALIBRATING';
+      session.blinkCount = 0;
+      session.blinkBaselineSamples = [];
+      session.blinkBaselineEar = null;
+      session.blinkOpenThresh = null;
+      session.blinkCloseThresh = null;
+      session.blinkClosedStart = null;
+      session.lastBlinkTime = null;
+      session.openConfirmedFrames = 0;
+      session.smoothedEar = null;
+      session.lastBlinkLogTime = 0;
+      session.lastLoggedState = null;
+    }
+
     let livenessSession = null;
     let livenessLoopTimer = null;
     let isProcessingLivenessFrame = false;
@@ -1652,36 +1705,52 @@
       return Math.sqrt(dx * dx + dy * dy);
     }
 
-    function computeEyeAspectRatio(landmarks) {
-      const pts = landmarks.positions;
-      // Right eye: 36..41
+    function computeEyeDetails(landmarks) {
+      const pts = landmarks.positions || landmarks;
+      if (!pts || pts.length < 48) {
+        return { leftEar: 0.3, rightEar: 0.3, avgEar: 0.3, valid: false };
+      }
+      // Right eye: 36..41 (anatomical right / viewer left)
       const rV1 = computeEuclidean(pts[37], pts[41]);
       const rV2 = computeEuclidean(pts[38], pts[40]);
       const rH = computeEuclidean(pts[36], pts[39]);
       const rightEar = rH > 0 ? (rV1 + rV2) / (2.0 * rH) : 0.3;
 
-      // Left eye: 42..47
+      // Left eye: 42..47 (anatomical left / viewer right)
       const lV1 = computeEuclidean(pts[43], pts[47]);
       const lV2 = computeEuclidean(pts[44], pts[46]);
       const lH = computeEuclidean(pts[42], pts[45]);
       const leftEar = lH > 0 ? (lV1 + lV2) / (2.0 * lH) : 0.3;
 
-      return (rightEar + leftEar) / 2.0;
+      const avgEar = (rightEar + leftEar) / 2.0;
+      return { leftEar, rightEar, avgEar, valid: true };
+    }
+
+    function computeEyeAspectRatio(landmarks) {
+      return computeEyeDetails(landmarks).avgEar;
     }
 
     function computeFacialYaw(landmarks) {
-      const pts = landmarks.positions;
-      const noseTip = pts[30];
-      const rightJaw = pts[0];  // anatomical right (viewer left in unmirrored canvas)
-      const leftJaw = pts[16];  // anatomical left (viewer right in unmirrored canvas)
+      const pts = landmarks?.positions || landmarks;
+      if (!pts || pts.length < 48 || !pts[30] || !pts[36] || !pts[39] || !pts[42] || !pts[45]) return null;
 
-      const distRight = Math.abs(noseTip.x - rightJaw.x);
-      const distLeft = Math.abs(leftJaw.x - noseTip.x);
-      const totalWidth = Math.abs(leftJaw.x - rightJaw.x);
+      // face-api.js 68-point layout: 36-41 right eye, 42-47 left eye, 30 nose tip.
+      // This is image-space geometry. Positive values mean the nose is toward the
+      // subject's anatomical left; CSS mirroring changes presentation, not these points.
+      const rightEyeCenter = {
+        x: (pts[36].x + pts[39].x) / 2,
+        y: (pts[36].y + pts[39].y) / 2
+      };
+      const leftEyeCenter = {
+        x: (pts[42].x + pts[45].x) / 2,
+        y: (pts[42].y + pts[45].y) / 2
+      };
+      const eyeCenterX = (rightEyeCenter.x + leftEyeCenter.x) / 2;
+      const eyeDistance = computeEuclidean(rightEyeCenter, leftEyeCenter);
+      if (!Number.isFinite(eyeDistance) || eyeDistance < 8) return null;
 
-      if (totalWidth < 1) return 0;
-      // yaw > 0 => turned to user's left; yaw < 0 => turned to user's right
-      return (distRight - distLeft) / totalWidth;
+      // Nose offset is scale-independent and is more stable than jaw endpoints.
+      return (pts[30].x - eyeCenterX) / eyeDistance;
     }
 
     function computeSmileRatio(landmarks) {
@@ -1902,6 +1971,98 @@
       }
     }
 
+    function median(values) {
+      const sorted = values.filter(Number.isFinite).slice().sort((a, b) => a - b);
+      return sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
+    }
+
+    function evaluateHeadTurn(challengeId, yaw, session) {
+      if (!Number.isFinite(yaw)) return false;
+
+      session.yawHistory = (session.yawHistory || []).concat(yaw).slice(-HEAD_TURN_CONFIG.SMOOTHING_WINDOW);
+      const smoothedYaw = median(session.yawHistory);
+      if (!Number.isFinite(smoothedYaw)) return false;
+      session.smoothedYaw = smoothedYaw;
+
+      if (!Number.isFinite(session.baselineYaw)) {
+        session.baselineYawSamples = (session.baselineYawSamples || []).concat(smoothedYaw).slice(-HEAD_TURN_CONFIG.BASELINE_FRAMES);
+        const sampleCount = session.baselineYawSamples.length;
+        const sub = document.getElementById('livenessSubInstruction');
+        const banner = document.getElementById('hudLivenessText');
+        if (sub) sub.textContent = `Look at the camera and hold still (${sampleCount}/${HEAD_TURN_CONFIG.BASELINE_FRAMES})`;
+        if (banner) banner.textContent = 'Look at the camera';
+        if (sampleCount < HEAD_TURN_CONFIG.BASELINE_FRAMES) return false;
+
+        session.baselineYaw = median(session.baselineYawSamples);
+        session.stepState = 'NEUTRAL_CONFIRMED';
+        session.stepFrames = 0;
+        session.turnFrames = 0;
+        session.returnFrames = 0;
+        if (sub) sub.textContent = challengeId === 'TURN_LEFT' ? 'Turn your head LEFT' : 'Turn your head RIGHT';
+        if (banner) banner.textContent = challengeId === 'TURN_LEFT' ? 'Turn your head LEFT' : 'Turn your head RIGHT';
+        if (!session.challengeDeadline) {
+          session.challengeStartedAt = Date.now();
+          session.challengeDeadline = session.challengeStartedAt + session.challengeTimeoutMs;
+          updateLivenessTimerUI(Math.ceil(session.challengeTimeoutMs / 1000));
+        }
+        return false;
+      }
+
+      const relativeYaw = smoothedYaw - session.baselineYaw;
+      const direction = relativeYaw >= 0 ? 'LEFT' : 'RIGHT';
+      session.relativeYaw = relativeYaw;
+
+      const now = Date.now();
+      if (!session.lastHeadYawLogAt || now - session.lastHeadYawLogAt >= 1000) {
+        session.lastHeadYawLogAt = now;
+        console.debug('[HEAD TURN]', {
+          baselineYaw: Number(session.baselineYaw.toFixed(3)),
+          currentYaw: Number(smoothedYaw.toFixed(3)),
+          relativeYaw: Number(relativeYaw.toFixed(3)),
+          direction,
+          state: session.stepState
+        });
+      }
+
+      if (session.stepState === 'INIT' || session.stepState === 'WAIT_NEUTRAL') {
+        session.stepState = 'NEUTRAL_CONFIRMED';
+      }
+
+      if (session.stepState === 'NEUTRAL_CONFIRMED') {
+        const isTargetDirection = challengeId === 'TURN_LEFT' ? relativeYaw >= HEAD_TURN_CONFIG.TURN_THRESHOLD : relativeYaw <= -HEAD_TURN_CONFIG.TURN_THRESHOLD;
+        if (isTargetDirection) {
+          session.turnFrames = (session.turnFrames || 0) + 1;
+          const sub = document.getElementById('livenessSubInstruction');
+          if (sub) sub.textContent = `${direction === challengeId.replace('TURN_', '') ? '✓ Turn detected' : 'Wrong direction'} - hold briefly`;
+          if (session.turnFrames >= HEAD_TURN_CONFIG.REQUIRED_TURN_FRAMES) {
+            session.stepState = 'WAIT_RETURN';
+            session.turnFrames = 0;
+            session.returnFrames = 0;
+            if (sub) sub.textContent = '✓ Turn detected. Return your head to center';
+            document.getElementById('hudLivenessText').textContent = 'Return to center';
+          }
+        } else {
+          session.turnFrames = 0;
+          if (Math.abs(relativeYaw) <= HEAD_TURN_CONFIG.NEUTRAL_THRESHOLD) {
+            const sub = document.getElementById('livenessSubInstruction');
+            if (sub) sub.textContent = challengeId === 'TURN_LEFT' ? 'Turn your head LEFT' : 'Turn your head RIGHT';
+          }
+        }
+      } else if (session.stepState === 'WAIT_RETURN') {
+        if (Math.abs(relativeYaw) <= HEAD_TURN_CONFIG.RETURN_THRESHOLD) {
+          session.returnFrames = (session.returnFrames || 0) + 1;
+          if (session.returnFrames >= HEAD_TURN_CONFIG.REQUIRED_RETURN_FRAMES) {
+            session.stepState = 'CHALLENGE_COMPLETE';
+            return true;
+          }
+        } else {
+          session.returnFrames = 0;
+        }
+      }
+
+      return session.stepState === 'CHALLENGE_COMPLETE';
+    }
+
     function evaluateChallengeStep(challengeId, landmarks, session) {
       const yaw = computeFacialYaw(landmarks);
       const ear = computeEyeAspectRatio(landmarks);
@@ -1909,95 +2070,195 @@
 
       switch (challengeId) {
         case 'TURN_LEFT': {
-          if (!session.stepState || session.stepState === 'INIT' || session.stepState === 'WAIT_NEUTRAL') {
-            if (Math.abs(yaw) <= 0.14) {
-              session.stepFrames = (session.stepFrames || 0) + 1;
-              if (session.stepFrames >= 2) {
-                session.stepState = 'WAIT_TURN';
-                session.stepFrames = 0;
-              }
-            } else {
-              session.stepFrames = 0;
-            }
-          } else if (session.stepState === 'WAIT_TURN') {
-            if (yaw >= 0.18) {
-              session.stepFrames = (session.stepFrames || 0) + 1;
-              const sub = document.getElementById('livenessSubInstruction');
-              if (sub) sub.textContent = '✓ Left turn detected! Now return head to center';
-              if (session.stepFrames >= 2) {
-                session.stepState = 'WAIT_RETURN';
-                session.stepFrames = 0;
-              }
-            }
-          } else if (session.stepState === 'WAIT_RETURN') {
-            if (Math.abs(yaw) <= 0.14) {
-              return true;
-            }
-          }
-          break;
+          return evaluateHeadTurn(challengeId, yaw, session);
         }
 
         case 'TURN_RIGHT': {
-          if (!session.stepState || session.stepState === 'INIT' || session.stepState === 'WAIT_NEUTRAL') {
-            if (Math.abs(yaw) <= 0.14) {
-              session.stepFrames = (session.stepFrames || 0) + 1;
-              if (session.stepFrames >= 2) {
-                session.stepState = 'WAIT_TURN';
-                session.stepFrames = 0;
-              }
-            } else {
-              session.stepFrames = 0;
-            }
-          } else if (session.stepState === 'WAIT_TURN') {
-            if (yaw <= -0.18) {
-              session.stepFrames = (session.stepFrames || 0) + 1;
-              const sub = document.getElementById('livenessSubInstruction');
-              if (sub) sub.textContent = '✓ Right turn detected! Now return head to center';
-              if (session.stepFrames >= 2) {
-                session.stepState = 'WAIT_RETURN';
-                session.stepFrames = 0;
-              }
-            }
-          } else if (session.stepState === 'WAIT_RETURN') {
-            if (Math.abs(yaw) <= 0.14) {
-              return true;
-            }
-          }
-          break;
+          return evaluateHeadTurn(challengeId, yaw, session);
         }
 
         case 'BLINK_TWICE': {
-          const baseEar = session.openEarBaseline || 0.26;
-          const openThresh = Math.max(0.20, baseEar * 0.80);
-          const closeThresh = Math.min(0.18, baseEar * 0.65);
+          const eyeDetails = computeEyeDetails(landmarks);
+          const rawEar = eyeDetails.avgEar;
+          const leftEar = eyeDetails.leftEar;
+          const rightEar = eyeDetails.rightEar;
+          const now = Date.now();
 
-          if (!session.stepState || session.stepState === 'INIT' || session.stepState === 'WAIT_OPEN_1') {
-            if (ear >= openThresh) {
-              session.stepFrames = (session.stepFrames || 0) + 1;
-              if (session.stepFrames >= 2) {
-                session.stepState = 'WAIT_CLOSE_1';
-                session.stepFrames = 0;
+          // Temporal smoothing: Exponential Moving Average (EMA)
+          if (session.smoothedEar === null || session.smoothedEar === undefined) {
+            session.smoothedEar = rawEar;
+          } else {
+            session.smoothedEar = (BLINK_CONFIG.SMOOTHING_ALPHA * rawEar) + ((1 - BLINK_CONFIG.SMOOTHING_ALPHA) * session.smoothedEar);
+          }
+          const currentEar = session.smoothedEar;
+
+          const isFrontal = Math.abs(yaw) <= BLINK_CONFIG.MAX_CALIBRATION_YAW;
+
+          // Diagnostic Logging (throttled to max once every 1s or on state change)
+          if (!session.lastBlinkLogTime || (now - session.lastBlinkLogTime) >= 1000 || session.lastLoggedState !== session.blinkState) {
+            session.lastBlinkLogTime = now;
+            session.lastLoggedState = session.blinkState;
+            console.log(
+              `[BLINK DIAGNOSTIC] State: ${session.blinkState} | Count: ${session.blinkCount}/2 | ` +
+              `leftEAR: ${leftEar.toFixed(3)} | rightEAR: ${rightEar.toFixed(3)} | avgEAR: ${rawEar.toFixed(3)} | smoothedEAR: ${currentEar.toFixed(3)} | ` +
+              `baseline: ${session.blinkBaselineEar ? session.blinkBaselineEar.toFixed(3) : 'calibrating'} | ` +
+              `openThresh: ${session.blinkOpenThresh ? session.blinkOpenThresh.toFixed(3) : 'null'} | ` +
+              `closeThresh: ${session.blinkCloseThresh ? session.blinkCloseThresh.toFixed(3) : 'null'} | yaw: ${yaw.toFixed(2)}`
+            );
+          }
+
+          const bannerText = document.getElementById('hudLivenessText');
+          const subPrompt = document.getElementById('livenessSubInstruction');
+          const stepBadge = document.getElementById(`livenessStepBadge_${session.currentIndex}`);
+
+          switch (session.blinkState) {
+            case 'CALIBRATING': {
+              if (!isFrontal) {
+                if (subPrompt) subPrompt.textContent = 'Look toward the camera and blink twice.';
+                if (bannerText) bannerText.textContent = '👁️ Look at camera';
+                return false;
               }
+              if (rawEar < BLINK_CONFIG.MIN_VALID_OPEN_EAR) {
+                if (subPrompt) subPrompt.textContent = 'Please open your eyes and look at the camera.';
+                if (bannerText) bannerText.textContent = '👁️ Open eyes';
+                return false;
+              }
+
+              session.blinkBaselineSamples = session.blinkBaselineSamples || [];
+              session.blinkBaselineSamples.push(rawEar);
+
+              const calibCount = session.blinkBaselineSamples.length;
+              if (subPrompt) subPrompt.textContent = `Calibrating eyes (${calibCount}/${BLINK_CONFIG.MIN_CALIBRATION_FRAMES})... Please look naturally at camera.`;
+
+              if (calibCount >= BLINK_CONFIG.MIN_CALIBRATION_FRAMES) {
+                const sorted = [...session.blinkBaselineSamples].sort((a, b) => a - b);
+                const median = sorted[Math.floor(sorted.length / 2)];
+                session.blinkBaselineEar = median;
+                session.openEarBaseline = median;
+
+                const rawClose = median * BLINK_CONFIG.CLOSE_RATIO;
+                session.blinkCloseThresh = Math.min(BLINK_CONFIG.MAX_CLOSE_THRESH, Math.max(BLINK_CONFIG.MIN_CLOSE_THRESH, rawClose));
+                session.blinkOpenThresh = Math.max(BLINK_CONFIG.MIN_OPEN_THRESH, median * BLINK_CONFIG.OPEN_RATIO);
+
+                // Guarantee hysteresis margin of at least 0.025
+                if (session.blinkOpenThresh - session.blinkCloseThresh < 0.025) {
+                  session.blinkCloseThresh = session.blinkOpenThresh - 0.025;
+                }
+
+                console.log(`[BLINK CALIBRATED] baselineEAR=${median.toFixed(3)}, closeThresh=${session.blinkCloseThresh.toFixed(3)}, openThresh=${session.blinkOpenThresh.toFixed(3)}`);
+
+                session.blinkState = 'WAIT_OPEN_1';
+                session.openConfirmedFrames = 0;
+                if (subPrompt) subPrompt.textContent = 'Eyes: Open | Blink: 0 / 2';
+                if (bannerText) bannerText.textContent = '👁️ Blink twice naturally (0/2)';
+                if (stepBadge) stepBadge.textContent = 'In Progress (0/2)';
+              }
+              return false;
             }
-          } else if (session.stepState === 'WAIT_CLOSE_1') {
-            if (ear <= closeThresh) {
-              session.stepState = 'WAIT_REOPEN_1';
-              session.stepFrames = 0;
+
+            case 'WAIT_OPEN_1': {
+              if (currentEar >= session.blinkOpenThresh) {
+                session.openConfirmedFrames = (session.openConfirmedFrames || 0) + 1;
+                if (session.openConfirmedFrames >= 2) {
+                  session.blinkState = 'OPEN_CONFIRMED_1';
+                  session.openConfirmedFrames = 0;
+                  if (subPrompt) subPrompt.textContent = 'Eyes: Open | Blink: 0 / 2';
+                  if (bannerText) bannerText.textContent = '👁️ Blink twice naturally (0/2)';
+                }
+              } else {
+                session.openConfirmedFrames = 0;
+              }
+              return false;
             }
-          } else if (session.stepState === 'WAIT_REOPEN_1') {
-            if (ear >= openThresh) {
-              session.stepState = 'WAIT_CLOSE_2';
-              session.stepFrames = 0;
-              const sub = document.getElementById('livenessSubInstruction');
-              if (sub) sub.textContent = '✓ 1st blink detected! Blink once more...';
+
+            case 'OPEN_CONFIRMED_1': {
+              if (!isFrontal) return false;
+              if (currentEar <= session.blinkCloseThresh || rawEar <= session.blinkCloseThresh) {
+                session.blinkState = 'EYES_CLOSED_1';
+                session.blinkClosedStart = now;
+                if (subPrompt) subPrompt.textContent = 'Eyes: Closing... | Blink: 0 / 2';
+              }
+              return false;
             }
-          } else if (session.stepState === 'WAIT_CLOSE_2') {
-            if (ear <= closeThresh) {
-              session.stepState = 'WAIT_REOPEN_2';
-              session.stepFrames = 0;
+
+            case 'EYES_CLOSED_1': {
+              const duration = now - session.blinkClosedStart;
+              if (duration > BLINK_CONFIG.MAX_CLOSED_DURATION_MS) {
+                session.blinkState = 'WAIT_OPEN_1';
+                session.openConfirmedFrames = 0;
+                if (subPrompt) subPrompt.textContent = 'Eyes closed too long. Open eyes and blink naturally.';
+                if (bannerText) bannerText.textContent = '👁️ Open eyes naturally';
+                return false;
+              }
+
+              if (currentEar >= session.blinkOpenThresh || rawEar >= session.blinkOpenThresh) {
+                if (duration >= BLINK_CONFIG.MIN_CLOSED_DURATION_MS) {
+                  session.blinkCount = 1;
+                  session.lastBlinkTime = now;
+                  session.blinkState = 'WAIT_OPEN_2';
+                  session.openConfirmedFrames = 0;
+                  if (subPrompt) subPrompt.textContent = '✓ Blink 1 detected | Blink: 1 / 2';
+                  if (bannerText) bannerText.textContent = '✓ Blink 1 detected (1/2)';
+                  if (stepBadge) stepBadge.textContent = 'In Progress (1/2)';
+                } else {
+                  session.blinkState = 'OPEN_CONFIRMED_1';
+                }
+              }
+              return false;
             }
-          } else if (session.stepState === 'WAIT_REOPEN_2') {
-            if (ear >= openThresh) {
+
+            case 'WAIT_OPEN_2': {
+              const timeSinceBlink = now - session.lastBlinkTime;
+              if (currentEar >= session.blinkOpenThresh && timeSinceBlink >= BLINK_CONFIG.MIN_TIME_BETWEEN_BLINKS_MS) {
+                session.openConfirmedFrames = (session.openConfirmedFrames || 0) + 1;
+                if (session.openConfirmedFrames >= 2) {
+                  session.blinkState = 'OPEN_CONFIRMED_2';
+                  session.openConfirmedFrames = 0;
+                  if (subPrompt) subPrompt.textContent = 'Eyes: Open | Blink once more (1 / 2)';
+                  if (bannerText) bannerText.textContent = '👁️ Blink once more (1/2)';
+                }
+              } else {
+                session.openConfirmedFrames = 0;
+              }
+              return false;
+            }
+
+            case 'OPEN_CONFIRMED_2': {
+              if (!isFrontal) return false;
+              if (currentEar <= session.blinkCloseThresh || rawEar <= session.blinkCloseThresh) {
+                session.blinkState = 'EYES_CLOSED_2';
+                session.blinkClosedStart = now;
+                if (subPrompt) subPrompt.textContent = 'Eyes: Closing... | Blink: 1 / 2';
+              }
+              return false;
+            }
+
+            case 'EYES_CLOSED_2': {
+              const duration = now - session.blinkClosedStart;
+              if (duration > BLINK_CONFIG.MAX_CLOSED_DURATION_MS) {
+                session.blinkState = 'WAIT_OPEN_2';
+                session.openConfirmedFrames = 0;
+                if (subPrompt) subPrompt.textContent = 'Eyes closed too long. Open eyes and blink naturally.';
+                if (bannerText) bannerText.textContent = '👁️ Open eyes naturally';
+                return false;
+              }
+
+              if (currentEar >= session.blinkOpenThresh || rawEar >= session.blinkOpenThresh) {
+                if (duration >= BLINK_CONFIG.MIN_CLOSED_DURATION_MS) {
+                  session.blinkCount = 2;
+                  session.blinkState = 'CHALLENGE_COMPLETE';
+                  if (subPrompt) subPrompt.textContent = '✓ Blink 2 detected | Blink: 2 / 2';
+                  if (bannerText) bannerText.textContent = '✓ Blink complete (2/2)';
+                  if (stepBadge) stepBadge.textContent = 'In Progress (2/2)';
+                  return true;
+                } else {
+                  session.blinkState = 'OPEN_CONFIRMED_2';
+                }
+              }
+              return false;
+            }
+
+            case 'CHALLENGE_COMPLETE': {
               return true;
             }
           }
@@ -2287,6 +2548,18 @@
           baselineEar: null,
           baselineSmile: null,
           openEarBaseline: null,
+          blinkState: 'CALIBRATING',
+          blinkCount: 0,
+          blinkBaselineSamples: [],
+          blinkBaselineEar: null,
+          blinkOpenThresh: null,
+          blinkCloseThresh: null,
+          blinkClosedStart: null,
+          lastBlinkTime: null,
+          openConfirmedFrames: 0,
+          smoothedEar: null,
+          lastBlinkLogTime: 0,
+          lastLoggedState: null,
           completedChallenges: [],
           faceMatched: false,
           livenessPassed: false,
@@ -2396,7 +2669,9 @@
           if (session.state === FaceLivenessState.FACE_SEARCHING) {
             updateLivenessHUDStatus('NO_FACE', 'Position your face in the camera frame');
           } else if (session.state === FaceLivenessState.LIVENESS_RUNNING) {
-            const remainingMs = Math.max(0, session.challengeDeadline - Date.now());
+            const remainingMs = session.challengeDeadline
+              ? Math.max(0, session.challengeDeadline - Date.now())
+              : session.challengeTimeoutMs;
             const remainingSec = Math.ceil(remainingMs / 1000);
             updateLivenessTimerUI(remainingSec);
             if (remainingMs <= 0) {
@@ -2422,7 +2697,9 @@
           updateLivenessHUDStatus('MULTIPLE_FACES', 'Multiple faces detected. Only one student allowed.');
 
           if (session.state === FaceLivenessState.LIVENESS_RUNNING) {
-            const remainingMs = Math.max(0, session.challengeDeadline - Date.now());
+            const remainingMs = session.challengeDeadline
+              ? Math.max(0, session.challengeDeadline - Date.now())
+              : session.challengeTimeoutMs;
             const remainingSec = Math.ceil(remainingMs / 1000);
             updateLivenessTimerUI(remainingSec);
             if (remainingMs <= 0) {
@@ -2461,7 +2738,9 @@
           session.stableFaceCount = 0;
           updateLivenessHUDStatus('TOO_SMALL', 'Move closer to the camera.');
           if (session.state === FaceLivenessState.LIVENESS_RUNNING) {
-            const remainingMs = Math.max(0, session.challengeDeadline - Date.now());
+            const remainingMs = session.challengeDeadline
+              ? Math.max(0, session.challengeDeadline - Date.now())
+              : session.challengeTimeoutMs;
             const remainingSec = Math.ceil(remainingMs / 1000);
             updateLivenessTimerUI(remainingSec);
             if (remainingMs <= 0) {
@@ -2495,16 +2774,20 @@
             const firstChallenge = LIVENESS_CHALLENGES[session.sequence[0]];
             updateChallengePromptUI(firstChallenge, 1, session.sequence.length);
 
-            session.openEarBaseline = ear;
+            resetChallengeState(session, session.sequence[0]);
             session.baselineEar = ear;
             session.baselineSmile = smile;
 
-            // START TIMER NOW (AND ONLY NOW!)
+            // Head-turn timing starts after neutral calibration; other challenges
+            // can begin immediately once one stable face is established.
             session.state = FaceLivenessState.LIVENESS_RUNNING;
-            session.challengeStartedAt = Date.now();
-            session.challengeDeadline = Date.now() + session.challengeTimeoutMs;
-            session.stepState = 'INIT';
-            session.stepFrames = 0;
+            if (isHeadTurnChallenge(firstChallenge.id)) {
+              session.challengeStartedAt = 0;
+              session.challengeDeadline = 0;
+            } else {
+              session.challengeStartedAt = Date.now();
+              session.challengeDeadline = session.challengeStartedAt + session.challengeTimeoutMs;
+            }
 
             const remainingSec = Math.ceil(session.challengeTimeoutMs / 1000);
             updateLivenessTimerUI(remainingSec);
@@ -2529,7 +2812,9 @@
           if (reticle) reticle.className = 'hud-reticle active';
 
           // Timer calculation
-          const remainingMs = Math.max(0, session.challengeDeadline - Date.now());
+          const remainingMs = session.challengeDeadline
+            ? Math.max(0, session.challengeDeadline - Date.now())
+            : session.challengeTimeoutMs;
           const remainingSec = Math.ceil(remainingMs / 1000);
           updateLivenessTimerUI(remainingSec);
 
@@ -2568,9 +2853,6 @@
             session.completedChallenges.push(currentChallengeId);
             markChallengeCompletedUI(currentChallengeId, session.currentIndex);
             session.currentIndex++;
-            session.stepState = 'INIT';
-            session.stepFrames = 0;
-            session.baselineMetric = null;
 
             if (session.currentIndex >= session.sequence.length) {
               // ALL 3 CHALLENGES PASSED!
@@ -2585,13 +2867,19 @@
               }
             } else {
               // ADVANCE TO NEXT CHALLENGE -> RESET TIMER FOR NEXT CHALLENGE!
-              session.challengeStartedAt = Date.now();
-              session.challengeDeadline = Date.now() + session.challengeTimeoutMs;
-              session.openEarBaseline = ear;
+              const nextChallengeId = session.sequence[session.currentIndex];
+              resetChallengeState(session, nextChallengeId);
+              if (isHeadTurnChallenge(nextChallengeId)) {
+                session.challengeStartedAt = 0;
+                session.challengeDeadline = 0;
+              } else {
+                session.challengeStartedAt = Date.now();
+                session.challengeDeadline = session.challengeStartedAt + session.challengeTimeoutMs;
+              }
               session.baselineEar = ear;
               session.baselineSmile = smile;
 
-              const nextChallenge = LIVENESS_CHALLENGES[session.sequence[session.currentIndex]];
+              const nextChallenge = LIVENESS_CHALLENGES[nextChallengeId];
               updateChallengePromptUI(nextChallenge, session.currentIndex + 1, session.sequence.length);
               const nextSec = Math.ceil(session.challengeTimeoutMs / 1000);
               updateLivenessTimerUI(nextSec);
@@ -2605,7 +2893,9 @@
         isProcessingLivenessFrame = false;
       }
 
-      scheduleNextLivenessFrame(90);
+      const isBlinkActive = (session?.active && session?.sequence && session?.sequence[session?.currentIndex] === 'BLINK_TWICE');
+      const delay = isBlinkActive ? 50 : 80;
+      scheduleNextLivenessFrame(delay);
     }
 
     function finishAttendanceDebug(debug) {

@@ -7,21 +7,29 @@ function computeEuclidean(p1, p2) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-function computeEyeAspectRatio(landmarks) {
-  const pts = landmarks.positions;
-  // Right eye: 36, 37, 38, 39, 40, 41
+function computeEyeDetails(landmarks) {
+  const pts = landmarks.positions || landmarks;
+  if (!pts || pts.length < 48) {
+    return { leftEar: 0.3, rightEar: 0.3, avgEar: 0.3, valid: false };
+  }
+  // Right eye: 36..41 (anatomical right / viewer left)
   const rV1 = computeEuclidean(pts[37], pts[41]);
   const rV2 = computeEuclidean(pts[38], pts[40]);
   const rH = computeEuclidean(pts[36], pts[39]);
   const rightEar = rH > 0 ? (rV1 + rV2) / (2.0 * rH) : 0.3;
 
-  // Left eye: 42, 43, 44, 45, 46, 47
+  // Left eye: 42..47 (anatomical left / viewer right)
   const lV1 = computeEuclidean(pts[43], pts[47]);
   const lV2 = computeEuclidean(pts[44], pts[46]);
   const lH = computeEuclidean(pts[42], pts[45]);
   const leftEar = lH > 0 ? (lV1 + lV2) / (2.0 * lH) : 0.3;
 
-  return (rightEar + leftEar) / 2.0;
+  const avgEar = (rightEar + leftEar) / 2.0;
+  return { leftEar, rightEar, avgEar, valid: true };
+}
+
+function computeEyeAspectRatio(landmarks) {
+  return computeEyeDetails(landmarks).avgEar;
 }
 
 function computeFacialYaw(landmarks) {
