@@ -663,7 +663,7 @@
           return;
         }
 
-        container.innerHTML = '';
+        const sessionCards = [];
         for (const doc of activeDocs) {
           const s = doc.data();
           let subject = null;
@@ -698,24 +698,26 @@
             presentCount = 0;
           }
 
-          container.innerHTML += `
+          const rawSubName = subject?.subjectName || s.subjectName || 'Course';
+          sessionCards.push(`
             <div class="session-info">
               <div>
-                <span style="font-size:1rem; font-weight:700; color:var(--primary-navy);">📖 ${subject?.subjectName || s.subjectName || 'Course'}</span>
-                <span class="badge green" style="margin-left:8px;">Class ${s.classNumber || 1}</span>
+                <span style="font-size:1rem; font-weight:700; color:var(--primary-navy);">📖 ${escapeHtml(rawSubName)}</span>
+                <span class="badge green" style="margin-left:8px;">Class ${escapeHtml(s.classNumber || 1)}</span>
                 <span class="badge" style="margin-left:6px; font-weight:700; background:rgba(16, 185, 129, 0.12); color:var(--emerald-dark);">👥 ${presentCount} / ${enrolledCount} Present</span>
               </div>
               <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; font-size:0.84rem; color:var(--text-muted); margin-top:4px;">
-                <span>⏰ Started: <strong>${s.startTime || '-'}</strong></span>
-                <span>⏳ Duration: <strong>${s.duration || 10} min</strong></span>
+                <span>⏰ Started: <strong>${escapeHtml(s.startTime || '-')}</strong></span>
+                <span>⏳ Duration: <strong>${escapeHtml(s.duration || 10)} min</strong></span>
                 <span>📍 GPS: <strong>${Number(s.latitude || 0).toFixed(4)}, ${Number(s.longitude || 0).toFixed(4)}</strong></span>
               </div>
               <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-                <button class="btn view-btn" onclick="openSessionAttendanceModal('${doc.id}', '${s.subjectId}')">👥 View Attendance Roster</button>
-                <button class="btn stop-btn" style="padding:6px 12px; font-size:0.8rem;" onclick="stopAttendance('${s.subjectId}', this)">⏹ Stop Session</button>
+                <button class="btn view-btn" onclick="openSessionAttendanceModal('${escapeHtml(doc.id)}', '${escapeHtml(s.subjectId)}')">👥 View Attendance Roster</button>
+                <button class="btn stop-btn" style="padding:6px 12px; font-size:0.8rem;" onclick="stopAttendance('${escapeHtml(s.subjectId)}', this)">⏹ Stop Session</button>
               </div>
-            </div>`;
+            </div>`);
         }
+        container.innerHTML = sessionCards.join('');
       } catch (err) {
         console.error('loadActiveSessions error:', err);
         if (container) {

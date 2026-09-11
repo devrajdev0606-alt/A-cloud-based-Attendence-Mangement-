@@ -738,8 +738,8 @@
           tbody.innerHTML = roster.map((r, idx) => `
             <tr>
               <td>${idx + 1}</td>
-              <td><strong>${r.name || 'Student'}</strong></td>
-              <td>${r.usn || '-'}</td>
+              <td><strong>${escapeAdminHtml(r.name || 'Student')}</strong></td>
+              <td>${escapeAdminHtml(r.usn || '-')}</td>
             </tr>
           `).join('');
         } else {
@@ -747,7 +747,7 @@
             <tr>
               <td>${idx + 1}</td>
               <td><strong>Enrolled Student</strong></td>
-              <td><code>${id}</code></td>
+              <td><code>${escapeAdminHtml(id)}</code></td>
             </tr>
           `).join('');
         }
@@ -1171,12 +1171,12 @@
         } else {
           tbody.innerHTML = pagedRecords.map(s => `
             <tr>
-              <td><strong>${s.name || 'Unknown'}</strong></td>
-              <td><strong>${s.usn || '-'}</strong></td>
-              <td>${s.email || '-'}</td>
-              <td><span class="badge blue">Sem ${s.semester || 1} • Sec ${s.section || 'A'}</span></td>
+              <td><strong>${escapeAdminHtml(s.name || 'Unknown')}</strong></td>
+              <td><strong>${escapeAdminHtml(s.usn || '-')}</strong></td>
+              <td>${escapeAdminHtml(s.email || '-')}</td>
+              <td><span class="badge blue">Sem ${escapeAdminHtml(s.semester || 1)} • Sec ${escapeAdminHtml(s.section || 'A')}</span></td>
               <td>${s.faceRegistered ? '<span class="badge green">● Registered</span>' : '<span class="badge">Pending</span>'}</td>
-              <td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('student', '${s.id}', '${encodeURIComponent(JSON.stringify(s))}')">🗑️ Delete</button></td>
+              <td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('student', '${escapeAdminHtml(s.id)}', '${encodeURIComponent(JSON.stringify(s))}')">🗑️ Delete</button></td>
             </tr>
           `).join('');
         }
@@ -1187,9 +1187,9 @@
         } else {
           tbody.innerHTML = pagedRecords.map(f => `
             <tr>
-              <td><strong>${f.name || 'Unknown'}</strong></td>
-              <td>${f.email || '-'}</td>
-              <td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('faculty', '${f.id}', '${encodeURIComponent(JSON.stringify(f))}')">🗑️ Delete</button></td>
+              <td><strong>${escapeAdminHtml(f.name || 'Unknown')}</strong></td>
+              <td>${escapeAdminHtml(f.email || '-')}</td>
+              <td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('faculty', '${escapeAdminHtml(f.id)}', '${encodeURIComponent(JSON.stringify(f))}')">🗑️ Delete</button></td>
             </tr>
           `).join('');
         }
@@ -1200,17 +1200,17 @@
         } else {
           tbody.innerHTML = pagedRecords.map(sub => {
             const hoursBadge = sub.totalHours
-              ? `<span class="badge" style="font-weight:600;">${sub.totalHours} hrs <span style="font-size:10px; color:var(--emerald-dark);">(75% req)</span></span>`
+              ? `<span class="badge" style="font-weight:600;">${escapeAdminHtml(sub.totalHours)} hrs <span style="font-size:10px; color:var(--emerald-dark);">(75% req)</span></span>`
               : '<span class="badge" style="opacity:0.6;">Not configured</span>';
             return `
               <tr>
-                <td><strong>${sub.subjectName}</strong></td>
-                <td><span class="badge">${sub.subjectCode}</span></td>
-                <td><span class="badge blue">Sem ${sub.semester || 1} • Sec ${sub.section || 'A'}</span></td>
+                <td><strong>${escapeAdminHtml(sub.subjectName || '-')}</strong></td>
+                <td><span class="badge">${escapeAdminHtml(sub.subjectCode || '-')}</span></td>
+                <td><span class="badge blue">Sem ${escapeAdminHtml(sub.semester || 1)} • Sec ${escapeAdminHtml(sub.section || 'A')}</span></td>
                 <td>${hoursBadge}</td>
-                <td>${sub.facultyName || '-'}</td>
-                <td><button type="button" class="badge green" style="cursor:pointer; border:none; font-weight:600;" onclick="viewSubjectRoster('${sub.id}')" title="Click to view enrolled roster">👥 ${(sub.studentIds || []).length} students</button></td>
-                <td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('subject', '${sub.id}', '${encodeURIComponent(JSON.stringify(sub))}')">🗑️ Delete</button></td>
+                <td>${escapeAdminHtml(sub.facultyName || '-')}</td>
+                <td><button type="button" class="badge green" style="cursor:pointer; border:none; font-weight:600;" onclick="viewSubjectRoster('${escapeAdminHtml(sub.id)}')" title="Click to view enrolled roster">👥 ${(sub.studentIds || []).length} students</button></td>
+                <td><button type="button" class="btn btn-reject" style="padding:4px 10px; font-size:0.78rem;" onclick="promptAdminDelete('subject', '${escapeAdminHtml(sub.id)}', '${encodeURIComponent(JSON.stringify(sub))}')">🗑️ Delete</button></td>
               </tr>
             `;
           }).join('');
@@ -1377,17 +1377,17 @@
         }
 
         const isStudent = (r.role || 'student') === 'student';
-        const roleOrUsn = isStudent ? `<strong>${r.usn || '-'}</strong>` : `<span class="badge purple">Faculty</span>`;
-        const semSecDisplay = isStudent && r.semester ? `<span class="badge blue">Sem ${r.semester} • Sec ${r.section || 'A'}</span>` : '<span class="badge">-</span>';
+        const roleOrUsn = isStudent ? `<strong>${escapeAdminHtml(r.usn || '-')}</strong>` : `<span class="badge purple">Faculty</span>`;
+        const semSecDisplay = isStudent && r.semester ? `<span class="badge blue">Sem ${escapeAdminHtml(r.semester)} • Sec ${escapeAdminHtml(r.section || 'A')}</span>` : '<span class="badge">-</span>';
 
         return `
           <tr>
-            <td><strong>${r.name || 'Unknown'}</strong></td>
+            <td><strong>${escapeAdminHtml(r.name || 'Unknown')}</strong></td>
             <td>${roleOrUsn}</td>
-            <td>${r.email || '-'}</td>
-            <td><span class="badge">${deptDisplay}</span></td>
+            <td>${escapeAdminHtml(r.email || '-')}</td>
+            <td><span class="badge">${escapeAdminHtml(deptDisplay)}</span></td>
             <td>${semSecDisplay}</td>
-            <td>${dateDisplay}</td>
+            <td>${escapeAdminHtml(dateDisplay)}</td>
             <td>${statusBadge}</td>
             <td>${actionHtml}</td>
           </tr>
@@ -1416,18 +1416,18 @@
       let extraDetails = '';
       if (isStudent) {
         extraDetails = `
-          <div><strong>USN:</strong> ${requestData.usn || '-'}</div>
-          <div><strong>Academic:</strong> Sem ${requestData.semester || 1} • Sec ${requestData.section || 'A'}</div>
-          <div><strong>Phone:</strong> ${requestData.phone || 'Not provided'}</div>
+          <div><strong>USN:</strong> ${escapeAdminHtml(requestData.usn || '-')}</div>
+          <div><strong>Academic:</strong> Sem ${escapeAdminHtml(requestData.semester || 1)} • Sec ${escapeAdminHtml(requestData.section || 'A')}</div>
+          <div><strong>Phone:</strong> ${escapeAdminHtml(requestData.phone || 'Not provided')}</div>
         `;
       }
 
       details.innerHTML = `
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size:0.85rem;">
-          <div><strong>Name:</strong> ${requestData.name || '-'}</div>
-          <div><strong>Role:</strong> ${roleLabel}</div>
-          <div><strong>Email:</strong> ${requestData.email || '-'}</div>
-          <div><strong>Department:</strong> ${deptName}</div>
+          <div><strong>Name:</strong> ${escapeAdminHtml(requestData.name || '-')}</div>
+          <div><strong>Role:</strong> ${escapeAdminHtml(roleLabel)}</div>
+          <div><strong>Email:</strong> ${escapeAdminHtml(requestData.email || '-')}</div>
+          <div><strong>Department:</strong> ${escapeAdminHtml(deptName)}</div>
           ${extraDetails}
         </div>
       `;
@@ -2482,53 +2482,53 @@
         let titleDisplay = '';
         let academicDisplay = '-';
         let facultyDisplay = '-';
-        let roomDisplay = item.room ? `<span class="badge">${item.room}</span>` : '-';
+        let roomDisplay = item.room ? `<span class="badge">${escapeAdminHtml(item.room)}</span>` : '-';
 
         if (item.type === 'subject') {
           typeBadge = '<span class="badge blue">📚 Subject</span>';
-          titleDisplay = `<strong>${item.subjectName || '-'}</strong> <span class="badge" style="font-size:0.75rem;">${item.subjectCode || ''}</span>`;
+          titleDisplay = `<strong>${escapeAdminHtml(item.subjectName || '-')}</strong> <span class="badge" style="font-size:0.75rem;">${escapeAdminHtml(item.subjectCode || '')}</span>`;
           const deptN = deptMap[item.departmentId] || item.departmentName || item.departmentId || 'Dept';
-          academicDisplay = `<span class="badge">${deptN}</span> <span class="badge blue">Sem ${item.semester || 1} • Sec ${item.section || 'A'}</span>`;
-          facultyDisplay = item.facultyName || '-';
+          academicDisplay = `<span class="badge">${escapeAdminHtml(deptN)}</span> <span class="badge blue">Sem ${escapeAdminHtml(item.semester || 1)} • Sec ${escapeAdminHtml(item.section || 'A')}</span>`;
+          facultyDisplay = escapeAdminHtml(item.facultyName || '-');
         } else if (item.type === 'lab') {
           typeBadge = '<span class="badge purple">🔬 Lab</span>';
-          titleDisplay = `<strong>${item.subjectName || item.title || 'Laboratory'}</strong> <span class="badge" style="font-size:0.75rem;">${item.subjectCode || ''}</span>`;
+          titleDisplay = `<strong>${escapeAdminHtml(item.subjectName || item.title || 'Laboratory')}</strong> <span class="badge" style="font-size:0.75rem;">${escapeAdminHtml(item.subjectCode || '')}</span>`;
           const deptN = deptMap[item.departmentId] || item.departmentName || item.departmentId || 'Dept';
-          academicDisplay = `<span class="badge">${deptN}</span> <span class="badge blue">Sem ${item.semester || 1} • Sec ${item.section || 'A'}</span>`;
-          facultyDisplay = item.facultyName || '-';
+          academicDisplay = `<span class="badge">${escapeAdminHtml(deptN)}</span> <span class="badge blue">Sem ${escapeAdminHtml(item.semester || 1)} • Sec ${escapeAdminHtml(item.section || 'A')}</span>`;
+          facultyDisplay = escapeAdminHtml(item.facultyName || '-');
         } else if (item.type === 'break') {
           typeBadge = '<span class="badge amber">☕ Break</span>';
-          titleDisplay = `<strong>${item.title || 'Short Break'}</strong>`;
+          titleDisplay = `<strong>${escapeAdminHtml(item.title || 'Short Break')}</strong>`;
         } else if (item.type === 'lunch') {
           typeBadge = '<span class="badge" style="background:#ffedd5; color:#c2410c;">🍴 Lunch</span>';
-          titleDisplay = `<strong>${item.title || 'Lunch Break'}</strong>`;
+          titleDisplay = `<strong>${escapeAdminHtml(item.title || 'Lunch Break')}</strong>`;
         } else if (item.type === 'forum') {
           typeBadge = '<span class="badge purple">🗣️ Forum Hour</span>';
-          titleDisplay = `<strong>${item.title || 'Forum Hour'}</strong>`;
+          titleDisplay = `<strong>${escapeAdminHtml(item.title || 'Forum Hour')}</strong>`;
           if (item.departmentId || item.semester) {
             const deptN = deptMap[item.departmentId] || item.departmentName || item.departmentId || '';
-            academicDisplay = `${deptN ? `<span class="badge">${deptN}</span> ` : ''}${item.semester ? `<span class="badge blue">Sem ${item.semester} • Sec ${item.section || 'A'}</span>` : ''}`;
+            academicDisplay = `${deptN ? `<span class="badge">${escapeAdminHtml(deptN)}</span> ` : ''}${item.semester ? `<span class="badge blue">Sem ${escapeAdminHtml(item.semester)} • Sec ${escapeAdminHtml(item.section || 'A')}</span>` : ''}`;
           }
-          if (item.facultyName) facultyDisplay = item.facultyName;
+          if (item.facultyName) facultyDisplay = escapeAdminHtml(item.facultyName);
         } else if (item.type === 'sports') {
           typeBadge = '<span class="badge green">🏃 Sports</span>';
-          titleDisplay = `<strong>${item.title || 'Sports / PT'}</strong>`;
+          titleDisplay = `<strong>${escapeAdminHtml(item.title || 'Sports / PT')}</strong>`;
           if (item.departmentId || item.semester) {
             const deptN = deptMap[item.departmentId] || item.departmentName || item.departmentId || '';
-            academicDisplay = `${deptN ? `<span class="badge">${deptN}</span> ` : ''}${item.semester ? `<span class="badge blue">Sem ${item.semester} • Sec ${item.section || 'A'}</span>` : ''}`;
+            academicDisplay = `${deptN ? `<span class="badge">${escapeAdminHtml(deptN)}</span> ` : ''}${item.semester ? `<span class="badge blue">Sem ${escapeAdminHtml(item.semester)} • Sec ${escapeAdminHtml(item.section || 'A')}</span>` : ''}`;
           }
-          if (item.facultyName) facultyDisplay = item.facultyName;
+          if (item.facultyName) facultyDisplay = escapeAdminHtml(item.facultyName);
         } else if (item.type === 'activity') {
           typeBadge = '<span class="badge purple">📢 Activity</span>';
-          titleDisplay = `<strong>${item.title || 'Activity / Seminar'}</strong>`;
+          titleDisplay = `<strong>${escapeAdminHtml(item.title || 'Activity / Seminar')}</strong>`;
           if (item.departmentId || item.semester) {
             const deptN = deptMap[item.departmentId] || item.departmentName || item.departmentId || '';
-            academicDisplay = `${deptN ? `<span class="badge">${deptN}</span> ` : ''}${item.semester ? `<span class="badge blue">Sem ${item.semester} • Sec ${item.section || 'A'}</span>` : ''}`;
+            academicDisplay = `${deptN ? `<span class="badge">${escapeAdminHtml(deptN)}</span> ` : ''}${item.semester ? `<span class="badge blue">Sem ${escapeAdminHtml(item.semester)} • Sec ${escapeAdminHtml(item.section || 'A')}</span>` : ''}`;
           }
-          if (item.facultyName) facultyDisplay = item.facultyName;
+          if (item.facultyName) facultyDisplay = escapeAdminHtml(item.facultyName);
         } else {
-          typeBadge = `<span class="badge">${item.type || 'Period'}</span>`;
-          titleDisplay = `<strong>${item.title || item.subjectName || 'Schedule Entry'}</strong>`;
+          typeBadge = `<span class="badge">${escapeAdminHtml(item.type || 'Period')}</span>`;
+          titleDisplay = `<strong>${escapeAdminHtml(item.title || item.subjectName || 'Schedule Entry')}</strong>`;
         }
 
         const safeItemJson = encodeURIComponent(JSON.stringify(item));

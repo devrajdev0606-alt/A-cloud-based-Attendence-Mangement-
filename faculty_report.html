@@ -181,22 +181,29 @@
       document.getElementById('todayRecords').textContent = records.filter(r => r.date === today).length;
     }
 
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>'"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[character]));
+    }
+
     function renderTable(records) {
       const tbody = document.getElementById('recordsTable');
       if (records.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="empty">No attendance records found for the selected criteria.</td></tr>';
         return;
       }
-      tbody.innerHTML = '';
-      records.forEach(r => {
-        tbody.innerHTML += `<tr>
-          <td><strong>${r.studentName || 'Student'}</strong></td>
-          <td>${r.date}</td>
-          <td>${r.time}</td>
-          <td><span class="badge blue">${r.distance ? r.distance.toFixed(1) + ' m' : '-'}</span></td>
+      const rows = records.map(r => {
+        const distDisplay = r.distance ? Number(r.distance).toFixed(1) + ' m' : '-';
+        return `<tr>
+          <td><strong>${escapeHtml(r.studentName || 'Student')}</strong></td>
+          <td>${escapeHtml(r.date || '-')}</td>
+          <td>${escapeHtml(r.time || '-')}</td>
+          <td><span class="badge blue">${escapeHtml(distDisplay)}</span></td>
           <td><span class="badge green">● Present (Verified)</span></td>
         </tr>`;
       });
+      tbody.innerHTML = rows.join('');
     }
 
     function filterRecords() {
@@ -223,11 +230,14 @@
           filtered = filtered.filter(r => r.date === formatted || r.date === `${parts[2]}-${parts[1]}-${parts[0]}`);
         }
       }
+      const escapeCsvCell = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
       let csv = 'Student,Date,Time,Distance,Status\n';
       filtered.forEach(r => {
-        const sName = (r.studentName || 'Student').replace(/"/g, '""');
-        const dist = r.distance ? r.distance.toFixed(1) : '-';
-        csv += `"${sName}","${r.date || ''}","${r.time || ''}","${dist}","Present"\n`;
+        const sName = escapeCsvCell(r.studentName || 'Student');
+        const date = escapeCsvCell(r.date || '');
+        const time = escapeCsvCell(r.time || '');
+        const dist = escapeCsvCell(r.distance ? Number(r.distance).toFixed(1) : '-');
+        csv += `${sName},${date},${time},${dist},"Present"\n`;
       });
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);

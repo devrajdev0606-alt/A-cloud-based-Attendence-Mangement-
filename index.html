@@ -963,6 +963,20 @@
       }
     }
 
+    // Enter key shortcuts for fast keyboard login
+    document.getElementById('studentPassword')?.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') loginStudent();
+    });
+    document.getElementById('studentEmail')?.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') loginStudent();
+    });
+    document.getElementById('facultyPassword')?.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') loginFaculty();
+    });
+    document.getElementById('facultyEmail')?.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') loginFaculty();
+    });
+
     // Auto-open admin modal if navigated with query parameter ?adminLogin=1
     if (new URLSearchParams(window.location.search).get('adminLogin') === '1') {
       openAdminLoginModal();

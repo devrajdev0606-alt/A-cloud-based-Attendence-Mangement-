@@ -225,14 +225,19 @@
       document.getElementById('todayRecords').textContent = records.filter(r => r.date === today).length;
     }
 
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>'"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[character]));
+    }
+
     function renderTable(records) {
       const tbody = document.getElementById('recordsTable');
       if (records.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="empty">No attendance records found matching filters.</td></tr>';
         return;
       }
-      tbody.innerHTML = '';
-      records.forEach(r => {
+      const rows = records.map(r => {
         let verified = '<span class="badge green">● GPS & Face Verified</span>';
         if (r.attendanceMethod === 'correction' || r.source === 'faculty_correction') {
           verified = '<span class="badge blue">● Faculty Correction</span>';
@@ -242,16 +247,17 @@
         const deptName = deptMap[r.studentDept] || r.studentDept || '-';
         const distDisplay = r.distance ? `${Number(r.distance).toFixed(1)} m` : (r.attendanceMethod === 'correction' ? 'Correction' : 'Verified');
         const usnDisplay = r.studentUsn || r.usn || '-';
-        tbody.innerHTML += `<tr>
-          <td><strong>${r.studentName || 'Unknown'}</strong></td>
-          <td><strong>${usnDisplay}</strong></td>
-          <td><span class="badge">${deptName}</span></td>
-          <td>${r.date}</td>
-          <td>${r.time}</td>
-          <td><span class="badge green">${distDisplay}</span></td>
+        return `<tr>
+          <td><strong>${escapeHtml(r.studentName || 'Unknown')}</strong></td>
+          <td><strong>${escapeHtml(usnDisplay)}</strong></td>
+          <td><span class="badge">${escapeHtml(deptName)}</span></td>
+          <td>${escapeHtml(r.date || '-')}</td>
+          <td>${escapeHtml(r.time || '-')}</td>
+          <td><span class="badge green">${escapeHtml(distDisplay)}</span></td>
           <td>${verified}</td>
         </tr>`;
       });
+      tbody.innerHTML = rows.join('');
     }
 
     function filterRecords() {
@@ -286,8 +292,20 @@
       }
       if (subjectVal) filtered = filtered.filter(r => r.subjectId === subjectVal);
       if (facultyVal) filtered = filtered.filter(r => r.facultyId === facultyVal || r.facultyUid === facultyVal);
+      const escapeCsvCell = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
       let csv = 'Student,USN,Department,Date,Time,Distance(m),Latitude,Longitude,Faculty\n';
-      filtered.forEach(r => csv += `"${r.studentName || ''}","${r.studentUsn || ''}","${deptMap[r.studentDept] || r.studentDept || '-'}","${r.date}","${r.time}","${r.distance || ''}","${r.latitude || ''}","${r.longitude || ''}","${r.facultyName || '-'}"\n`);
+      filtered.forEach(r => {
+        const sName = escapeCsvCell(r.studentName || '');
+        const usn = escapeCsvCell(r.studentUsn || '');
+        const dept = escapeCsvCell(deptMap[r.studentDept] || r.studentDept || '-');
+        const date = escapeCsvCell(r.date || '');
+        const time = escapeCsvCell(r.time || '');
+        const dist = escapeCsvCell(r.distance || '');
+        const lat = escapeCsvCell(r.latitude || '');
+        const lng = escapeCsvCell(r.longitude || '');
+        const fac = escapeCsvCell(r.facultyName || '-');
+        csv += `${sName},${usn},${dept},${date},${time},${dist},${lat},${lng},${fac}\n`;
+      });
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
