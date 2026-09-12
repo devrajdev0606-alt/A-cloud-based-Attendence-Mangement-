@@ -12,11 +12,12 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        ('email' in request.auth.token && (request.auth.token.email == 'admin@cit.edu' || request.auth.token.email.lower() == 'admin@cit.edu')) ||
-        request.auth.token.get('email', '') == 'admin@cit.edu' ||
-        request.auth.token.get('email', '').lower() == 'admin@cit.edu' ||
         ('admin' in request.auth.token && request.auth.token.admin == true) ||
-        request.auth.token.get('admin', false) == true
+        request.auth.token.get('admin', false) == true ||
+        (
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('active', true) == true
+        )
       );
     }
 
@@ -456,6 +457,23 @@ service cloud.firestore {
           && (!('facultyId' in resource.data) || request.resource.data.facultyId == resource.data.facultyId);
       }
 
+      function isValidStudentResubmission() {
+        return isSignedIn()
+          && resource.data.studentUid == request.auth.uid
+          && resource.data.status == 'rejected'
+          && request.resource.data.studentUid == request.auth.uid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.sessionId == resource.data.sessionId
+          && request.resource.data.subjectId == resource.data.subjectId
+          && 'reason' in request.resource.data
+          && request.resource.data.reason is string
+          && request.resource.data.reason.size() > 0
+          && request.resource.data.reason.size() <= 500
+          && (!('reviewedAt' in request.resource.data) || request.resource.data.reviewedAt == null)
+          && (!('reviewedBy' in request.resource.data) || request.resource.data.reviewedBy == null)
+          && (!('reviewReason' in request.resource.data) || request.resource.data.reviewReason == null);
+      }
+
       allow read: if isAdmin() || (
         isSignedIn() && (
           ('studentUid' in resource.data && resource.data.studentUid == request.auth.uid) ||
@@ -464,7 +482,7 @@ service cloud.firestore {
         )
       );
       allow create: if isAdmin() || isValidCorrectionCreate();
-      allow update: if isAdmin() || isValidFacultyReview();
+      allow update: if isAdmin() || isValidFacultyReview() || isValidStudentResubmission();
       allow delete: if isAdmin();
     }
 
@@ -521,6 +539,18 @@ service cloud.firestore {
 
     match /uniqueOfferings/{offeringKey} {
       allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // ADMINS COLLECTION
+    // =========================================================================
+    // Stores authorized institutional administrator records keyed by Auth UID.
+    // Read: Authenticated user can read their own admin doc, or an active admin can read all.
+    // Write: Strictly active admin only (no unauthenticated or non-admin self-elevation).
+    // =========================================================================
+    match /admins/{adminId} {
+      allow read: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
       allow write: if isAdmin();
     }
   }

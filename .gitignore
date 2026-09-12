@@ -6,6 +6,9 @@ npm-debug.log*
 .firebase/hosting/*.cache
 .firebase/hosting.*
 .firebaserc
+firebase-debug.log*
+auth_users.json
+*.log
 
 # Environment files
 .env

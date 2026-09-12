@@ -32,7 +32,7 @@
         <a href="report.html" class="btn btn-primary" style="font-size:0.84rem;">📊 View Attendance Report</a>
         <div class="user-badge" style="background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
           <div class="user-avatar" style="background: var(--amber-subtle, #fef3c7); color: var(--amber-dark, #92400e); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px;">⚙️</div>
-          <span id="adminEmailDisplay" style="font-size: 0.82rem; font-weight: 600; color: #fff;">admin@cit.edu</span>
+          <span id="adminEmailDisplay" style="font-size: 0.82rem; font-weight: 600; color: #fff;">Administrator</span>
         </div>
         <button type="button" class="logout-btn" onclick="adminLogout()" title="Sign out of Admin Suite">Logout</button>
         <a href="index.html" class="back-btn">Portal Home</a>
@@ -84,8 +84,11 @@
 
         <!-- Add Student Card -->
         <div class="card" style="margin-bottom: 0;">
-          <div class="card-header">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
             <h2>👨‍🎓 Onboard New Student</h2>
+            <button type="button" class="btn" id="openCsvImportBtn" onclick="openCsvImportModal()" style="font-size: 0.8rem; padding: 6px 12px; background: rgba(37, 99, 235, 0.1); color: var(--accent-blue, #2563eb); border: 1px solid rgba(37, 99, 235, 0.3); border-radius: 8px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              📁 Import Students CSV
+            </button>
           </div>
           <form id="addStudentForm" style="display: flex; flex-direction: column; gap: 12px;">
             <input type="text" id="name" placeholder="Full Student Name (e.g. Devraj)" required />
@@ -602,6 +605,110 @@
     </div>
   </div>
 
+  <!-- Import Students CSV Modal -->
+  <div id="csvImportModal" class="modal-overlay" style="display:none;" onclick="closeCsvImportModalOnBackdrop(event)">
+    <div class="modal-card" style="max-width: 840px; max-height: 90vh; display: flex; flex-direction: column;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="badge blue">📁 Bulk Onboarding</span>
+          <h2 style="margin-top:4px;">Import Students from CSV</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeCsvImportModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-y: auto; flex: 1; padding-right: 8px;">
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">
+          Upload a CSV file with student details. Firebase Authentication accounts and Firestore profiles will be created securely. Students set their own passwords through a secure Firebase password setup link.
+        </p>
+
+        <!-- Actions: Choose File & Download Template -->
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 18px; padding: 14px; background: rgba(255,255,255,0.03); border: 1px dashed var(--border-light, #cbd5e1); border-radius: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label for="csvFileInput" class="btn btn-primary" style="cursor: pointer; margin: 0; font-size: 0.85rem;">
+              📁 Choose CSV File
+            </label>
+            <input type="file" id="csvFileInput" accept=".csv,text/csv" style="display:none;" onchange="handleCsvFileSelected(event)" />
+            <span id="csvSelectedFileName" style="font-size: 0.85rem; color: var(--text-muted);">No file chosen</span>
+          </div>
+          <div>
+            <button type="button" class="btn" style="background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.85rem;" onclick="downloadCsvTemplate()">
+              📥 Download CSV Template
+            </button>
+          </div>
+        </div>
+
+        <div id="csvParseError" class="msg error" style="display:none; margin-bottom: 14px;"></div>
+
+        <!-- Preview Section -->
+        <div id="csvPreviewContainer" style="display:none; margin-bottom: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--primary-navy);">
+              CSV Data Preview (<span id="csvRowCount">0</span> rows)
+            </h3>
+            <div style="font-size: 0.8rem; display: flex; gap: 10px;">
+              <span id="csvValidBadge" class="badge green" style="font-size:0.75rem;">0 Ready</span>
+              <span id="csvInvalidBadge" class="badge red" style="font-size:0.75rem;">0 Issues</span>
+            </div>
+          </div>
+
+          <div style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px;">
+            <table class="data-table" style="width: 100%; font-size: 0.82rem;">
+              <thead>
+                <tr>
+                  <th style="width: 36px;">#</th>
+                  <th>Name</th>
+                  <th>USN</th>
+                  <th>Sem</th>
+                  <th>Sec</th>
+                  <th>Dept</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="csvPreviewTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Results Section (Post-Import) -->
+        <div id="csvResultsContainer" style="display:none; margin-bottom: 18px;">
+          <div style="padding: 12px; background: rgba(59, 130, 246, 0.08); border-radius: 8px; margin-bottom: 12px;">
+            <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; color: var(--primary-navy);">Import Completed</h4>
+            <div style="display: flex; gap: 16px; font-size: 0.84rem;">
+              <span>Successfully imported: <strong id="resImportedCount" style="color:#059669;">0</strong></span>
+              <span>Failed: <strong id="resFailedCount" style="color:#dc2626;">0</strong></span>
+              <span>Skipped duplicates: <strong id="resSkippedCount" style="color:#d97706;">0</strong></span>
+            </div>
+          </div>
+
+          <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px;">
+            <table class="data-table" style="width: 100%; font-size: 0.82rem;">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>USN</th>
+                  <th>Email</th>
+                  <th>Result</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody id="csvResultsTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Progress Spinner & Status Message -->
+        <div id="csvImportStatusMsg" class="msg" style="display:none; margin-bottom: 14px;"></div>
+
+        <div class="btn-row" style="justify-content: flex-end; width: 100%; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-light);">
+          <button type="button" class="btn back-btn" onclick="closeCsvImportModal()">Cancel</button>
+          <button type="button" id="importStudentsSubmitBtn" class="btn btn-primary" disabled onclick="executeCsvImport()">
+            🚀 Import Students
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -628,8 +735,19 @@
       const tokenResult = await user.getIdTokenResult().catch(() => null);
       const isAdminClaim = tokenResult?.claims?.admin === true;
 
-      const userEmail = (user.email || '').toLowerCase();
-      if (userEmail !== 'admin@cit.edu' && !isAdminClaim) {
+      let isAdminRecord = false;
+      try {
+        const adminDoc = await db.collection('admins').doc(user.uid).get();
+        if (adminDoc.exists) {
+          const data = adminDoc.data();
+          isAdminRecord = data?.active !== false && (data?.role === 'admin' || !data?.role);
+        }
+      } catch (err) {
+        console.warn('[Admin Guard] Firestore admin lookup warning:', err?.code || err?.message);
+      }
+
+      if (!isAdminClaim && !isAdminRecord) {
+        console.warn('[Admin Guard] Access denied for UID:', user.uid);
         await auth.signOut();
         localStorage.clear();
         window.location.replace('index.html?adminLogin=1');
@@ -641,7 +759,7 @@
 
       // Display authenticated admin email
       const emailDisplay = document.getElementById('adminEmailDisplay');
-      if (emailDisplay) emailDisplay.textContent = user.email;
+      if (emailDisplay) emailDisplay.textContent = user.email || 'Administrator';
 
       // Initialize admin dashboard once verified
       if (!isAdminInitialized) {
@@ -2024,6 +2142,444 @@
         submitBtn.textContent = 'Register Student';
       }
     });
+
+    // =========================================================================
+    // IMPORT STUDENTS FROM CSV MODULE
+    // =========================================================================
+    let parsedCsvStudents = [];
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function openCsvImportModal() {
+      const modal = document.getElementById('csvImportModal');
+      const fileInput = document.getElementById('csvFileInput');
+      const fileNameSpan = document.getElementById('csvSelectedFileName');
+      const parseError = document.getElementById('csvParseError');
+      const previewContainer = document.getElementById('csvPreviewContainer');
+      const resultsContainer = document.getElementById('csvResultsContainer');
+      const statusMsg = document.getElementById('csvImportStatusMsg');
+      const submitBtn = document.getElementById('importStudentsSubmitBtn');
+
+      if (fileInput) fileInput.value = '';
+      if (fileNameSpan) fileNameSpan.textContent = 'No file chosen';
+      if (parseError) { parseError.style.display = 'none'; parseError.textContent = ''; }
+      if (previewContainer) previewContainer.style.display = 'none';
+      if (resultsContainer) resultsContainer.style.display = 'none';
+      if (statusMsg) { statusMsg.style.display = 'none'; statusMsg.textContent = ''; }
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '🚀 Import Students'; }
+
+      parsedCsvStudents = [];
+      modal.style.display = 'flex';
+      loadDepartments();
+    }
+
+    function closeCsvImportModal() {
+      const modal = document.getElementById('csvImportModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function closeCsvImportModalOnBackdrop(e) {
+      if (e.target.id === 'csvImportModal') closeCsvImportModal();
+    }
+
+    function downloadCsvTemplate() {
+      const csvContent = "name,usn,sem,sec,dept,email\nRahul Kumar,1CD23CS999,5,A,CSE,student.example@cit.edu\n";
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'students_template.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function parseCSVText(text) {
+      const rows = [];
+      let currentRow = [];
+      let currentVal = '';
+      let insideQuote = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+
+        if (insideQuote) {
+          if (char === '"') {
+            if (nextChar === '"') {
+              currentVal += '"';
+              i++;
+            } else {
+              insideQuote = false;
+            }
+          } else {
+            currentVal += char;
+          }
+        } else {
+          if (char === '"') {
+            insideQuote = true;
+          } else if (char === ',') {
+            currentRow.push(currentVal.trim());
+            currentVal = '';
+          } else if (char === '\r') {
+            if (nextChar === '\n') i++;
+            currentRow.push(currentVal.trim());
+            currentVal = '';
+            if (currentRow.some(val => val !== '')) rows.push(currentRow);
+            currentRow = [];
+          } else if (char === '\n') {
+            currentRow.push(currentVal.trim());
+            currentVal = '';
+            if (currentRow.some(val => val !== '')) rows.push(currentRow);
+            currentRow = [];
+          } else {
+            currentVal += char;
+          }
+        }
+      }
+      if (currentVal || currentRow.length > 0) {
+        currentRow.push(currentVal.trim());
+        if (currentRow.some(val => val !== '')) rows.push(currentRow);
+      }
+      return rows;
+    }
+
+    async function handleCsvFileSelected(event) {
+      const file = event.target.files && event.target.files[0];
+      const fileNameSpan = document.getElementById('csvSelectedFileName');
+      const parseError = document.getElementById('csvParseError');
+      const previewContainer = document.getElementById('csvPreviewContainer');
+      const resultsContainer = document.getElementById('csvResultsContainer');
+      const submitBtn = document.getElementById('importStudentsSubmitBtn');
+      const statusMsg = document.getElementById('csvImportStatusMsg');
+
+      if (parseError) { parseError.style.display = 'none'; parseError.textContent = ''; }
+      if (previewContainer) previewContainer.style.display = 'none';
+      if (resultsContainer) resultsContainer.style.display = 'none';
+      if (statusMsg) { statusMsg.style.display = 'none'; statusMsg.textContent = ''; }
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '🚀 Import Students'; }
+
+      if (!file) {
+        if (fileNameSpan) fileNameSpan.textContent = 'No file chosen';
+        return;
+      }
+
+      fileNameSpan.textContent = file.name;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const text = e.target.result;
+          const rows = parseCSVText(text);
+
+          if (!rows || rows.length < 2) {
+            throw new Error('The CSV file is empty or does not contain student data rows.');
+          }
+
+          const rawHeaders = rows[0];
+          const headers = rawHeaders.map(h => h.trim().toLowerCase());
+
+          // Required columns check
+          const requiredColumns = ['name', 'usn', 'sem', 'sec', 'dept', 'email'];
+          for (const col of requiredColumns) {
+            if (!headers.includes(col)) {
+              throw new Error(`Missing required column: ${col}`);
+            }
+          }
+
+          // Check prohibited password column
+          if (headers.includes('password') || headers.includes('pass')) {
+            throw new Error('CSV must not contain passwords. Passwords are set securely by students via email setup.');
+          }
+
+          const colIndex = {};
+          requiredColumns.forEach(c => {
+            colIndex[c] = headers.indexOf(c);
+          });
+
+          // Fetch fresh department list for validation
+          const departments = await fetchDepartmentsOnce(true);
+          const deptLookup = new Map();
+          departments.forEach(d => {
+            deptLookup.set(d.id.toLowerCase(), d);
+            deptLookup.set(d.name.toLowerCase(), d);
+            if (d.normalizedName) deptLookup.set(d.normalizedName.toLowerCase(), d);
+          });
+
+          // Check duplicates within CSV
+          const seenUsns = new Set();
+          const seenEmails = new Set();
+
+          const studentRows = [];
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+          for (let i = 1; i < rows.length; i++) {
+            const r = rows[i];
+            const name = (r[colIndex.name] || '').trim();
+            const usn = (r[colIndex.usn] || '').trim().toUpperCase();
+            const semStr = (r[colIndex.sem] || '').trim();
+            const sec = (r[colIndex.sec] || '').trim().toUpperCase();
+            const dept = (r[colIndex.dept] || '').trim();
+            const email = (r[colIndex.email] || '').trim().toLowerCase();
+
+            let status = 'Ready to import';
+            let reason = '';
+
+            if (!name) {
+              status = 'Invalid row';
+              reason = 'Name is required';
+            } else if (!usn) {
+              status = 'Invalid row';
+              reason = 'USN is required';
+            } else if (!email || !emailRegex.test(email)) {
+              status = 'Invalid row';
+              reason = 'Invalid email';
+            } else {
+              const semNum = parseInt(semStr, 10);
+              if (isNaN(semNum) || semNum < 1 || semNum > 8) {
+                status = 'Invalid row';
+                reason = 'Invalid semester';
+              } else if (!sec || !['A', 'B', 'C', 'D'].includes(sec)) {
+                status = 'Invalid row';
+                reason = 'Invalid section';
+              } else if (!deptLookup.has(dept.toLowerCase())) {
+                status = 'Invalid row';
+                reason = 'Department not found';
+              } else if (seenUsns.has(usn)) {
+                status = 'Invalid row';
+                reason = 'Already exists';
+              } else if (seenEmails.has(email)) {
+                status = 'Invalid row';
+                reason = 'Already exists';
+              }
+            }
+
+            if (usn) seenUsns.add(usn);
+            if (email) seenEmails.add(email);
+
+            studentRows.push({
+              index: i,
+              name,
+              usn,
+              sem: semStr,
+              sec,
+              dept,
+              email,
+              status,
+              reason
+            });
+          }
+
+          // Async duplicate check against Firestore for valid candidates
+          for (const item of studentRows) {
+            if (item.status === 'Ready to import') {
+              try {
+                const [usnDoc, emailDoc] = await Promise.all([
+                  db.collection('uniqueUSNs').doc(item.usn).get(),
+                  db.collection('uniqueEmails').doc(item.email).get()
+                ]);
+                if (usnDoc.exists || emailDoc.exists) {
+                  item.status = 'Invalid row';
+                  item.reason = 'Already exists';
+                }
+              } catch (e) {
+                console.warn('Firestore preview uniqueness check error:', e);
+              }
+            }
+          }
+
+          parsedCsvStudents = studentRows;
+
+          // Render Preview Table
+          const tbody = document.getElementById('csvPreviewTbody');
+          tbody.innerHTML = '';
+          let validCount = 0;
+          let invalidCount = 0;
+
+          studentRows.forEach((row, idx) => {
+            const tr = document.createElement('tr');
+            const isValid = row.status === 'Ready to import';
+            if (isValid) validCount++; else invalidCount++;
+
+            const statusBadge = isValid
+              ? `<span class="badge green" style="font-size:0.75rem;">Ready to import</span>`
+              : `<span class="badge red" style="font-size:0.75rem;" title="${escapeHtml(row.reason)}">${escapeHtml(row.reason || 'Invalid')}</span>`;
+
+            tr.innerHTML = `
+              <td style="color:var(--text-muted); font-size:0.75rem;">${idx + 1}</td>
+              <td style="font-weight:600;">${escapeHtml(row.name || '-')}</td>
+              <td><code>${escapeHtml(row.usn || '-')}</code></td>
+              <td>${escapeHtml(row.sem || '-')}</td>
+              <td>${escapeHtml(row.sec || '-')}</td>
+              <td>${escapeHtml(row.dept || '-')}</td>
+              <td style="font-size:0.78rem;">${escapeHtml(row.email || '-')}</td>
+              <td>${statusBadge}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          document.getElementById('csvRowCount').textContent = studentRows.length;
+          document.getElementById('csvValidBadge').textContent = `${validCount} Ready`;
+          document.getElementById('csvInvalidBadge').textContent = `${invalidCount} Issues`;
+          previewContainer.style.display = 'block';
+
+          if (validCount > 0) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = `🚀 Import Students (${validCount})`;
+          } else {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'No Valid Students to Import';
+          }
+        } catch (err) {
+          console.error('CSV Parsing Error:', err);
+          if (parseError) {
+            parseError.textContent = err.message;
+            parseError.style.display = 'block';
+          }
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    async function executeCsvImport() {
+      const submitBtn = document.getElementById('importStudentsSubmitBtn');
+      const statusMsg = document.getElementById('csvImportStatusMsg');
+      const resultsContainer = document.getElementById('csvResultsContainer');
+      const resultsTbody = document.getElementById('csvResultsTbody');
+
+      const validRows = parsedCsvStudents.filter(r => r.status === 'Ready to import');
+      if (!validRows.length) {
+        statusMsg.textContent = 'No valid rows available to import.';
+        statusMsg.className = 'msg error';
+        statusMsg.style.display = 'block';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = `Importing ${validRows.length} Students...`;
+      statusMsg.textContent = 'Contacting secure backend service...';
+      statusMsg.className = 'msg info';
+      statusMsg.style.display = 'block';
+
+      try {
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          throw new Error('Admin authentication expired. Please sign in again.');
+        }
+
+        const idToken = await currentUser.getIdToken(true);
+        const payload = validRows.map(r => ({
+          name: r.name,
+          usn: r.usn,
+          sem: r.sem,
+          sec: r.sec,
+          dept: r.dept,
+          email: r.email
+        }));
+
+        let responseData = null;
+
+        // Try production Cloud Function first
+        let cfSucceeded = false;
+        try {
+          const callable = functions.httpsCallable('importStudents');
+          const cfResult = await callable({ students: payload });
+          if (cfResult && cfResult.data) {
+            responseData = cfResult.data;
+            cfSucceeded = true;
+          }
+        } catch (cfErr) {
+          console.warn('[CSV Import] Cloud Function not reachable, falling back to local backend server:', cfErr);
+        }
+
+        // Fallback to local secure backend server if Cloud Function not deployed
+        if (!cfSucceeded) {
+          const localBackendUrl = 'http://localhost:3001/api/import-students';
+          const localRes = await fetch(localBackendUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({ students: payload })
+          });
+
+          if (!localRes.ok) {
+            const errJson = await localRes.json().catch(() => ({}));
+            throw new Error(errJson.error || `Backend server returned error ${localRes.status}`);
+          }
+          responseData = await localRes.json();
+        }
+
+        if (!responseData || !responseData.results) {
+          throw new Error('Invalid response received from backend.');
+        }
+
+        // Render Results Table
+        resultsTbody.innerHTML = '';
+        const summary = responseData.summary || {
+          total: responseData.results.length,
+          imported: responseData.results.filter(r => r.status === 'success' || r.status === 'partial_success').length,
+          failed: responseData.results.filter(r => r.status === 'failed').length,
+          skipped: responseData.results.filter(r => r.status === 'skipped').length
+        };
+
+        document.getElementById('resImportedCount').textContent = summary.imported;
+        document.getElementById('resFailedCount').textContent = summary.failed;
+        document.getElementById('resSkippedCount').textContent = summary.skipped;
+
+        responseData.results.forEach(res => {
+          const tr = document.createElement('tr');
+          let resultBadge = '';
+          if (res.status === 'success') {
+            resultBadge = `<span class="badge green" style="font-size:0.75rem;">Imported successfully</span>`;
+          } else if (res.status === 'partial_success') {
+            resultBadge = `<span class="badge amber" style="font-size:0.75rem;">Password setup email failed</span>`;
+          } else if (res.status === 'skipped') {
+            resultBadge = `<span class="badge amber" style="font-size:0.75rem;">Already exists</span>`;
+          } else {
+            resultBadge = `<span class="badge red" style="font-size:0.75rem;">${escapeHtml(res.result || 'Failed')}</span>`;
+          }
+
+          tr.innerHTML = `
+            <td style="font-weight:600;">${escapeHtml(res.name || '-')}</td>
+            <td><code>${escapeHtml(res.usn || '-')}</code></td>
+            <td style="font-size:0.78rem;">${escapeHtml(res.email || '-')}</td>
+            <td>${resultBadge}</td>
+            <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(res.reason || (res.emailSent ? 'Account created & setup email dispatched' : 'None'))}</td>
+          `;
+          resultsTbody.appendChild(tr);
+        });
+
+        resultsContainer.style.display = 'block';
+        statusMsg.textContent = `Import complete: ${summary.imported} imported, ${summary.failed} failed, ${summary.skipped} skipped.`;
+        statusMsg.className = 'msg success';
+        statusMsg.style.display = 'block';
+
+        // Refresh stats & listing
+        await updateStats();
+        renderListing();
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Import Completed';
+      } catch (err) {
+        console.error('Execute CSV Import Error:', err);
+        statusMsg.textContent = 'Import error: ' + (err.message || 'Backend service failed');
+        statusMsg.className = 'msg error';
+        statusMsg.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = '🚀 Import Students';
+      }
+    }
 
     document.getElementById('addFacultyForm').addEventListener('submit', async (e) => {
       e.preventDefault();

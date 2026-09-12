@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body class="login-page">
   <!-- Soft Blurred Decorative Glass Blobs -->
   <div class="glass-bg-blobs" aria-hidden="true">
@@ -52,7 +53,7 @@
             <input type="password" id="studentPassword" placeholder="Password" required autocomplete="current-password" />
           </label>
 
-          <a href="#" class="forgot" onclick="alert('Please contact your department administrator to reset your password.'); return false;">Forgot Password?</a>
+          <a href="reset-password.html" class="forgot">Forgot Password?</a>
           <button type="button" id="studentLoginBtn" class="btn btn-student" onclick="loginStudent()">LOGIN AS STUDENT</button>
           <div id="studentLoginMsg" class="login-msg" role="alert"></div>
         </article>
@@ -287,7 +288,7 @@
             <label class="form-label" for="adminEmail" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Admin Email *</label>
             <div class="input-wrap" style="margin-bottom: 0;">
               <span class="input-icon">📧</span>
-              <input type="email" id="adminEmail" placeholder="admin@cit.edu" required autocomplete="username" />
+              <input type="email" id="adminEmail" placeholder="admin@example.com" required autocomplete="username" />
             </div>
           </div>
 
@@ -473,8 +474,18 @@
           }
         }
 
-        if (email === 'admin@cit.edu') {
-          localStorage.setItem('adminEmail', email);
+        // Check if account is an authorized administrator
+        const tokenResult = await user.getIdTokenResult().catch(() => null);
+        const isAdminClaim = tokenResult?.claims?.admin === true;
+        let isAdminRecord = false;
+        try {
+          const adminDoc = await db.collection('admins').doc(user.uid).get();
+          isAdminRecord = adminDoc.exists && adminDoc.data()?.active !== false;
+        } catch (_) {}
+
+        if (isAdminClaim || isAdminRecord) {
+          localStorage.setItem('adminUid', user.uid);
+          localStorage.setItem('adminEmail', user.email);
           window.location.href = 'admin.html';
           return;
         }
@@ -934,13 +945,47 @@
         const userCred = await auth.signInWithEmailAndPassword(email, password);
         const user = userCred.user;
 
-        const tokenResult = await user.getIdTokenResult().catch(() => null);
+        // 1. Check custom user claim
+        const tokenResult = await user.getIdTokenResult().catch((tErr) => {
+          console.warn('[Admin Auth] Token result warning:', tErr?.code || tErr?.message);
+          return null;
+        });
         const isAdminClaim = tokenResult?.claims?.admin === true;
 
-        if (user.email !== 'admin@cit.edu' && !isAdminClaim) {
+        // 2. Check Firestore admins collection by authenticated UID
+        let isAdminRecord = false;
+        let firestoreError = null;
+        try {
+          const adminDoc = await db.collection('admins').doc(user.uid).get();
+          if (adminDoc.exists) {
+            const data = adminDoc.data();
+            isAdminRecord = data?.active !== false && (data?.role === 'admin' || !data?.role);
+          }
+        } catch (fsErr) {
+          firestoreError = fsErr;
+          console.error('[Admin Auth] Firestore role check error:', fsErr?.code || fsErr?.message);
+        }
+
+        // Handle Firestore permission or database error during role verification
+        if (firestoreError && !isAdminClaim) {
           await auth.signOut();
           localStorage.clear();
-          msg.textContent = 'Access denied. Only authorized administrator accounts can access this panel.';
+          if (firestoreError.code === 'permission-denied') {
+            msg.textContent = 'Database permission denied. Unable to verify administrator role.';
+          } else {
+            msg.textContent = 'Database error during authorization check. Please try again.';
+          }
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        // Admin authorization failure
+        if (!isAdminClaim && !isAdminRecord) {
+          console.warn('[Admin Auth] Authorization failure for UID:', user.uid);
+          await auth.signOut();
+          localStorage.clear();
+          msg.textContent = 'Access denied. This account is not authorized for administrator access.';
           msg.className = 'msg error';
           msg.style.display = 'block';
           return;
@@ -950,10 +995,39 @@
         localStorage.setItem('adminEmail', user.email);
         window.location.href = 'admin.html';
       } catch (err) {
+        console.warn('[Admin Auth] Authentication failure:', err?.code || 'unknown');
         let errorMsg = 'Invalid administrator credentials or access error.';
-        if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-          errorMsg = 'Invalid admin email or password.';
+
+        switch (err.code) {
+          case 'auth/wrong-password':
+          case 'auth/invalid-credential':
+            errorMsg = 'Invalid email or password.';
+            break;
+          case 'auth/user-not-found':
+            errorMsg = 'No administrator account found with this email.';
+            break;
+          case 'auth/invalid-email':
+            errorMsg = 'Please enter a valid email address.';
+            break;
+          case 'auth/user-disabled':
+            errorMsg = 'This administrator account has been disabled. Contact IT support.';
+            break;
+          case 'auth/network-request-failed':
+            errorMsg = 'Network error. Please check your connection and try again.';
+            break;
+          case 'auth/too-many-requests':
+            errorMsg = 'Too many failed login attempts. Please wait a few moments and try again.';
+            break;
+          case 'auth/operation-not-allowed':
+          case 'auth/invalid-api-key':
+          case 'auth/app-deleted':
+            errorMsg = 'Authentication service configuration error. Please contact system administrator.';
+            break;
+          default:
+            errorMsg = 'Authentication failed. Please verify your credentials and try again.';
+            break;
         }
+
         msg.textContent = errorMsg;
         msg.className = 'msg error';
         msg.style.display = 'block';

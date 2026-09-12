@@ -4,7 +4,20 @@
   },
   "hosting": {
     "public": ".",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "auth_users.json",
+      "backend-server.js",
+      "firestore.rules",
+      "scratch/**",
+      "*.log",
+      "package*.json",
+      "SETUP.md",
+      "README.md",
+      "FINAL_PRESENTATION_CHECKLIST.md"
+    ],
     "cleanUrls": true
   },
   "firestore": {

@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body style="display: none;">
   <!-- Mesh Background Scene -->
   <div class="bg-scene">
     <div class="overlay"></div>
@@ -413,6 +413,9 @@
       localStorage.setItem('facultyUid', facultyUid);
       localStorage.setItem('facultyName', facultyName);
       localStorage.setItem('facultyDept', facultyDept);
+
+      // Reveal faculty dashboard once authenticated and profile verified
+      document.body.style.display = 'block';
 
       document.getElementById('welcome').textContent = facultyName;
       const greetText = `Good ${getGreetingTime()}, ${facultyName.split(' ')[0] || facultyName} 👋`;

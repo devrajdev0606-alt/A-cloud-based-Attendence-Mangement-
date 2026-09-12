@@ -29,7 +29,7 @@
       </a>
 
       <div class="header-actions">
-        <span class="badge" style="background: rgba(13, 148, 136, 0.15); color: #0d9488; border: 1px solid rgba(13, 148, 136, 0.3); font-weight: 700;">Admin: admin@cit.edu</span>
+        <span id="reportAdminEmailBadge" class="badge" style="background: rgba(13, 148, 136, 0.15); color: #0d9488; border: 1px solid rgba(13, 148, 136, 0.3); font-weight: 700;">Admin</span>
         <a href="admin.html" class="back-btn">← Back to Admin Panel</a>
         <button class="back-btn" onclick="adminLogout()" style="background: rgba(225, 29, 72, 0.1); color: #e11d48; border-color: rgba(225, 29, 72, 0.25); cursor: pointer;">Sign Out</button>
       </div>
@@ -122,7 +122,6 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    const DESIGNATED_ADMIN_EMAIL = 'admin@cit.edu';
     let isReportInitialized = false;
 
     // Admin Auth Guard
@@ -133,15 +132,32 @@
       }
 
       const idTokenResult = await user.getIdTokenResult().catch(() => ({ claims: {} }));
-      const isAdminUser = (user.email && user.email.toLowerCase() === DESIGNATED_ADMIN_EMAIL) || Boolean(idTokenResult.claims.admin);
+      const isAdminClaim = Boolean(idTokenResult?.claims?.admin);
 
-      if (!isAdminUser) {
+      let isAdminRecord = false;
+      try {
+        const adminDoc = await db.collection('admins').doc(user.uid).get();
+        if (adminDoc.exists) {
+          const data = adminDoc.data();
+          isAdminRecord = data?.active !== false && (data?.role === 'admin' || !data?.role);
+        }
+      } catch (err) {
+        console.warn('[Report Admin Guard] Firestore admin lookup warning:', err?.code || err?.message);
+      }
+
+      if (!isAdminClaim && !isAdminRecord) {
+        console.warn('[Report Guard] Access denied for UID:', user.uid);
         await auth.signOut();
         window.location.replace('index.html?adminLogin=1');
         return;
       }
 
       document.body.style.display = 'block';
+
+      const badge = document.getElementById('reportAdminEmailBadge');
+      if (badge) {
+        badge.textContent = `Admin: ${user.email || 'Authorized'}`;
+      }
 
       if (!isReportInitialized) {
         isReportInitialized = true;

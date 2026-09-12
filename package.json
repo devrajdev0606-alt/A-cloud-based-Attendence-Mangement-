@@ -1,5 +1,9 @@
 {
   "private": true,
+  "scripts": {
+    "backend": "node backend-server.js",
+    "test": "node scratch/test_security_suite.js"
+  },
   "dependencies": {
     "firebase-admin": "^14.3.0"
   }

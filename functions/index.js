@@ -1,17 +1,27 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const admin = require('firebase-admin');
+const https = require('https');
 
 admin.initializeApp();
-setGlobalOptions({ maxInstances: 10 });
+setGlobalOptions({ region: 'us-central1', maxInstances: 10 });
 
 const db = admin.firestore();
-const FieldValue = admin.firestore.FieldValue;
+const FieldValue = (db && db.constructor && db.constructor.FieldValue) ? db.constructor.FieldValue : admin.firestore.FieldValue;
 const DELETE_BATCH_SIZE = 400;
 
-function isAdmin(auth) {
-  const email = String(auth?.token?.email || '').toLowerCase();
-  return email === 'admin@cit.edu' || auth?.token?.admin === true;
+async function isAdmin(auth) {
+  if (!auth) return false;
+  if (auth.token?.admin === true) return true;
+  const uid = auth.uid;
+  if (!uid) return false;
+  try {
+    const adminDoc = await db.collection('admins').doc(uid).get();
+    return adminDoc.exists && adminDoc.data()?.active !== false;
+  } catch (err) {
+    console.error('[Functions] Error checking admin doc for UID:', uid, err);
+    return false;
+  }
 }
 
 function asString(value) {
@@ -257,10 +267,317 @@ async function deleteEntity(type, id) {
 }
 
 exports.deleteAdminEntity = onCall(async request => {
-  if (!request.auth || !isAdmin(request.auth)) {
+  if (!request.auth || !(await isAdmin(request.auth))) {
     throw new HttpsError('permission-denied', 'Only an authenticated Admin may permanently delete records.');
   }
   const type = asString(request.data?.type);
   const id = asString(request.data?.id);
   return deleteEntity(type, id);
 });
+
+const WEB_API_KEY = 'AIzaSyC1x0R-CKUh7sGonAYiqXMNemeLW-6bdvU';
+
+function triggerPasswordResetEmail(email) {
+  return new Promise(resolve => {
+    const postData = JSON.stringify({
+      requestType: 'PASSWORD_RESET',
+      email: email
+    });
+    const req = https.request(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${WEB_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      },
+      timeout: 10000
+    }, res => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve({ ok: true });
+        } else {
+          try {
+            const errObj = JSON.parse(data);
+            resolve({ ok: false, error: errObj.error?.message || `HTTP ${res.statusCode}` });
+          } catch (e) {
+            resolve({ ok: false, error: `HTTP ${res.statusCode}` });
+          }
+        }
+      });
+    });
+    req.on('error', err => resolve({ ok: false, error: err.message }));
+    req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'Request timeout' }); });
+    req.write(postData);
+    req.end();
+  });
+}
+
+async function loadDepartmentsMap() {
+  const snap = await db.collection('departments').get();
+  const map = new Map();
+  snap.forEach(doc => {
+    const data = doc.data();
+    const id = doc.id;
+    const name = (data.name || id).trim();
+    const normalizedName = (data.normalizedName || name).toLowerCase();
+    const item = { id, name, normalizedName };
+    map.set(id.toLowerCase(), item);
+    map.set(normalizedName, item);
+    map.set(name.toLowerCase(), item);
+  });
+  return map;
+}
+
+async function importSingleStudent(student, departmentsMap) {
+  const name = String(student.name || '').trim();
+  const usn = String(student.usn || '').trim().toUpperCase();
+  const email = String(student.email || '').trim().toLowerCase();
+  const semRaw = student.sem;
+  const sec = String(student.sec || '').trim().toUpperCase();
+  const deptInput = String(student.dept || '').trim();
+
+  // 1. Validation
+  if (!name) {
+    return { name, usn, email, status: 'failed', result: 'Invalid name', reason: 'Student name cannot be empty' };
+  }
+  if (!usn) {
+    return { name, usn, email, status: 'failed', result: 'Invalid USN', reason: 'Student USN cannot be empty' };
+  }
+  const sem = parseInt(semRaw, 10);
+  if (isNaN(sem) || sem < 1 || sem > 8) {
+    return { name, usn, email, status: 'failed', result: 'Invalid semester', reason: 'Semester must be between 1 and 8' };
+  }
+  if (!sec || !['A', 'B', 'C', 'D'].includes(sec)) {
+    return { name, usn, email, status: 'failed', result: 'Invalid section', reason: 'Section must be A, B, C, or D' };
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRegex.test(email)) {
+    return { name, usn, email, status: 'failed', result: 'Invalid email', reason: 'Invalid email format' };
+  }
+
+  // Department match against existing departments
+  const normalizedDeptKey = deptInput.toLowerCase();
+  let matchedDept = departmentsMap.get(normalizedDeptKey);
+  if (!matchedDept) {
+    for (const [key, d] of departmentsMap.entries()) {
+      if (d.id.toLowerCase() === normalizedDeptKey || d.name.toLowerCase() === normalizedDeptKey || (d.normalizedName && d.normalizedName.toLowerCase() === normalizedDeptKey)) {
+        matchedDept = d;
+        break;
+      }
+    }
+  }
+  if (!matchedDept) {
+    return { name, usn, email, status: 'failed', result: 'Department not found', reason: `Department "${deptInput}" does not match an existing department` };
+  }
+
+  const deptId = matchedDept.id;
+  const deptName = matchedDept.name;
+
+  // 2. Duplicate checks (Firestore indexes & Auth)
+  try {
+    const usnDoc = await db.collection('uniqueUSNs').doc(usn).get();
+    if (usnDoc.exists) {
+      return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Student with USN ${usn} already exists` };
+    }
+    const usnSnap = await db.collection('students').where('usn', '==', usn).limit(1).get();
+    if (!usnSnap.empty) {
+      return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Student with USN ${usn} already exists` };
+    }
+
+    const emailDoc = await db.collection('uniqueEmails').doc(email).get();
+    if (emailDoc.exists) {
+      return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Account with email ${email} already exists` };
+    }
+    const emailSnap = await db.collection('students').where('email', '==', email).limit(1).get();
+    if (!emailSnap.empty) {
+      return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Student with email ${email} already exists` };
+    }
+
+    try {
+      const existingUser = await admin.auth().getUserByEmail(email);
+      if (existingUser) {
+        return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Firebase Authentication account already exists for ${email}` };
+      }
+    } catch (authLookupErr) {
+      if (authLookupErr.code !== 'auth/user-not-found') {
+        throw authLookupErr;
+      }
+    }
+  } catch (checkErr) {
+    return { name, usn, email, status: 'failed', result: 'Validation error', reason: checkErr.message || 'Error checking existing records' };
+  }
+
+  // 3. Create Firebase Authentication Account
+  let authUser = null;
+  try {
+    authUser = await admin.auth().createUser({
+      email: email,
+      displayName: name
+    });
+  } catch (authCreateErr) {
+    if (authCreateErr.code === 'auth/email-already-in-use') {
+      return { name, usn, email, status: 'skipped', result: 'Already exists', reason: 'Firebase Authentication account already exists' };
+    }
+    return { name, usn, email, status: 'failed', result: 'Authentication account creation failed', reason: authCreateErr.message };
+  }
+
+  const uid = authUser.uid;
+
+  // 4. Create Firestore Student Profile and Unique Index Records
+  const studentDoc = {
+    uid: uid,
+    name: name,
+    usn: usn,
+    phone: student.phone || '',
+    email: email,
+    dept: deptId,
+    department: deptName || deptId,
+    semester: sem,
+    section: sec,
+    faceRegistered: false,
+    createdAt: FieldValue.serverTimestamp(),
+    approvedAt: FieldValue.serverTimestamp()
+  };
+
+  try {
+    const batch = db.batch();
+    batch.set(db.collection('uniqueEmails').doc(email), {
+      email: email,
+      uid: uid,
+      role: 'student',
+      createdAt: FieldValue.serverTimestamp()
+    });
+    batch.set(db.collection('uniqueUSNs').doc(usn), {
+      usn: usn,
+      uid: uid,
+      role: 'student',
+      createdAt: FieldValue.serverTimestamp()
+    });
+    batch.set(db.collection('students').doc(uid), studentDoc);
+    await batch.commit();
+  } catch (firestoreErr) {
+    try {
+      await admin.auth().deleteUser(uid);
+      console.warn(`[Rollback] Deleted orphaned Auth user ${uid} after Firestore commit failure.`);
+    } catch (rollbackErr) {
+      console.error(`[Rollback Error] Failed to delete Auth user ${uid}:`, rollbackErr);
+    }
+    return { name, usn, email, status: 'failed', result: 'Student profile creation failed', reason: firestoreErr.message };
+  }
+
+  // 5. Auto-enroll in matching subjects for Dept + Semester + Section
+  try {
+    const subjectsSnap = await db.collection('subjects').get();
+    const enrollBatch = db.batch();
+    let enrollCount = 0;
+
+    subjectsSnap.forEach(subDoc => {
+      const sub = subDoc.data();
+      const subDept = String(sub.departmentId || sub.department || '').trim().toLowerCase();
+      const stuDeptId = String(deptId).trim().toLowerCase();
+      const stuDeptName = String(deptName).trim().toLowerCase();
+      const deptMatches = subDept === stuDeptId || subDept === stuDeptName;
+      const semMatches = parseInt(sub.semester, 10) === sem;
+      const secMatches = !sub.section || String(sub.section).trim().toUpperCase() === sec;
+
+      if (deptMatches && semMatches && secMatches) {
+        const roster = Array.isArray(sub.enrolledRoster) ? sub.enrolledRoster : [];
+        const alreadyIn = roster.some(r => r && (r.id === uid || r.uid === uid));
+        const updatedRoster = alreadyIn ? roster : [...roster, { id: uid, name: name, usn: usn }];
+        enrollBatch.update(subDoc.ref, {
+          studentIds: FieldValue.arrayUnion(uid),
+          enrolledRoster: updatedRoster
+        });
+        enrollCount++;
+      }
+    });
+
+    if (enrollCount > 0) {
+      await enrollBatch.commit();
+    }
+  } catch (enrollErr) {
+    console.warn(`[Auto-Enroll] Warning during subject enrollment for student ${uid}:`, enrollErr);
+  }
+
+  // 6. Trigger Password Setup Email
+  let emailSent = false;
+  let emailError = null;
+  try {
+    const emailResult = await triggerPasswordResetEmail(email);
+    if (emailResult.ok) {
+      emailSent = true;
+    } else {
+      emailError = emailResult.error;
+    }
+  } catch (emailEx) {
+    emailError = emailEx.message;
+  }
+
+  if (emailSent) {
+    return {
+      name,
+      usn,
+      email,
+      uid,
+      status: 'success',
+      result: 'Imported successfully',
+      reason: null,
+      emailSent: true
+    };
+  } else {
+    return {
+      name,
+      usn,
+      email,
+      uid,
+      status: 'partial_success',
+      result: 'Student created, but password setup email could not be sent.',
+      reason: emailError ? `Email error: ${emailError}` : 'Password setup email could not be dispatched',
+      emailSent: false
+    };
+  }
+}
+
+exports.importStudents = onCall(async request => {
+  if (!request.auth || !(await isAdmin(request.auth))) {
+    throw new HttpsError('permission-denied', 'Only an authenticated Admin may import students.');
+  }
+
+  const rawStudents = request.data?.students;
+  const students = Array.isArray(rawStudents) ? rawStudents : (rawStudents ? [rawStudents] : []);
+
+  if (!students.length) {
+    throw new HttpsError('invalid-argument', 'No student records provided for import.');
+  }
+
+  const departmentsMap = await loadDepartmentsMap();
+  const results = [];
+  let importedCount = 0;
+  let failedCount = 0;
+  let skippedCount = 0;
+
+  for (const stu of students) {
+    const rowResult = await importSingleStudent(stu, departmentsMap);
+    results.push(rowResult);
+    if (rowResult.status === 'success' || rowResult.status === 'partial_success') {
+      importedCount++;
+    } else if (rowResult.status === 'skipped') {
+      skippedCount++;
+    } else {
+      failedCount++;
+    }
+  }
+
+  return {
+    success: true,
+    summary: {
+      total: students.length,
+      imported: importedCount,
+      failed: failedCount,
+      skipped: skippedCount
+    },
+    results
+  };
+});
+
