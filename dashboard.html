@@ -182,7 +182,7 @@
       <div class="collapsible-header" onclick="toggleCollapsible(this)">
         <div class="collapsible-title">
           <h2>📍 Mark Class Attendance (Face + GPS)</h2>
-          <span id="activeVerificationBadge" class="badge green">● Live Session Active</span>
+          <span id="activeVerificationBadge" class="badge">No Active Session</span>
         </div>
         <span class="collapsible-chevron">▾</span>
       </div>
@@ -547,7 +547,11 @@
     let deptMap = {};
 
     let activeSessions = {};
+    let activeSessionsUnsubscribes = [];
+    let activeSessionsListenerSubjectIds = [];
+    let _activeSessionsUiUpdateTimeout = null;
     let attendanceStateBySession = {};
+    let cachedStudentTimetableSnap = null;
     let studentSubjectDocs = [];
     let studentSubjectsMap = {};
     let studentSubjectsAttendance = {}; // { subjectId: { present: 0, total: 0 } }
@@ -631,6 +635,7 @@
     // =========================================================================
     auth.onAuthStateChanged(async (user) => {
       if (!user) {
+        unsubscribeActiveSessions();
         localStorage.clear();
         window.location.replace('student.html');
         return;
@@ -638,10 +643,25 @@
 
       studentId = user.uid;
       studentUid = user.uid;
-      await loadDepartmentMap();
 
-      // 1. Check profile by UID
-      let studentDoc = await db.collection('students').doc(user.uid).get().catch(() => null);
+      // Instantly populate display UI with cached non-sensitive session data while verifying in background
+      const cachedStudentName = localStorage.getItem('studentName');
+      const cachedStudentUsn = localStorage.getItem('studentUsn');
+      if (cachedStudentName) {
+        document.getElementById('welcome').textContent = cachedStudentName;
+        const heroGreeting = document.getElementById('heroGreeting');
+        if (heroGreeting) heroGreeting.textContent = `${getTimeGreeting()}, ${cachedStudentName} 👋`;
+      }
+      if (cachedStudentUsn) {
+        const heroUsnDisplay = document.getElementById('heroUsnDisplay');
+        if (heroUsnDisplay) heroUsnDisplay.textContent = `USN: ${cachedStudentUsn}`;
+      }
+
+      // Parallelize authoritative profile retrieval and department mapping
+      const [, studentDoc] = await Promise.all([
+        loadDepartmentMap(),
+        db.collection('students').doc(user.uid).get().catch(() => null)
+      ]);
       let studentData = studentDoc && studentDoc.exists ? studentDoc.data() : null;
 
       // 2. Fallback check by email (for legacy profiles) - ONLY to locate profile
@@ -656,6 +676,7 @@
 
       if (!studentData) {
         // Not an active/approved student account
+        unsubscribeActiveSessions();
         await auth.signOut();
         localStorage.clear();
         window.location.replace('student.html');
@@ -756,23 +777,28 @@
 
       if (!isDashboardInitialized) {
         isDashboardInitialized = true;
-        await loadSettings();
-        await loadMySubjects();
-        await loadActiveSessions();
-        await loadStudentTimetable();
-        await loadMyAttendance();
+        // Parallelize initial student dashboard modules
+        await Promise.allSettled([
+          loadSettings(),
+          loadMySubjects(),
+          loadActiveSessions(),
+          loadStudentTimetable(),
+          loadMyAttendance()
+        ]);
+        initActiveSessionsListeners();
         if (window._studentRefreshInterval) clearInterval(window._studentRefreshInterval);
+        // Gentle background sync (75s) for secondary timetable & attendance stats.
+        // Active session tracking is handled in zero-latency real-time via Firestore onSnapshot().
         window._studentRefreshInterval = setInterval(async () => {
           try {
-            await Promise.all([
-              loadActiveSessions(),
+            await Promise.allSettled([
               loadStudentTimetable(),
               loadMyAttendance()
             ]);
           } catch (e) {
             console.error('Student auto refresh error:', e);
           }
-        }, 15000);
+        }, 75000);
       }
     });
 
@@ -984,10 +1010,12 @@
               </p>
             </div>
           `;
+          initActiveSessionsListeners();
           return;
         }
 
         renderSubjectsUI();
+        initActiveSessionsListeners();
       } catch (err) {
         console.error('loadMySubjects error:', err);
         loadingEl.textContent = 'Error loading enrolled subjects: ' + err.message;
@@ -997,89 +1025,179 @@
     }
 
     // =========================================================================
-    // ACTIVE SESSIONS CHECKER
+    // ACTIVE SESSIONS REAL-TIME LISTENER & LIFECYCLE (Zero-delay push updates)
     // =========================================================================
-    async function loadActiveSessions() {
+    function unsubscribeActiveSessions() {
+      if (_activeSessionsUiUpdateTimeout) {
+        clearTimeout(_activeSessionsUiUpdateTimeout);
+        _activeSessionsUiUpdateTimeout = null;
+      }
+      if (activeSessionsUnsubscribes && activeSessionsUnsubscribes.length > 0) {
+        activeSessionsUnsubscribes.forEach(unsub => {
+          try {
+            if (typeof unsub === 'function') unsub();
+          } catch (e) {
+            console.warn('Error unsubscribing active session listener:', e);
+          }
+        });
+        activeSessionsUnsubscribes = [];
+        activeSessionsListenerSubjectIds = [];
+      }
+    }
+
+    function scheduleActiveSessionsUIUpdate() {
+      if (_activeSessionsUiUpdateTimeout) return;
+      _activeSessionsUiUpdateTimeout = setTimeout(() => {
+        _activeSessionsUiUpdateTimeout = null;
+        updateActiveSessionsUI();
+      }, 10);
+    }
+
+    function updateActiveSessionsUI() {
       const selectEl = document.getElementById('subjectSelect');
       const beaconText = document.getElementById('beaconText');
       const beaconEl = document.getElementById('sessionStatusBeacon');
       const verificationBadge = document.getElementById('activeVerificationBadge');
 
-      try {
-        if (!studentSubjectDocs || studentSubjectDocs.length === 0) {
-          if (beaconText) beaconText.textContent = 'No Active Classes';
-          if (verificationBadge) {
-            verificationBadge.textContent = 'No Live Class';
-            verificationBadge.className = 'badge';
-          }
-          return;
+      const now = new Date();
+      Object.keys(activeSessions).forEach(sid => {
+        const s = activeSessions[sid];
+        if (s && s.expiresAt && s.expiresAt.toDate && s.expiresAt.toDate() <= now) {
+          delete activeSessions[sid];
         }
+      });
 
-        const sessionQueries = studentSubjectDocs.map(s =>
-          db.collection('attendanceSessions')
-            .where('subjectId', '==', s.id)
-            .where('active', '==', true)
-            .get()
-            .catch(err => {
-              console.warn('Session query failed for subject', s.id, err);
-              return null;
-            })
-        );
-        const sessionSnapshots = await Promise.all(sessionQueries);
+      const activeSubjectIds = Object.keys(activeSessions);
+      const activeCount = activeSubjectIds.length;
 
-        activeSessions = {};
-        const now = new Date();
-
-        sessionSnapshots.forEach(snap => {
-          if (!snap) return;
-          snap.forEach(doc => {
-            const data = doc.data();
-            const sid = data.subjectId;
-            const expiresAt = data.expiresAt;
-            if (expiresAt && expiresAt.toDate && expiresAt.toDate() <= now) {
-              return;
-            }
-            if (!activeSessions[sid] || (data.classNumber || 0) > (activeSessions[sid].classNumber || 0)) {
-              activeSessions[sid] = { id: doc.id, ...data };
-            }
-          });
-        });
-
-        const activeSubjectIds = Object.keys(activeSessions);
-
-        if (activeSubjectIds.length > 0) {
-          if (beaconText) beaconText.textContent = `${activeSubjectIds.length} Session${activeSubjectIds.length > 1 ? 's' : ''} Open Now`;
-          if (beaconEl) beaconEl.classList.add('live-active');
-          if (verificationBadge) {
-            verificationBadge.textContent = '● Live Session Active';
-            verificationBadge.className = 'badge green';
-          }
-        } else {
-          if (beaconText) beaconText.textContent = 'No Active Classes';
-          if (beaconEl) beaconEl.classList.remove('live-active');
-          if (verificationBadge) {
-            verificationBadge.textContent = 'No Active Session';
-            verificationBadge.className = 'badge';
-          }
+      if (activeCount > 0) {
+        if (beaconText) beaconText.textContent = `${activeCount} Session${activeCount > 1 ? 's' : ''} Open Now`;
+        if (beaconEl) beaconEl.classList.add('live-active');
+        if (verificationBadge) {
+          verificationBadge.textContent = '● Live Session Active';
+          verificationBadge.className = 'badge green';
         }
+      } else {
+        if (beaconText) beaconText.textContent = 'No Active Classes';
+        if (beaconEl) beaconEl.classList.remove('live-active');
+        if (verificationBadge) {
+          verificationBadge.textContent = 'No Active Session';
+          verificationBadge.className = 'badge';
+        }
+      }
 
-        // Preserve the selected subject while the periodic session refresh rebuilds options.
+      // Preserve the selected subject while refreshing options
+      if (selectEl) {
         const selectedSubjectId = selectEl.value;
         selectEl.innerHTML = '<option value="">-- Select Active Subject to Verify --</option>';
-        studentSubjectDocs.forEach(s => {
-          const hasLive = Boolean(activeSessions[s.id]);
-          const optPrefix = hasLive ? '🟢 [LIVE] ' : '⚪ ';
-          selectEl.innerHTML += `<option value="${s.id}" ${hasLive ? 'data-live="true"' : ''}>${optPrefix}${s.subjectName} (${s.subjectCode || 'Course'})</option>`;
-        });
-        if (selectedSubjectId && activeSessions[selectedSubjectId]) {
-          selectEl.value = selectedSubjectId;
+        if (studentSubjectDocs && studentSubjectDocs.length > 0) {
+          studentSubjectDocs.forEach(s => {
+            const hasLive = Boolean(activeSessions[s.id]);
+            const optPrefix = hasLive ? '🟢 [LIVE] ' : '⚪ ';
+            selectEl.innerHTML += `<option value="${s.id}" ${hasLive ? 'data-live="true"' : ''}>${optPrefix}${s.subjectName} (${s.subjectCode || 'Course'})</option>`;
+          });
+          if (selectedSubjectId && activeSessions[selectedSubjectId]) {
+            selectEl.value = selectedSubjectId;
+          }
         }
-
-        // Re-render subject cards with live session tags and buttons
-        renderSubjectsUI();
-      } catch (err) {
-        console.error('Active sessions check error:', err);
       }
+
+      // Re-render subject cards with live session tags and buttons
+      renderSubjectsUI();
+
+      // Update timetable schedule if available
+      if (typeof renderStudentTodaySchedule === 'function' && allStudentTimetable && allStudentTimetable.length > 0) {
+        renderStudentTodaySchedule();
+      }
+
+      // Refresh selected subject info box if open
+      if (selectEl && selectEl.value && typeof onSubjectSelectChange === 'function') {
+        onSubjectSelectChange();
+      }
+    }
+
+    function initActiveSessionsListeners() {
+      if (!auth.currentUser) return;
+      if (!studentSubjectDocs || studentSubjectDocs.length === 0) {
+        unsubscribeActiveSessions();
+        activeSessions = {};
+        updateActiveSessionsUI();
+        return;
+      }
+
+      const newSubjectIds = studentSubjectDocs.map(s => s.id).sort();
+      const newIdsKey = newSubjectIds.join(',');
+      const currentIdsKey = activeSessionsListenerSubjectIds.join(',');
+
+      // If listeners are already active for these exact subject IDs, avoid creating duplicate listeners
+      if (currentIdsKey === newIdsKey && activeSessionsUnsubscribes.length > 0) {
+        return;
+      }
+
+      // Clean up previous listeners before attaching new ones
+      unsubscribeActiveSessions();
+      activeSessionsListenerSubjectIds = newSubjectIds;
+
+      studentSubjectDocs.forEach(s => {
+        try {
+          const unsub = db.collection('attendanceSessions')
+            .where('subjectId', '==', s.id)
+            .where('active', '==', true)
+            .onSnapshot(
+              snapshot => {
+                const now = new Date();
+                let latestForSubject = null;
+                snapshot.forEach(doc => {
+                  const data = doc.data();
+                  if (data.expiresAt && data.expiresAt.toDate && data.expiresAt.toDate() <= now) {
+                    return;
+                  }
+                  if (!latestForSubject || (data.classNumber || 0) > (latestForSubject.classNumber || 0)) {
+                    latestForSubject = { id: doc.id, ...data };
+                  }
+                });
+
+                if (latestForSubject) {
+                  activeSessions[s.id] = latestForSubject;
+                  if (latestForSubject.expiresAt && latestForSubject.expiresAt.toDate) {
+                    const msUntilExpiry = latestForSubject.expiresAt.toDate().getTime() - Date.now();
+                    if (msUntilExpiry > 0 && msUntilExpiry < 24 * 60 * 60 * 1000) {
+                      setTimeout(() => {
+                        scheduleActiveSessionsUIUpdate();
+                      }, msUntilExpiry + 500);
+                    }
+                  }
+                } else {
+                  delete activeSessions[s.id];
+                }
+                scheduleActiveSessionsUIUpdate();
+              },
+              err => {
+                console.error(`[ACTIVE SESSION LISTENER ERROR] Subject: ${s.id} (${s.subjectName || ''}):`, {
+                  code: err?.code,
+                  message: err?.message,
+                  name: err?.name,
+                  authUid: auth.currentUser?.uid || null
+                });
+                const beaconText = document.getElementById('beaconText');
+                if (beaconText && Object.keys(activeSessions).length === 0) {
+                  if (err?.code === 'permission-denied') {
+                    beaconText.textContent = 'Session access restricted';
+                  } else {
+                    beaconText.textContent = 'Active classes sync error';
+                  }
+                }
+              }
+            );
+          activeSessionsUnsubscribes.push(unsub);
+        } catch (err) {
+          console.error(`Failed to register snapshot listener for subject ${s.id}:`, err);
+        }
+      });
+    }
+
+    async function loadActiveSessions() {
+      initActiveSessionsListeners();
     }
 
     // =========================================================================
@@ -1274,9 +1392,13 @@
         const authUid = auth.currentUser.uid;
         const todayDateStr = new Date().toLocaleDateString('en-GB');
 
-        // 1. Fetch all timetable entries
+        // 1. Fetch timetable entries (cached across session polling)
+        const ttPromise = cachedStudentTimetableSnap
+          ? Promise.resolve(cachedStudentTimetableSnap)
+          : db.collection('timetable').get().then(s => { cachedStudentTimetableSnap = s; return s; }).catch(() => null);
+
         const [ttSnap, sessSnap, myAttSnap, myReqSnap] = await Promise.all([
-          db.collection('timetable').get().catch(() => null),
+          ttPromise,
           db.collection('attendanceSessions').where('date', '==', todayDateStr).get().catch(() => null),
           db.collection('attendance').where('studentUid', '==', authUid).get().catch(() => null),
           db.collection('attendanceCorrectionRequests').where('studentUid', '==', authUid).get().catch(() => null)
@@ -5206,6 +5328,7 @@
         clearInterval(window._studentRefreshInterval);
         window._studentRefreshInterval = null;
       }
+      unsubscribeActiveSessions();
       stopVideoStream(document.getElementById('attVideo'));
       stopVideoStream(document.getElementById('regVideo'));
       stopReregVideoStream();
@@ -5223,6 +5346,7 @@
         clearInterval(window._studentRefreshInterval);
         window._studentRefreshInterval = null;
       }
+      unsubscribeActiveSessions();
       stopVideoStream(document.getElementById('attVideo'));
       stopVideoStream(document.getElementById('regVideo'));
       stopReregVideoStream();

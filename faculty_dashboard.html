@@ -374,6 +374,7 @@
     let liveSessionsMap = {}; // subjectId -> sessionDoc
     let todayConductedSessions = [];
     let sessionAttendanceCounts = {}; // sessionId -> count of present students
+    let cachedIsAdmin = null;
 
     function toggleCollapsible(headerEl) {
       const card = headerEl.closest('.collapsible-card');
@@ -415,6 +416,22 @@
       facultyUid = user.uid;
       const currentAuthUid = user.uid;
 
+      // Instantly reveal dashboard shell with cached display info while verifying credentials in background
+      const cachedName = localStorage.getItem('facultyName');
+      const cachedDept = localStorage.getItem('facultyDept');
+      if (cachedName) {
+        document.getElementById('welcome').textContent = cachedName;
+        const heroGreet = document.getElementById('facultyHeroGreeting');
+        if (heroGreet) heroGreet.textContent = `Good ${getGreetingTime()}, ${cachedName.split(' ')[0] || cachedName} 👋`;
+      }
+      if (cachedDept) {
+        const deptBadge = document.getElementById('facultyDeptBadge');
+        if (deptBadge) deptBadge.textContent = `${cachedDept} Faculty`;
+        const deptDisplay = document.getElementById('facultyDeptDisplay');
+        if (deptDisplay) deptDisplay.textContent = cachedDept;
+      }
+      document.body.style.display = 'block';
+
       // 1. Check profile by UID (authoritative architecture)
       let facultyDoc = await db.collection('faculty').doc(user.uid).get().catch(() => null);
       let facultyData = facultyDoc && facultyDoc.exists ? facultyDoc.data() : null;
@@ -422,7 +439,8 @@
       allFacultyIds = [user.uid];
 
       // 2. Fallback check by email (supporting legacy documents without modifying DB)
-      if (user.email) {
+      // Only execute this extra network read if not already resolved by UID
+      if (!facultyData && user.email) {
         const emailSnap = await db.collection('faculty').where('email', '==', user.email.toLowerCase()).get().catch(() => null);
         if (emailSnap && !emailSnap.empty) {
           emailSnap.forEach(d => {
@@ -455,9 +473,6 @@
       localStorage.setItem('facultyName', facultyName);
       localStorage.setItem('facultyDept', facultyDept);
 
-      // Reveal faculty dashboard once authenticated and profile verified
-      document.body.style.display = 'block';
-
       document.getElementById('welcome').textContent = facultyName;
       const greetText = `Good ${getGreetingTime()}, ${facultyName.split(' ')[0] || facultyName} 👋`;
       const heroGreet = document.getElementById('facultyHeroGreeting');
@@ -479,19 +494,24 @@
         }
       });
 
-        if (!isDashboardInitialized) {
-          isDashboardInitialized = true;
-          await loadSettings();
-          await Promise.allSettled([
-            loadActiveSessions(),
-            loadSubjects(),
-            loadFacultyTimetable(),
-            loadFacultyCorrectionRequests(),
-            loadFaceReregRequests()
-          ]);
-          if (refreshIntervalId) clearInterval(refreshIntervalId);
-          refreshIntervalId = setInterval(refreshSessionsAndCleanup, 15000);
-        }
+      if (!isDashboardInitialized) {
+        isDashboardInitialized = true;
+        // Parallelize all initial data fetch operations concurrently
+        await Promise.allSettled([
+          loadSettings(),
+          loadActiveSessions(),
+          loadSubjects(),
+          loadFacultyTimetable(),
+          loadFacultyCorrectionRequests(),
+          loadFaceReregRequests()
+        ]);
+        if (refreshIntervalId) clearInterval(refreshIntervalId);
+        // Fast live polling (20s) for active session tracking
+        refreshIntervalId = setInterval(loadActiveSessions, 20000);
+        // Gentle background sync (75s) for secondary data to avoid saturating network
+        if (window._facultySecondaryInterval) clearInterval(window._facultySecondaryInterval);
+        window._facultySecondaryInterval = setInterval(refreshSessionsAndCleanup, 75000);
+      }
     });
 
     async function loadSettings() {
@@ -708,8 +728,7 @@
           return;
         }
 
-        const sessionCards = [];
-        for (const doc of activeDocs) {
+        const sessionCardPromises = activeDocs.map(async (doc) => {
           const s = doc.data();
           let subject = null;
           const cachedSub = assignedSubjectDocs.find(d => d.id === s.subjectId);
@@ -744,7 +763,7 @@
           }
 
           const rawSubName = subject?.subjectName || s.subjectName || 'Course';
-          sessionCards.push(`
+          return `
             <div class="session-info">
               <div>
                 <span style="font-size:1rem; font-weight:700; color:var(--primary-navy);">📖 ${escapeHtml(rawSubName)}</span>
@@ -760,8 +779,9 @@
                 <button class="btn view-btn" onclick="openSessionAttendanceModal('${escapeHtml(doc.id)}', '${escapeHtml(s.subjectId)}')">👥 View Attendance Roster</button>
                 <button class="btn stop-btn" style="padding:6px 12px; font-size:0.8rem;" onclick="stopAttendance('${escapeHtml(s.subjectId)}', this)">⏹ Stop Session</button>
               </div>
-            </div>`);
-        }
+            </div>`;
+        });
+        const sessionCards = await Promise.all(sessionCardPromises);
         container.innerHTML = sessionCards.join('');
       } catch (err) {
         console.error('loadActiveSessions error:', err);
@@ -1138,6 +1158,12 @@
     }
 
     async function startAttendance(subjectId, subjectName, button, customDuration = null) {
+      const origBtnText = button ? button.textContent : '';
+      if (button) {
+        button.disabled = true;
+        button.textContent = '⏳ Starting Attendance...';
+      }
+
       const debug = {
         subjectId,
         subjectName,
@@ -1156,18 +1182,16 @@
       console.group('[FACULTY SESSION DEBUG START]');
       console.log('subjectId:', subjectId);
       console.log('subjectName:', subjectName);
-      if (button) {
-        button.disabled = true;
+
+      // Fast-path: Only fetch settings if not already in memory
+      if (!attendanceSettings) {
+        await loadSettings();
       }
-      await loadSettings();
       debug.authUid = auth.currentUser?.uid || null;
       debug.facultyId = facultyId || null;
       debug.facultyUid = facultyUid || null;
       debug.gps.threshold = gpsAccuracyThreshold;
-      console.log('authUid:', debug.authUid);
-      console.log('facultyUid:', debug.facultyUid);
-      console.log('facultyId:', debug.facultyId);
-      console.log('gpsAccuracyThreshold:', debug.gps.threshold);
+
       let duration = customDuration;
       if (!duration) {
         const durEl = document.getElementById(`duration-${subjectId}`);
@@ -1179,139 +1203,114 @@
       const statusMsg = document.createElement('div');
       statusMsg.classList.add('start-status-msg');
       statusMsg.className = 'msg info';
-      statusMsg.textContent = 'Verifying session status...';
+      statusMsg.textContent = 'Verifying session & capturing GPS...';
       statusMsg.style.display = 'block';
       statusContainer.appendChild(statusMsg);
 
       try {
-        // 1. Check if active session is already running for this subject
-        const activeSnap = await db.collection('attendanceSessions')
+        const hasInstitutionLocation = Number.isFinite(attendanceSettings?.latitude) && Number.isFinite(attendanceSettings?.longitude);
+
+        // Pre-flight 1: Check active session for subject
+        const activeCheckPromise = db.collection('attendanceSessions')
           .where('subjectId', '==', subjectId)
           .where('active', '==', true)
           .get();
 
-        if (!activeSnap.empty) {
-          statusMsg.className = 'msg error';
-          statusMsg.textContent = 'Attendance session is already active.';
-          if (button) button.disabled = false;
-          return;
-        }
+        // Pre-flight 2: Calculate class number concurrently
+        const classNumPromise = getNextClassNumber(subjectId);
 
-        statusMsg.textContent = 'Capturing GPS location...';
+        // Pre-flight 3: Subject metadata lookup concurrently
+        const cachedSub = assignedSubjectDocs.find(d => d.id === subjectId);
+        const subjectPromise = cachedSub
+          ? Promise.resolve(cachedSub.data())
+          : db.collection('subjects').doc(subjectId).get().then(s => s.exists ? s.data() : null).catch(() => null);
 
-        const hasInstitutionLocation = Number.isFinite(attendanceSettings?.latitude) && Number.isFinite(attendanceSettings?.longitude);
-        let selectedPos = null;
-        let selectedAccuracyMeters = null;
-        let locationSource = 'faculty_device';
-        if (hasInstitutionLocation) {
-          locationSource = 'institution';
-          selectedPos = { coords: { latitude: attendanceSettings.latitude, longitude: attendanceSettings.longitude, accuracy: null } };
-          statusMsg.textContent = `Using configured attendance location: ${attendanceSettings.locationName || 'Institution'}`;
-          console.log('[FACULTY SESSION LOCATION]', {
-            locationSource,
-            locationName: attendanceSettings.locationName || null,
-            latitude: attendanceSettings.latitude,
-            longitude: attendanceSettings.longitude,
-            geofenceRadius: attendanceSettings.distanceThreshold,
-            gpsAccuracyThreshold: attendanceSettings.gpsAccuracyThreshold
-          });
-        } else if (!navigator.geolocation) {
-          statusMsg.className = 'msg error';
-          statusMsg.textContent = 'Geolocation not supported by this browser.';
-          if (button) button.disabled = false;
-          return;
-        } else {
-        const maxAttempts = 3;
-        const retryDelayMs = 1200;
-        const getPosition = () => new Promise((resolvePos, rejectPos) => {
-          debug.gps.requested = true;
-          navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 });
-        });
+        // Pre-flight 4: Geolocation acquisition concurrently
+        const locationPromise = (async () => {
+          if (hasInstitutionLocation) {
+            return {
+              selectedPos: { coords: { latitude: attendanceSettings.latitude, longitude: attendanceSettings.longitude, accuracy: null } },
+              selectedAccuracyMeters: null,
+              locationSource: 'institution'
+            };
+          }
+          if (!navigator.geolocation) {
+            throw new Error('Geolocation not supported by this browser.');
+          }
 
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-          statusMsg.className = 'msg info';
-          statusMsg.textContent = `Capturing GPS location (attempt ${attempt}/${maxAttempts})...`;
-          try {
-            const pos = await getPosition();
-            const accuracyMeters = typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null;
-            debug.gps.succeeded = true;
-            debug.gps.latitude = pos.coords.latitude;
-            debug.gps.longitude = pos.coords.longitude;
-            debug.gps.accuracy = accuracyMeters;
-            debug.gps.timestamp = Number.isFinite(pos.timestamp) ? pos.timestamp : null;
-            debug.gps.ageMs = Number.isFinite(pos.timestamp) ? Math.max(0, Date.now() - pos.timestamp) : null;
-            console.log('GPS success:', debug.gps);
-            console.log('[FACULTY GPS DIAGNOSTIC]', {
-              latitude: debug.gps.latitude,
-              longitude: debug.gps.longitude,
-              accuracy: debug.gps.accuracy,
-              timestamp: debug.gps.timestamp,
-              ageMs: debug.gps.ageMs
+          const maxAttempts = 3;
+          const retryDelayMs = 1000;
+          const getPosition = () => new Promise((resolvePos, rejectPos) => {
+            debug.gps.requested = true;
+            navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, {
+              enableHighAccuracy: true,
+              timeout: 15000,
+              maximumAge: 10000
             });
-            if (accuracyMeters !== null && accuracyMeters > gpsAccuracyThreshold) {
+          });
+
+          for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+              const pos = await getPosition();
+              const accuracyMeters = typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null;
+              debug.gps.succeeded = true;
+              debug.gps.latitude = pos.coords.latitude;
+              debug.gps.longitude = pos.coords.longitude;
+              debug.gps.accuracy = accuracyMeters;
+              debug.gps.timestamp = Number.isFinite(pos.timestamp) ? pos.timestamp : null;
+              debug.gps.ageMs = Number.isFinite(pos.timestamp) ? Math.max(0, Date.now() - pos.timestamp) : null;
+              if (accuracyMeters !== null && accuracyMeters > gpsAccuracyThreshold) {
+                if (attempt < maxAttempts) {
+                  statusMsg.textContent = `GPS accuracy ${accuracyMeters.toFixed(1)}m is too low. Retrying...`;
+                  await new Promise(r => setTimeout(r, retryDelayMs));
+                  continue;
+                }
+                throw new Error(`GPS accuracy is too low (${accuracyMeters.toFixed(1)}m). Required: ≤ ${gpsAccuracyThreshold}m. Move closer to an open window or increase threshold in settings.`);
+              }
+              return {
+                selectedPos: pos,
+                selectedAccuracyMeters: accuracyMeters,
+                locationSource: 'faculty_device'
+              };
+            } catch (err) {
+              if (err?.code === 1) throw new Error('Location access denied. Please allow location permissions.');
               if (attempt < maxAttempts) {
-                statusMsg.className = 'msg info';
-                statusMsg.textContent = `GPS accuracy ${accuracyMeters.toFixed(1)}m is too low. Retrying...`;
+                statusMsg.textContent = `GPS unavailable (attempt ${attempt}/${maxAttempts}). Retrying...`;
                 await new Promise(r => setTimeout(r, retryDelayMs));
                 continue;
               }
-              statusMsg.className = 'msg error';
-              statusMsg.textContent = `GPS accuracy is too low (${accuracyMeters.toFixed(1)}m). Required: ≤ ${gpsAccuracyThreshold}m. Move closer to an open window or increase threshold in settings.`;
-              if (button) button.disabled = false;
-              return;
+              throw err;
             }
-            selectedPos = pos;
-            selectedAccuracyMeters = accuracyMeters;
-            break;
-          } catch (err) {
-            console.error('[FACULTY GPS ERROR]', { code: err?.code, message: err?.message || String(err), attempt });
-            if (err?.code === 1) {
-              statusMsg.className = 'msg error';
-              statusMsg.textContent = 'Location access denied. Please allow location permissions.';
-              if (button) button.disabled = false;
-              return;
-            }
-            if (attempt < maxAttempts) {
-              statusMsg.className = 'msg info';
-              statusMsg.textContent = `GPS unavailable (attempt ${attempt}/${maxAttempts}). Retrying...`;
-              await new Promise(r => setTimeout(r, retryDelayMs));
-              continue;
-            }
-            statusMsg.className = 'msg error';
-            statusMsg.textContent = 'Unable to capture GPS location.';
-            if (button) button.disabled = false;
-            return;
           }
-        }
-        }
+          throw new Error('Unable to capture GPS location.');
+        })();
 
-        if (!selectedPos) {
+        // Execute all independent checks concurrently
+        const [activeSnap, classNumber, subjectData, locResult] = await Promise.all([
+          activeCheckPromise,
+          classNumPromise,
+          subjectPromise,
+          locationPromise
+        ]);
+
+        if (!activeSnap.empty) {
           statusMsg.className = 'msg error';
-          statusMsg.textContent = 'Unable to capture GPS location.';
-          if (button) button.disabled = false;
+          statusMsg.textContent = 'Attendance session is already active.';
           return;
         }
+
+        const { selectedPos, selectedAccuracyMeters, locationSource } = locResult;
+
+        debug.subjectExists = Boolean(subjectData);
+        debug.subjectCode = subjectData?.subjectCode || null;
+
         const now = new Date();
         const durationMinutes = parseInt(duration, 10);
         const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         const dateStr = now.toLocaleDateString('en-GB');
         const endTimeObj = new Date(now.getTime() + durationMinutes * 60 * 1000);
         const endTimeStr = endTimeObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-        const classNumber = await getNextClassNumber(subjectId);
         const currentAuthUid = auth.currentUser ? auth.currentUser.uid : (facultyUid || facultyId);
-
-        let subjectData = null;
-        const subjDocCache = assignedSubjectDocs.find(d => d.id === subjectId);
-        if (subjDocCache) {
-          subjectData = subjDocCache.data();
-        } else {
-          const subSnap = await db.collection('subjects').doc(subjectId).get().catch(() => null);
-          if (subSnap && subSnap.exists) subjectData = subSnap.data();
-        }
-        debug.subjectExists = Boolean(subjectData);
-        debug.subjectCode = subjectData?.subjectCode || null;
-        console.log('subjectExists:', debug.subjectExists);
-        console.log('subjectCode:', debug.subjectCode);
 
         const sessionPayload = {
           subjectId,
@@ -1345,20 +1344,19 @@
           expiresAt: endTimeObj.toISOString(),
           createdAt: '[serverTimestamp]'
         };
-        console.log('session payload:', debug.sessionPayload);
         debug.writeAttempted = true;
-        console.log('Firestore write: attendanceSessions.add(payload)');
+
         const sessionRef = await db.collection('attendanceSessions').add(sessionPayload);
         debug.sessionId = sessionRef.id;
-        console.log('[FACULTY SESSION CREATED]', { sessionId: sessionRef.id, subjectId, facultyUid: currentAuthUid });
+
         statusMsg.className = 'msg success';
         statusMsg.textContent = `Attendance started! Class ${classNumber} (GPS: ${selectedAccuracyMeters !== null ? `${selectedAccuracyMeters.toFixed(1)}m` : 'OK'})`;
-        console.log('[ATTENDANCE SESSION CREATED]', { sessionId: sessionRef.id, subjectId, facultyUid: currentAuthUid });
-        setTimeout(() => {
-          loadActiveSessions();
-          loadSubjects();
-          loadFacultyTimetable();
-        }, 1000);
+
+        // Immediately update local state and re-render without delay
+        liveSessionsMap[subjectId] = { id: sessionRef.id, ...sessionPayload };
+        renderSubjectsTable();
+        renderTodayClasses();
+        loadActiveSessions();
       } catch (err) {
         debug.errorCode = err?.code || null;
         debug.errorMessage = err?.message || String(err);
@@ -1374,9 +1372,12 @@
           writeAttempted: debug.writeAttempted
         });
         statusMsg.className = 'msg error';
-        statusMsg.textContent = 'Error: ' + err.message;
+        statusMsg.textContent = 'Error: ' + (err.message || 'Failed to start session');
       } finally {
-        if (button) button.disabled = false;
+        if (button) {
+          button.disabled = false;
+          button.textContent = origBtnText || '▶ Start Attendance';
+        }
         console.log('sessionId:', debug.sessionId);
         console.log('writeAttempted:', debug.writeAttempted);
         console.groupEnd();
@@ -2309,9 +2310,16 @@
 
         // Admin sees all pending requests (server-enforced via Firestore rules)
         try {
-          const token = auth.currentUser?.token || {};
-          const adminDoc = await db.collection('admins').doc(currentAuthUid).get().catch(() => null);
-          if (token.admin === true || (adminDoc && adminDoc.exists)) {
+          if (cachedIsAdmin === null) {
+            const token = auth.currentUser?.token || {};
+            if (token.admin === true) {
+              cachedIsAdmin = true;
+            } else {
+              const adminDoc = await db.collection('admins').doc(currentAuthUid).get().catch(() => null);
+              cachedIsAdmin = Boolean(adminDoc && adminDoc.exists && adminDoc.data()?.active !== false);
+            }
+          }
+          if (cachedIsAdmin) {
             queries.push(
               db.collection('faceReRegistrationRequests')
                 .where('status', '==', 'pending')

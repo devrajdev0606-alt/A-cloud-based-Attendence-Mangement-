@@ -3577,14 +3577,18 @@
         };
       }
 
-      // Execute each module independently so one error does not break the entire page
-      try { await loadDepartments(); } catch (e) { console.warn('loadDepartments error:', e); }
-      try { await loadFacultyOptions(); } catch (e) { console.warn('loadFacultyOptions error:', e); }
-      try { await loadRegistrationRequests(); } catch (e) { console.warn('loadRegistrationRequests error:', e); }
-      try { await loadAdminTimetable(); } catch (e) { console.warn('loadAdminTimetable error:', e); }
-      try { await loadSettings(); } catch (e) { console.warn('loadSettings error:', e); }
-      try { await updateStats(); } catch (e) { console.warn('updateStats error:', e); }
-      try { await renderListing(); } catch (e) { console.warn('renderListing error:', e); }
+      // Execute catalog loads, stats, and directory listing concurrently in parallel
+      await Promise.allSettled([
+        loadDepartments(),
+        loadFacultyOptions(),
+        loadRegistrationRequests(),
+        loadAdminTimetable(),
+        loadSettings()
+      ]);
+      await Promise.allSettled([
+        updateStats(),
+        renderListing()
+      ]);
     }
 
     function toggleMobileNav() {
