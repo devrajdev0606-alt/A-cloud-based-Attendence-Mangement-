@@ -28,6 +28,12 @@
         </div>
       </a>
 
+      <button type="button" class="nav-toggle-btn" onclick="toggleMobileNav()" aria-label="Toggle navigation menu" aria-expanded="false">
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+      </button>
+
       <div class="header-actions">
         <span id="reportAdminEmailBadge" class="badge" style="background: rgba(13, 148, 136, 0.15); color: #0d9488; border: 1px solid rgba(13, 148, 136, 0.3); font-weight: 700;">Admin</span>
         <a href="admin.html" class="back-btn">← Back to Admin Panel</a>
@@ -93,7 +99,7 @@
           <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Verified geolocation and biometric attendance history</p>
         </div>
       </div>
-      <div class="table-wrap">
+      <div class="table-responsive table-wrap">
         <table>
           <thead>
             <tr>
@@ -334,6 +340,35 @@
     document.getElementById('dateFilter').addEventListener('change', filterRecords);
     document.getElementById('subjectFilter').addEventListener('change', filterRecords);
     document.getElementById('facultyFilter').addEventListener('change', filterRecords);
+
+    function toggleMobileNav() {
+      const header = document.querySelector('.app-header');
+      const btn = document.querySelector('.nav-toggle-btn');
+      if (!header || !btn) return;
+      const isOpen = header.classList.toggle('nav-open');
+      btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+
+    document.addEventListener('click', function(e) {
+      const header = document.querySelector('.app-header');
+      if (!header || !header.classList.contains('nav-open')) return;
+      if (!header.contains(e.target)) {
+        header.classList.remove('nav-open');
+        const btn = document.querySelector('.nav-toggle-btn');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const header = document.querySelector('.app-header');
+        if (header && header.classList.contains('nav-open')) {
+          header.classList.remove('nav-open');
+          const btn = document.querySelector('.nav-toggle-btn');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+      }
+    });
   </script>
 </body>
 </html>

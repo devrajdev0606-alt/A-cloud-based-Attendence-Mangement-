@@ -68,7 +68,12 @@ service cloud.firestore {
       allow create: if isAdmin();
       allow update: if isAdmin() || (
         isOwner(studentId) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['faceDescriptor', 'faceRegistered'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'faceDescriptor',
+          'faceRegistered',
+          'lastReregistrationAt',
+          'reregistrationAudit'
+        ])
       );
       allow delete: if isAdmin();
     }
@@ -553,6 +558,93 @@ service cloud.firestore {
       allow read: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
       allow write: if isAdmin();
     }
+
+    // =========================================================================
+    // FACE RE-REGISTRATION REQUESTS COLLECTION
+    // =========================================================================
+    // Students submit requests when they cannot verify their current registered
+    // face (e.g. biometric failure, broken registration). Faculty/Admin review
+    // and approve/reject. Approval is enforced via server-side callable Function
+    // plus these rules — students cannot self-approve.
+    //
+    // Create: Authenticated student submitting their own pending request.
+    // Read: Owner student, assigned faculty, or admin.
+    // Update: Faculty can approve/reject. Student can cancel pending. Admin full.
+    // Delete: Admin or the requesting student (if still pending).
+    // =========================================================================
+    match /faceReRegistrationRequests/{requestId} {
+      function isRequestOwner() {
+        return isSignedIn() && resource.data.studentUid == request.auth.uid;
+      }
+
+      function isAssignedFacultyForReRegRequest() {
+        return isSignedIn() && (
+          ('facultyUid' in resource.data && resource.data.facultyUid == request.auth.uid) ||
+          ('facultyId' in resource.data && resource.data.facultyId == request.auth.uid) ||
+          (
+            'facultyId' in resource.data &&
+            resource.data.facultyId is string &&
+            resource.data.facultyId != '' &&
+            exists(/databases/$(database)/documents/faculty/$(resource.data.facultyId)) &&
+            'email' in get(/databases/$(database)/documents/faculty/$(resource.data.facultyId)).data &&
+            get(/databases/$(database)/documents/faculty/$(resource.data.facultyId)).data.email == request.auth.token.email
+          )
+        );
+      }
+
+      // Students create pending requests only. They cannot set approved=true or
+      // any approval fields. The serverApprovedAt timestamp is set by the
+      // callable Function, not the client.
+      allow create: if isSignedIn()
+        && request.resource.data.studentUid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && (!('serverApprovedAt' in request.resource.data) || request.resource.data.serverApprovedAt == null)
+        && (!('approvedBy' in request.resource.data) || request.resource.data.approvedBy == null)
+        && (!('reviewedBy' in request.resource.data) || request.resource.data.reviewedBy == null)
+        && (!('reviewedAt' in request.resource.data) || request.resource.data.reviewedAt == null)
+        && (!('reviewReason' in request.resource.data) || request.resource.data.reviewReason == null)
+        && ('reason' in request.resource.data && request.resource.data.reason is string && request.resource.data.reason.size() > 0 && request.resource.data.reason.size() <= 1000);
+
+      // Read: owner student, assigned faculty, or admin
+      allow read: if isAdmin() || isRequestOwner() || isAssignedFacultyForReRegRequest();
+
+      // Update: Faculty can approve/reject. Student can cancel pending. Admin full.
+      allow update: if isAdmin() || (
+        isSignedIn() && (
+          // Faculty approval/rejection — only status and review fields
+          (
+            isAssignedFacultyForReRegRequest() &&
+            resource.data.studentUid != request.auth.uid &&
+            resource.data.status == 'pending' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewReason', 'reviewedAt', 'approvedBy', 'reviewedBy']) &&
+            (request.resource.data.status == 'approved' || request.resource.data.status == 'rejected') &&
+            request.resource.data.reviewedAt == request.time &&
+            (
+              (!('approvedBy' in request.resource.data) || request.resource.data.approvedBy == request.auth.uid) &&
+              (!('reviewedBy' in request.resource.data) || request.resource.data.reviewedBy == request.auth.uid)
+            )
+          ) ||
+          // Student can cancel their own pending request
+          (
+            isRequestOwner() &&
+            resource.data.status == 'pending' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reason']) &&
+            request.resource.data.status == 'cancelled'
+          )
+        )
+      );
+
+      // Delete: Admin or owner student (if still pending)
+      allow delete: if isAdmin() || (
+        isSignedIn() &&
+        isRequestOwner() &&
+        resource.data.status == 'pending'
+      );
+    }
+
+    // Allow students to update their own faceRegistered and faceDescriptor fields.
+    // Also allow a serverApprovedAt check field on the student doc for recovery flow.
+    // (Already covered by the students match block above; no changes needed there.)
   }
 }
 

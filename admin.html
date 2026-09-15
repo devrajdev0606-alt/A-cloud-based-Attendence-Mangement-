@@ -28,6 +28,12 @@
         </div>
       </a>
 
+      <button type="button" class="nav-toggle-btn" onclick="toggleMobileNav()" aria-label="Toggle navigation menu" aria-expanded="false">
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+      </button>
+
       <div class="header-actions">
         <a href="report.html" class="btn btn-primary" style="font-size:0.84rem;">📊 View Attendance Report</a>
         <div class="user-badge" style="background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
@@ -650,7 +656,7 @@
             </div>
           </div>
 
-          <div style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px;">
+          <div class="table-responsive" style="max-height: 280px; overflow-y: auto; overflow-x: auto; border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px;">
             <table class="data-table" style="width: 100%; font-size: 0.82rem;">
               <thead>
                 <tr>
@@ -673,14 +679,14 @@
         <div id="csvResultsContainer" style="display:none; margin-bottom: 18px;">
           <div style="padding: 12px; background: rgba(59, 130, 246, 0.08); border-radius: 8px; margin-bottom: 12px;">
             <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; color: var(--primary-navy);">Import Completed</h4>
-            <div style="display: flex; gap: 16px; font-size: 0.84rem;">
+            <div style="display: flex; gap: 16px; font-size: 0.84rem; flex-wrap: wrap;">
               <span>Successfully imported: <strong id="resImportedCount" style="color:#059669;">0</strong></span>
               <span>Failed: <strong id="resFailedCount" style="color:#dc2626;">0</strong></span>
               <span>Skipped duplicates: <strong id="resSkippedCount" style="color:#d97706;">0</strong></span>
             </div>
           </div>
 
-          <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px;">
+          <div class="table-responsive" style="max-height: 240px; overflow-y: auto; overflow-x: auto; border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px;">
             <table class="data-table" style="width: 100%; font-size: 0.82rem;">
               <thead>
                 <tr>
@@ -3580,6 +3586,35 @@
       try { await updateStats(); } catch (e) { console.warn('updateStats error:', e); }
       try { await renderListing(); } catch (e) { console.warn('renderListing error:', e); }
     }
+
+    function toggleMobileNav() {
+      const header = document.querySelector('.app-header');
+      const btn = document.querySelector('.nav-toggle-btn');
+      if (!header || !btn) return;
+      const isOpen = header.classList.toggle('nav-open');
+      btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+
+    document.addEventListener('click', function(e) {
+      const header = document.querySelector('.app-header');
+      if (!header || !header.classList.contains('nav-open')) return;
+      if (!header.contains(e.target)) {
+        header.classList.remove('nav-open');
+        const btn = document.querySelector('.nav-toggle-btn');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const header = document.querySelector('.app-header');
+        if (header && header.classList.contains('nav-open')) {
+          header.classList.remove('nav-open');
+          const btn = document.querySelector('.nav-toggle-btn');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+      }
+    });
   </script>
 </body>
 </html>

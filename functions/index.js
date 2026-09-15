@@ -581,3 +581,126 @@ exports.importStudents = onCall(async request => {
   };
 });
 
+// =========================================================================
+// FACE RE-REGISTRATION REQUEST APPROVAL
+// =========================================================================
+// Used by Faculty and Admin to approve face re-registration requests.
+// Enforcement: The caller (faculty or admin) must be authorized. The student
+// cannot approve their own request. A server-approved timestamp and approving
+// UID are written server-side, which the client checks before allowing the
+// controlled re-registration flow.
+//
+// Rate limiting: Enforces a cooldown on re-registration per student.
+// =========================================================================
+
+const FACE_REREG_APPROVAL_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+const FACE_REREG_MAX_APPROVALS = 3; // max approvals per student ever
+
+async function isAssignedFacultyForSubject(facultyUid, subjectId) {
+  if (!facultyUid || !subjectId) return false;
+  const subjectDoc = await db.collection('subjects').doc(subjectId).get();
+  if (!subjectDoc.exists) return false;
+  const sub = subjectDoc.data();
+  return sub.facultyUid === facultyUid || sub.facultyId === facultyUid;
+}
+
+exports.approveFaceReRegistration = onCall(async request => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Authentication required.');
+  }
+
+  const callerUid = request.auth.uid;
+  const requestId = asString(request.data?.requestId);
+  const reason = asString(request.data?.reason) || null;
+
+  if (!requestId) {
+    throw new HttpsError('invalid-argument', 'Request ID is required.');
+  }
+
+  const requestRef = db.collection('faceReRegistrationRequests').doc(requestId);
+  const requestDoc = await requestRef.get();
+
+  if (!requestDoc.exists) {
+    throw new HttpsError('not-found', 'Face re-registration request not found.');
+  }
+
+  const reqData = requestDoc.data();
+
+  if (reqData.status !== 'pending') {
+    throw new HttpsError('failed-precondition', 'This request has already been processed.');
+  }
+
+  // Determine if caller is an admin
+  const callerIsAdmin = await isAdmin(request.auth);
+
+  // Determine if caller is faculty for ANY of the student's enrolled subjects
+  // (Uses authoritative Firestore enrollment data, not client-supplied fields)
+  const targetStudentUid = reqData.studentUid;
+  let isAssignedFaculty = false;
+  try {
+    const studentSubjectsSnap = await db.collection('subjects')
+      .where('studentIds', 'array-contains', targetStudentUid)
+      .get();
+    for (const subDoc of studentSubjectsSnap.docs) {
+      if (await isAssignedFacultyForSubject(callerUid, subDoc.id)) {
+        isAssignedFaculty = true;
+        break;
+      }
+    }
+  } catch (err) {
+    console.error('[approveFaceReRegistration] Subject authorization check error:', err);
+  }
+
+  if (!callerIsAdmin && !isAssignedFaculty) {
+    throw new HttpsError('permission-denied', 'Only an assigned faculty member or admin may approve this request.');
+  }
+
+  // Prevent self-approval: ensure the student is not approving their own request
+  if (reqData.studentUid === callerUid) {
+    throw new HttpsError('permission-denied', 'Students cannot approve their own face re-registration request.');
+  }
+
+  // Rate limiting: check existing approvals and cooldown
+  const auditSnap = await db.collection('faceReRegistrationRequests')
+    .where('studentUid', '==', targetStudentUid)
+    .where('status', '==', 'approved')
+    .get();
+
+  if (auditSnap.size >= FACE_REREG_MAX_APPROVALS) {
+    throw new HttpsError('failed-precondition', `Maximum of ${FACE_REREG_MAX_APPROVALS} approvals reached for this student.`);
+  }
+
+  const now = Date.now();
+  for (const doc of auditSnap.docs) {
+    const approvedAt = doc.data().serverApprovedAt;
+    if (approvedAt && (now - approvedAt.toMillis()) < FACE_REREG_APPROVAL_COOLDOWN_MS) {
+      throw new HttpsError('failed-precondition', 'Approval cooldown active. Wait before requesting another face re-registration.');
+    }
+  }
+
+  // Fetch student to verify they exist and record audit
+  const studentDoc = await db.collection('students').doc(targetStudentUid).get();
+  if (!studentDoc.exists) {
+    throw new HttpsError('not-found', 'Student profile not found.');
+  }
+
+  const batch = db.batch();
+  batch.update(requestRef, {
+    status: 'approved',
+    approvedBy: callerUid,
+    serverApprovedAt: FieldValue.serverTimestamp(),
+    reviewReason: reason,
+    reviewedAt: FieldValue.serverTimestamp()
+  });
+
+  await batch.commit();
+
+  return {
+    success: true,
+    requestId,
+    studentUid: targetStudentUid,
+    approvedBy: callerUid,
+    method: 'approved_recovery'
+  };
+});
+

@@ -28,6 +28,12 @@
         </div>
       </a>
 
+      <button type="button" class="nav-toggle-btn" onclick="toggleMobileNav()" aria-label="Toggle navigation menu" aria-expanded="false">
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+      </button>
+
       <div class="header-actions">
         <a href="faculty_dashboard.html" class="back-btn">← Back to Dashboard</a>
       </div>
@@ -247,6 +253,35 @@
       a.click();
       URL.revokeObjectURL(url);
     }
+
+    function toggleMobileNav() {
+      const header = document.querySelector('.app-header');
+      const btn = document.querySelector('.nav-toggle-btn');
+      if (!header || !btn) return;
+      const isOpen = header.classList.toggle('nav-open');
+      btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+
+    document.addEventListener('click', function(e) {
+      const header = document.querySelector('.app-header');
+      if (!header || !header.classList.contains('nav-open')) return;
+      if (!header.contains(e.target)) {
+        header.classList.remove('nav-open');
+        const btn = document.querySelector('.nav-toggle-btn');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const header = document.querySelector('.app-header');
+        if (header && header.classList.contains('nav-open')) {
+          header.classList.remove('nav-open');
+          const btn = document.querySelector('.nav-toggle-btn');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+      }
+    });
   </script>
 </body>
 </html>

@@ -42,6 +42,7 @@
             <div class="input-wrap" style="margin-bottom: 0;">
               <span class="input-icon">🔒</span>
               <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password" />
+              <button type="button" class="pass-toggle-btn" onclick="togglePasswordVisibility('password', this)" aria-label="Toggle password visibility" title="Show/Hide password">👁️</button>
             </div>
           </div>
 
@@ -65,9 +66,11 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    if (localStorage.getItem('facultyId')) {
-      window.location.replace('faculty_dashboard.html');
-    }
+    auth.onAuthStateChanged((user) => {
+      if (user && localStorage.getItem('facultyId')) {
+        window.location.replace('faculty_dashboard.html');
+      }
+    });
 
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -161,6 +164,17 @@
         }
       }
     });
+
+    function togglePasswordVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      const isPass = input.type === 'password';
+      input.type = isPass ? 'text' : 'password';
+      if (btn) {
+        btn.innerHTML = isPass ? '🙈' : '👁️';
+        btn.setAttribute('aria-label', isPass ? 'Hide password' : 'Show password');
+      }
+    }
   </script>
 </body>
 </html>

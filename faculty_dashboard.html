@@ -28,6 +28,12 @@
         </div>
       </a>
 
+      <button type="button" class="nav-toggle-btn" onclick="toggleMobileNav()" aria-label="Toggle navigation menu" aria-expanded="false">
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+      </button>
+
       <div class="header-actions">
         <div class="user-badge">
           <div class="user-avatar" style="background: var(--teacher-orange);">👩‍🏫</div>
@@ -213,6 +219,38 @@
       </div>
     </div>
 
+    <!-- Collapsible 7: Face Re-registration Requests Card -->
+    <div class="collapsible-card" id="faceReregRequestsCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>👤 Face Re-registration Requests</h2>
+          <span class="badge amber" id="faceReregPendingBadge">0 Pending</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <p class="card-desc">
+          Review face re-registration recovery requests submitted by students who cannot verify their current
+          registered face. Approve to allow a controlled face re-registration, or reject if suspicious.
+        </p>
+
+        <div class="filter-row" style="margin-bottom: 16px;">
+          <input type="text" id="faceReregSearch" placeholder="🔍 Search by student name, USN..." oninput="renderFaceReregRequests()" style="flex: 2 1 200px;" />
+          <select id="faceReregFilter" onchange="renderFaceReregRequests()" style="flex: 1 1 140px;">
+            <option value="pending" selected>🟡 Pending Review</option>
+            <option value="approved">🟢 Approved</option>
+            <option value="rejected">🔴 Rejected</option>
+            <option value="all">All Requests</option>
+          </select>
+          <button type="button" class="btn btn-primary" onclick="loadFaceReregRequests()">🔄 Refresh</button>
+        </div>
+
+        <div id="faceReregRequestsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;">
+          <p class="empty">Loading face re-registration requests...</p>
+        </div>
+      </div>
+    </div>
+
     <!-- Collapsible 7: Attendance Analytics Card -->
     <div class="collapsible-card" id="analyticsCard">
       <div class="collapsible-header" onclick="toggleCollapsible(this)">
@@ -309,10 +347,13 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script>
     const db = firebase.firestore();
     const auth = firebase.auth();
+    const functions = firebase.app().functions('us-central1');
+    const approveFaceReRegistration = functions.httpsCallable('approveFaceReRegistration');
 
     let facultyId = localStorage.getItem('facultyId');
     let facultyUid = localStorage.getItem('facultyUid');
@@ -438,18 +479,19 @@
         }
       });
 
-      if (!isDashboardInitialized) {
-        isDashboardInitialized = true;
-        await loadSettings();
-        await Promise.allSettled([
-          loadActiveSessions(),
-          loadSubjects(),
-          loadFacultyTimetable(),
-          loadFacultyCorrectionRequests()
-        ]);
-        if (refreshIntervalId) clearInterval(refreshIntervalId);
-        refreshIntervalId = setInterval(refreshSessionsAndCleanup, 15000);
-      }
+        if (!isDashboardInitialized) {
+          isDashboardInitialized = true;
+          await loadSettings();
+          await Promise.allSettled([
+            loadActiveSessions(),
+            loadSubjects(),
+            loadFacultyTimetable(),
+            loadFacultyCorrectionRequests(),
+            loadFaceReregRequests()
+          ]);
+          if (refreshIntervalId) clearInterval(refreshIntervalId);
+          refreshIntervalId = setInterval(refreshSessionsAndCleanup, 15000);
+        }
     });
 
     async function loadSettings() {
@@ -1051,7 +1093,8 @@
           loadActiveSessions(),
           loadSubjects(),
           loadFacultyTimetable(),
-          loadFacultyCorrectionRequests()
+          loadFacultyCorrectionRequests(),
+          loadFaceReregRequests()
         ]);
       } catch (err) {
         console.error('Auto refresh error:', err);
@@ -1081,9 +1124,10 @@
               .get()
               .catch(() => null)
           );
-        }
-      });
-      const snapshots = await Promise.all(queries);
+          }
+        });
+
+        const snapshots = await Promise.all(queries);
       const numbers = [];
       snapshots.forEach(snap => {
         if (snap && !snap.empty) {
@@ -1376,6 +1420,7 @@
             );
           }
         });
+
         const snapshots = await Promise.all(queries);
         for (const snapshot of snapshots) {
           if (snapshot && !snapshot.empty) {
@@ -2219,13 +2264,309 @@
       }
     }
 
+    // =========================================================================
+    // FACE RE-REGISTRATION REQUESTS MANAGEMENT
+    // =========================================================================
+    let faceReregRequests = [];
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    async function loadFaceReregRequests() {
+      const container = document.getElementById('faceReregRequestsContainer');
+      const badge = document.getElementById('faceReregPendingBadge');
+      try {
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+        if (!currentAuthUid) return;
+
+        const queries = [
+          db.collection('faceReRegistrationRequests')
+            .where('facultyUid', '==', currentAuthUid)
+            .get()
+            .catch(() => null),
+          db.collection('faceReRegistrationRequests')
+            .where('facultyId', '==', currentAuthUid)
+            .get()
+            .catch(() => null)
+        ];
+        (allFacultyIds || []).forEach(fId => {
+          if (fId && fId !== currentAuthUid) {
+            queries.push(
+              db.collection('faceReRegistrationRequests')
+                .where('facultyId', '==', fId)
+                .get()
+                .catch(() => null)
+            );
+          }
+        });
+
+        // Admin sees all pending requests (server-enforced via Firestore rules)
+        try {
+          const token = auth.currentUser?.token || {};
+          const adminDoc = await db.collection('admins').doc(currentAuthUid).get().catch(() => null);
+          if (token.admin === true || (adminDoc && adminDoc.exists)) {
+            queries.push(
+              db.collection('faceReRegistrationRequests')
+                .where('status', '==', 'pending')
+                .get()
+                .catch(() => null)
+            );
+          }
+        } catch (adminErr) {
+          console.warn('[loadFaceReregRequests] Admin check skipped:', adminErr);
+        }
+
+        const snapshots = await Promise.all(queries);
+        const seenDocIds = new Set();
+        faceReregRequests = [];
+
+        snapshots.forEach(snap => {
+          if (!snap) return;
+          snap.forEach(doc => {
+            if (!seenDocIds.has(doc.id)) {
+              seenDocIds.add(doc.id);
+              faceReregRequests.push({ id: doc.id, ...doc.data() });
+            }
+          });
+        });
+
+        // Sort: pending first, then newest first
+        faceReregRequests.sort((a, b) => {
+          if (a.status === 'pending' && b.status !== 'pending') return -1;
+          if (a.status !== 'pending' && b.status === 'pending') return 1;
+          const tB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+          const tA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+          return tB - tA;
+        });
+
+        const pendingCount = faceReregRequests.filter(r => r.status === 'pending').length;
+        if (badge) {
+          badge.textContent = `${pendingCount} Pending`;
+          badge.className = pendingCount > 0 ? 'badge amber' : 'badge';
+        }
+
+        renderFaceReregRequests();
+      } catch (err) {
+        console.error('loadFaceReregRequests error:', err);
+        if (container) {
+          container.innerHTML = '<p class="empty" style="color:var(--crimson-dark);">Unable to load requests. Please refresh.</p>';
+        }
+      }
+    }
+
+    function renderFaceReregRequests() {
+      const container = document.getElementById('faceReregRequestsContainer');
+      if (!container) return;
+
+      const query = (document.getElementById('faceReregSearch')?.value || '').trim().toLowerCase();
+      const statusFilter = document.getElementById('faceReregFilter')?.value || 'pending';
+
+      let filtered = faceReregRequests;
+
+      if (statusFilter !== 'all') {
+        filtered = filtered.filter(r => r.status === statusFilter);
+      }
+
+      if (query) {
+        filtered = filtered.filter(r => {
+          const studentName = (r.studentName || '').toLowerCase();
+          const studentUsn = (r.studentUsn || '').toLowerCase();
+          const studentDept = (r.studentDept || '').toLowerCase();
+          return studentName.includes(query) || studentUsn.includes(query) || studentDept.includes(query);
+        });
+      }
+
+      if (filtered.length === 0) {
+        const filterName = statusFilter === 'all' ? '' : (statusFilter === 'pending' ? 'pending ' : (statusFilter === 'approved' ? 'approved ' : 'rejected '));
+        container.innerHTML = `
+          <div class="empty" style="grid-column: 1 / -1; padding: 24px; text-align: center; background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: 12px;">
+            <div style="font-size: 1.8rem; margin-bottom: 6px;">👤</div>
+            <strong style="color: var(--text-color); font-size: 0.95rem;">No ${filterName}Face Re-registration Requests</strong>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
+              Students who cannot verify their current registered face will appear here for review.
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(req => {
+        let statusBadge = '';
+        let actionButtonsHtml = '';
+        let decisionNoteHtml = '';
+
+        if (req.status === 'pending') {
+          statusBadge = '<span class="badge amber" style="font-weight:700;">🟡 Pending</span>'
+            + (req.needsAdminReview
+              ? '<span class="badge red" style="font-weight:700; margin-left:4px;">&#9888; Admin Review</span>'
+              : '');
+          actionButtonsHtml = `
+            <div class="btn-row" style="gap: 10px; justify-content: flex-end;">
+              <button type="button" class="btn btn-approve" style="padding: 7px 16px; font-size: 0.84rem;" onclick="approveReregRequest('${req.id}')">
+                &#10003; Approve
+              </button>
+              <button type="button" class="btn btn-reject" style="padding: 7px 16px; font-size: 0.84rem;" onclick="rejectReregRequest('${req.id}')">
+                &#10005; Reject
+              </button>
+            </div>
+          `;
+        } else if (req.status === 'approved') {
+          statusBadge = '<span class="badge green" style="font-weight:700;">🟢 Approved</span>';
+          const revTime = req.reviewedAt?.toDate ? req.reviewedAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+          decisionNoteHtml = `
+            <div style="margin-top: 8px; padding: 6px 10px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 6px; font-size: 0.8rem; color: var(--emerald-dark); font-weight: 600;">
+              ✓ Approved for recovery re-registration (${revTime || 'Approved'})
+            </div>
+          `;
+          actionButtonsHtml = `
+            <div style="font-size: 0.76rem; color: var(--text-muted); text-align: right;">
+              Ready for student recovery flow
+            </div>
+          `;
+        } else if (req.status === 'rejected') {
+          statusBadge = '<span class="badge red" style="font-weight:700;">🔴 Rejected</span>';
+          const revTime = req.reviewedAt?.toDate ? req.reviewedAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+          decisionNoteHtml = `
+            <div style="margin-top: 8px; padding: 8px 10px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 6px; font-size: 0.82rem; color: #fca5a5;">
+              <strong style="color:#ef4444;">Rejection Reason:</strong> "${escapeHtml(req.reviewReason || 'Not approved')}"
+            </div>
+          `;
+          actionButtonsHtml = `
+            <div style="font-size: 0.76rem; color: #ef4444; text-align: right;">
+              Rejected (${revTime || 'Final'})
+            </div>
+          `;
+        } else if (req.status === 'cancelled') {
+          statusBadge = '<span class="badge" style="font-weight:700; background:var(--text-muted); color:#666;">⚪ Cancelled</span>';
+          actionButtonsHtml = `<div style="font-size: 0.76rem; color: var(--text-muted); text-align: right;">Cancelled by student</div>`;
+        }
+
+        const semSec = req.studentSection ? `Sem ${req.studentSemester || '1'} • Sec ${req.studentSection}` : `Sem ${req.studentSemester || '1'}`;
+        const createdDisplay = req.createdAt?.toDate ? req.createdAt.toDate().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+
+        return `
+          <div class="card" style="margin-bottom: 0; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: space-between; gap: 12px; padding: 16px;">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                <div>
+                  <strong style="font-size: 1.05rem; color: var(--text-color);">${escapeHtml(req.studentName)}</strong>
+                  <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; margin-top: 2px;">
+                    USN: <span style="color:var(--text-color);">${escapeHtml(req.studentUsn || 'N/A')}</span>
+                  </div>
+                  <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 1px;">
+                    ${escapeHtml(req.studentDept || '')} • ${escapeHtml(semSec)}
+                  </div>
+                </div>
+                <div>${statusBadge}</div>
+              </div>
+
+              <div style="margin-top: 10px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px;">
+                <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Reason</div>
+                <div style="font-size: 0.85rem; color: var(--text-color); font-style: italic; margin-top: 3px;">
+                  "${escapeHtml(req.reason || 'No reason provided')}"
+                </div>
+              </div>
+
+              ${decisionNoteHtml}
+
+              <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 10px;">
+                📅 Submitted: ${escapeHtml(createdDisplay)}
+              </div>
+            </div>
+
+            <div>
+              ${actionButtonsHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function approveReregRequest(requestId) {
+      if (!requestId) return;
+      if (!confirm('Approve this face re-registration request?\n\nThe student will be able to perform a recovery re-registration after approval.')) {
+        return;
+      }
+
+      const btn = (typeof event !== 'undefined' && event?.target) ? event.target : (window.event?.target || null);
+      if (btn) { btn.disabled = true; btn.textContent = 'Approving...'; }
+
+      try {
+        const callResult = await approveFaceReRegistration({ requestId: requestId });
+        const result = callResult?.data || callResult;
+        if (result && result.success) {
+          alert('✓ Request approved successfully! The student can now re-register their face.');
+          await loadFaceReregRequests();
+        } else {
+          alert('Approval failed: ' + (result?.message || 'Unknown error'));
+        }
+      } catch (err) {
+        console.error('approveReregRequest error:', err);
+        const code = err?.code || '';
+        const msg = err?.message || String(err);
+        let safeMsg = msg;
+        if (code.includes('not-found') || msg.includes('NOT_FOUND') || msg.includes('404')) {
+          safeMsg = 'Cloud Function approveFaceReRegistration is not deployed yet. Please deploy Firebase Functions and try again.';
+        } else if (code.includes('permission-denied')) {
+          safeMsg = msg.includes('Only an assigned faculty') ? msg : 'Unauthorized: You are not authorized to approve this request.';
+        }
+        alert('Failed to approve request: ' + safeMsg);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '✓ Approve'; }
+      }
+    }
+
+    function rejectReregRequest(requestId) {
+      if (!requestId) return;
+      const req = faceReregRequests.find(r => r.id === requestId);
+      if (!req) return;
+
+      if (req.status !== 'pending') {
+        alert('This request has already been processed (' + req.status + ') and cannot be modified.');
+        return;
+      }
+
+      const reason = prompt(
+        `Reject re-registration request for ${req.studentName} (${req.studentUsn}):`,
+        ''
+      );
+      if (reason === null) return;
+
+      const btn = (typeof event !== 'undefined' && event?.target) ? event.target : (window.event?.target || null);
+      if (btn) { btn.disabled = true; btn.textContent = 'Rejecting...'; }
+
+      db.collection('faceReRegistrationRequests').doc(requestId).update({
+        status: 'rejected',
+        reviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        reviewedBy: auth.currentUser ? auth.currentUser.uid : facultyUid,
+        reviewReason: reason.trim() || null
+      }).then(() => {
+        loadFaceReregRequests();
+      }).catch(err => {
+        console.error('rejectReregRequest error:', err);
+        alert('Failed to reject request: ' + err.message);
+      }).finally(() => {
+        if (btn) { btn.disabled = false; btn.textContent = '✕ Reject'; }
+      });
+    }
+
     async function viewAttendance(subjectId) {
       localStorage.setItem('reportSubjectId', subjectId);
       window.location.href = 'faculty_report.html';
     }
 
     async function logout() {
-      if (refreshIntervalId) clearInterval(refreshIntervalId);
+      if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+        refreshIntervalId = null;
+      }
       try {
         await auth.signOut();
       } catch (e) {
@@ -2234,6 +2575,45 @@
       localStorage.clear();
       window.location.href = 'index.html';
     }
+
+    function handleFacultyPageTeardown() {
+      if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+        refreshIntervalId = null;
+      }
+    }
+
+    window.addEventListener('pagehide', handleFacultyPageTeardown);
+    window.addEventListener('beforeunload', handleFacultyPageTeardown);
+
+    function toggleMobileNav() {
+      const header = document.querySelector('.app-header');
+      const btn = document.querySelector('.nav-toggle-btn');
+      if (!header || !btn) return;
+      const isOpen = header.classList.toggle('nav-open');
+      btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+
+    document.addEventListener('click', function(e) {
+      const header = document.querySelector('.app-header');
+      if (!header || !header.classList.contains('nav-open')) return;
+      if (!header.contains(e.target)) {
+        header.classList.remove('nav-open');
+        const btn = document.querySelector('.nav-toggle-btn');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const header = document.querySelector('.app-header');
+        if (header && header.classList.contains('nav-open')) {
+          header.classList.remove('nav-open');
+          const btn = document.querySelector('.nav-toggle-btn');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+      }
+    });
   </script>
 </body>
 </html>

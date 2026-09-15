@@ -28,6 +28,12 @@
         </div>
       </a>
 
+      <button type="button" class="nav-toggle-btn" onclick="toggleMobileNav()" aria-label="Toggle navigation menu" aria-expanded="false">
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+      </button>
+
       <div class="header-actions">
         <div class="user-badge">
           <div class="user-avatar">👨‍🎓</div>
@@ -273,7 +279,7 @@
     </div>
 
     <!-- Collapsible 5: Face Biometrics Enrollment -->
-    <div class="collapsible-card" id="faceEnrollmentCard">
+      <div class="collapsible-card" id="faceEnrollmentCard">
       <div class="collapsible-header" onclick="toggleCollapsible(this)">
         <div class="collapsible-title">
           <h2>👤 Face Biometrics Enrollment</h2>
@@ -317,6 +323,105 @@
           </div>
         </div>
         <div id="regMsg" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- Collapsible 5b: Face Re-registration (Secure) -->
+    <div class="collapsible-card" id="faceReregCard" style="display: none;">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>🔄 Face Re-registration</h2>
+          <span id="reregBadge" class="badge green">Face Registered</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <p class="card-desc">
+          <strong>Security notice:</strong> Re-registering your face requires live verification of your
+          <em>current</em> registered face through active liveness detection. This prevents unauthorized
+          face replacement. The existing descriptor is only replaced after successful verification.
+        </p>
+        <p class="card-desc">
+          If you cannot verify your current face (e.g. significant appearance change, broken enrollment),
+          use the recovery request option below. Faculty/Admin will review and approve your identity before
+          allowing a controlled re-registration.
+        </p>
+
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
+          <!-- Biometric Scanner HUD Frame (reuses same video/canvas elements) -->
+          <div class="biometric-scanner-wrap" id="reregScannerWrap" style="display: none;">
+            <video id="reregVideo" class="scanner-video" autoplay muted playsinline></video>
+            <div class="scanner-hud-overlay">
+              <div class="hud-corner tl"></div>
+              <div class="hud-corner tr"></div>
+              <div class="hud-corner bl"></div>
+              <div class="hud-corner br"></div>
+              <div class="hud-reticle" id="reregReticle"></div>
+              <div class="scan-laser"></div>
+            </div>
+          </div>
+          <canvas id="reregCanvas" style="display: none;"></canvas>
+
+          <div class="hud-status-strip" id="reregStatusStrip">
+            <div class="status-chip">
+              <span class="status-chip-dot" id="reregFaceDot"></span>
+              <span id="reregFaceText">Face: Standby</span>
+            </div>
+            <div class="status-chip">
+              <span class="status-chip-dot" id="reregLiveDot"></span>
+              <span id="reregLiveText">Liveness: Standby</span>
+            </div>
+          </div>
+
+          <div class="btn-row" style="justify-content: center; width: 100%;">
+            <button type="button" class="btn reg-btn" id="startReregBtn" onclick="startReregistration()">📷 Verify Current Face</button>
+            <button type="button" class="btn reg-btn" id="captureReregBtn" onclick="captureNewFace()" disabled>Capture & Save New Face</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+          <button type="button" class="btn btn-primary" id="requestRecoveryBtn" onclick="openRecoveryRequestModal()" style="font-size: 0.85rem; padding: 8px 18px;">
+            ❓ Can't verify your current face? Request Recovery
+          </button>
+        </div>
+
+        <div id="reregMsg" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- Recovery Request Modal -->
+    <div id="recoveryModal" class="modal-overlay" style="display:none;" onclick="closeRecoveryModalOnBackdrop(event)">
+      <div class="modal-card" style="max-width: 500px;" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <span class="badge blue">📝 Recovery Request</span>
+            <h2 style="margin-top:4px;">Face Re-registration Request</h2>
+          </div>
+          <button type="button" class="modal-close-btn" onclick="closeRecoveryModal()" aria-label="Close modal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:0.86rem; color:var(--text-muted); margin-bottom:12px;">
+            Your face biometrics could not be verified. Submit a recovery request for Faculty/Admin review.
+            Your existing face descriptor will remain unchanged until approved.
+          </p>
+
+          <form id="recoveryForm" onsubmit="submitRecoveryRequest(event)">
+            <label class="form-label" for="recoveryReason">Reason for re-registration <span style="color:var(--crimson-dark);">*</span></label>
+            <textarea id="recoveryReason" rows="3"
+              placeholder="e.g. New enrollment photo, significant appearance change due to injury, face biometrics not recognized."
+              style="width:100%; box-sizing:border-box; resize:vertical;" required></textarea>
+            <div style="display:flex; justify-content:space-between; font-size:0.74rem; color:var(--text-muted); margin-top:4px;">
+              <span id="recoveryCharCount">0 / 500</span>
+            </div>
+
+            <div id="recoveryModalMsg" class="msg" style="display:none; margin:12px 0;"></div>
+
+            <div class="btn-row" style="justify-content:flex-end; gap:10px; margin-top:14px;">
+              <button type="button" class="btn" onclick="closeRecoveryModal()">Cancel</button>
+              <button type="submit" id="submitRecoveryBtn" class="btn btn-primary">Submit Request</button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
 
@@ -430,14 +535,14 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    let studentId = localStorage.getItem('studentId');
-    let studentUid = localStorage.getItem('studentUid');
-    let studentName = localStorage.getItem('studentName') || 'Student';
-    let studentUsn = localStorage.getItem('studentUsn') || '';
-    let studentDept = localStorage.getItem('studentDept') || '';
-    let studentSemester = localStorage.getItem('studentSemester') || '';
-    let studentSection = localStorage.getItem('studentSection') || '';
-    let faceRegistered = localStorage.getItem('faceRegistered') === 'true';
+    let studentId = null;
+    let studentUid = null;
+    let studentName = 'Student';
+    let studentUsn = '';
+    let studentDept = '';
+    let studentSemester = '';
+    let studentSection = '';
+    let faceRegistered = false;
     let isDashboardInitialized = false;
     let deptMap = {};
 
@@ -531,21 +636,21 @@
         return;
       }
 
+      studentId = user.uid;
       studentUid = user.uid;
       await loadDepartmentMap();
 
       // 1. Check profile by UID
       let studentDoc = await db.collection('students').doc(user.uid).get().catch(() => null);
       let studentData = studentDoc && studentDoc.exists ? studentDoc.data() : null;
-      let effectiveId = user.uid;
 
-      // 2. Fallback check by email (for legacy profiles)
+      // 2. Fallback check by email (for legacy profiles) - ONLY to locate profile
+      //    All security-sensitive operations use user.uid, NOT the document ID.
       if (!studentData && user.email) {
         const emailSnap = await db.collection('students').where('email', '==', user.email.toLowerCase()).get().catch(() => null);
         if (emailSnap && !emailSnap.empty) {
           studentDoc = emailSnap.docs[0];
           studentData = studentDoc.data();
-          effectiveId = studentDoc.id;
         }
       }
 
@@ -557,7 +662,9 @@
         return;
       }
 
-      studentId = effectiveId;
+      // Canonical student identity is ALWAYS auth.currentUser.uid
+      studentId = user.uid;
+      studentUid = user.uid;
       studentName = studentData.name || 'Student';
       studentUsn = (studentData.usn || '').toUpperCase();
       studentDept = studentData.dept || studentData.department || '';
@@ -565,8 +672,7 @@
       studentSection = (studentData.section || '').toUpperCase();
       faceRegistered = Boolean(studentData.faceRegistered);
 
-      localStorage.setItem('studentId', studentId);
-      localStorage.setItem('studentUid', studentUid);
+      // Store only display/UI preferences in localStorage (never security-sensitive UIDs)
       localStorage.setItem('studentName', studentName);
       localStorage.setItem('studentUsn', studentUsn);
       localStorage.setItem('studentDept', studentDept);
@@ -623,6 +729,19 @@
         const capBtn = document.getElementById('captureRegBtn');
         if (startBtn) startBtn.disabled = true;
         if (capBtn) capBtn.disabled = true;
+
+        // Show re-registration card
+        const reregCard = document.getElementById('faceReregCard');
+        if (reregCard) reregCard.style.display = 'block';
+        const reregBadge = document.getElementById('reregBadge');
+        if (reregBadge) {
+          reregBadge.textContent = 'Face Registered';
+          reregBadge.className = 'badge green';
+        }
+      } else {
+        // Hide re-registration card if not registered
+        const reregCard = document.getElementById('faceReregCard');
+        if (reregCard) reregCard.style.display = 'none';
       }
 
       // Highlight current day in student weekly tabs
@@ -661,6 +780,9 @@
       if (videoEl && videoEl.id === 'attVideo' && typeof stopActiveLivenessSession === 'function') {
         stopActiveLivenessSession();
       }
+      if (videoEl && videoEl.id === 'reregVideo' && typeof stopReregVideoStream === 'function') {
+        stopReregVideoStream();
+      }
       if (videoEl && videoEl.srcObject) {
         const stream = videoEl.srcObject;
         if (stream && stream.getTracks) {
@@ -672,7 +794,7 @@
       }
     }
 
-    function getAttendanceDocId(sessionId, uid = auth.currentUser?.uid || studentUid) {
+    function getAttendanceDocId(sessionId, uid = auth.currentUser?.uid) {
       return sessionId && uid ? `${sessionId}_${uid}` : null;
     }
 
@@ -816,10 +938,10 @@
       const loadingEl = document.getElementById('subjectsLoading');
       const listEl = document.getElementById('subjectsList');
       try {
-        const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
-        if (!authUid) {
+        if (!auth.currentUser) {
           throw new Error('User is not authenticated.');
         }
+        const authUid = auth.currentUser.uid;
 
         // Authoritative query: Query subjects where studentIds array contains the student's Auth UID
         // This strictly satisfies firestore.rules: request.auth.uid in resource.data.studentIds
@@ -1148,7 +1270,8 @@
 
     async function loadStudentTimetable() {
       try {
-        const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        if (!auth.currentUser) return;
+        const authUid = auth.currentUser.uid;
         const todayDateStr = new Date().toLocaleDateString('en-GB');
 
         // 1. Fetch all timetable entries
@@ -1593,7 +1716,12 @@
         }
 
         const descriptor = Array.from(detections[0].descriptor);
-        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : null;
+        if (!currentAuthUid) {
+          showMsg('regMsg', 'error', 'User is not authenticated. Please sign in again.');
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
         await db.collection('students').doc(currentAuthUid).update({
           faceDescriptor: descriptor,
           faceRegistered: true
@@ -1627,11 +1755,825 @@
           enrollBadge.textContent = '✓ Biometrics Active';
           enrollBadge.className = 'badge green';
         }
+
+        // Show the re-registration card now that face is registered
+        faceRegistered = true;
+        const reregCard = document.getElementById('faceReregCard');
+        if (reregCard) reregCard.style.display = 'block';
+        const reregBadge = document.getElementById('reregBadge');
+        if (reregBadge) {
+          reregBadge.textContent = 'Face Registered';
+          reregBadge.className = 'badge green';
+        }
       } catch (err) {
         showMsg('regMsg', 'error', 'Error: ' + err.message);
         console.error(err);
         if (captureBtn) captureBtn.disabled = false;
       }
+    }
+
+    // =========================================================================
+    // FACE RE-REGISTRATION (SECURE)
+    // =========================================================================
+    // Flow:
+    //   1. Student clicks "Re-register Face"
+    //   2. Confirmation dialog
+    //   3. Load EXISTING stored face descriptor for auth.currentUser.uid
+    //   4. Camera starts, MediaPipe active liveness runs (reused implementation)
+    //   5. NEW face must match EXISTING stored descriptor (Face-API distance ≤ 0.6)
+    //   6. Liveness must pass
+    //   7. Capture NEW face descriptor from live camera
+    //   8. Validate new descriptor
+    //   9. Save new descriptor — ONLY after all checks pass
+    //  10. Old descriptor is NEVER deleted first — preserved until new one is written
+    // =========================================================================
+
+    let reregSession = null;
+    let reregLoopTimer = null;
+    let isProcessingReregFrame = false;
+    let currentReregToken = 0;
+
+    const FaceReregState = {
+      INITIAL: 'INITIAL',
+      VERIFYING_CURRENT: 'VERIFYING_CURRENT',   // Verifying old face matches stored
+      VERIFYING_CURRENT_LIVENESS: 'VERIFYING_CURRENT_LIVENESS', // Running liveness on current face
+      LIVENESS_PASSED: 'LIVENESS_PASSED',       // Old face verified + liveness passed
+      CAPTURING_NEW: 'CAPTURING_NEW',          // Show "Capture & Save New Face" button
+      COMPLETING: 'COMPLETING'                  // Writing new descriptor
+    };
+
+    async function startReregistration() {
+      if (!auth.currentUser || !auth.currentUser.uid) {
+        showMsg('reregMsg', 'error', 'User is not authenticated. Please sign in again.');
+        return;
+      }
+
+      const confirmed = confirm(
+        'Re-register your face biometrics?\n\nYou must verify your CURRENT registered face ' +
+        'before a new face can be registered. Your existing descriptor will be replaced only ' +
+        'after successful verification.\n\nProceed?'
+      );
+      if (!confirmed) return;
+
+      // Reset UI
+      const startBtn = document.getElementById('startReregBtn');
+      const captureBtn = document.getElementById('captureReregBtn');
+      const scannerWrap = document.getElementById('reregScannerWrap');
+      const canvas = document.getElementById('reregCanvas');
+      if (startBtn) startBtn.disabled = true;
+      if (captureBtn) captureBtn.disabled = true;
+      if (scannerWrap) scannerWrap.style.display = 'block';
+      if (canvas) canvas.style.display = 'block';
+
+      showMsg('reregMsg', 'info', 'Loading biometric models...');
+
+      try {
+        const ok = await loadModels();
+        if (!ok) {
+          showMsg('reregMsg', 'error', 'Face verification models could not be loaded. Please check your internet connection.');
+          if (startBtn) startBtn.disabled = false;
+          return;
+        }
+
+        // 1. Load student profile for auth.currentUser.uid
+        const uid = auth.currentUser.uid;
+        const studentDoc = await db.collection('students').doc(uid).get();
+        if (!studentDoc.exists) {
+          showMsg('reregMsg', 'error', 'Student profile not found.');
+          if (startBtn) startBtn.disabled = false;
+          return;
+        }
+
+        // 2. Check for approved recovery request (skip old-face verification)
+        const studentData = studentDoc.data() || {};
+        const approvedRecoveryDoc = await checkApprovedRecoveryRequest(uid, studentData);
+        const hasApprovedRecovery = !!approvedRecoveryDoc;
+        const recoveryRequestId = approvedRecoveryDoc ? approvedRecoveryDoc.id : null;
+
+        if (!hasApprovedRecovery && !studentData.faceDescriptor) {
+          showMsg('reregMsg', 'error', 'No registered face found. If you have lost access to your biometrics, use the recovery request option below.');
+          if (startBtn) startBtn.disabled = false;
+          return;
+        }
+        const storedDescriptor = studentData.faceDescriptor ? new Float32Array(studentData.faceDescriptor) : null;
+
+        // 3. Open camera
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+        });
+        const video = document.getElementById('reregVideo');
+        video.srcObject = stream;
+
+        // 4. Generate fresh session token
+        const sessionToken = ++currentReregToken;
+        const challengeSequence = generateRandomChallengeSequence(3);
+
+        reregSession = {
+          token: sessionToken,
+          storedDescriptor: storedDescriptor,
+          sequence: challengeSequence,
+          state: hasApprovedRecovery
+            ? FaceReregState.VERIFYING_CURRENT_LIVENESS
+            : FaceReregState.VERIFYING_CURRENT,
+          currentIndex: 0,
+          stepState: 'INIT',
+          stepFrames: 0,
+          heldFrames: 0,
+          baselineSamples: { yaw: [], pitch: [], smile: [], blink: [] },
+          neutralYaw: null,
+          neutralPitch: null,
+          neutralSmile: null,
+          neutralBlink: null,
+          blinkState: 'WAIT_OPEN_1',
+          blinkCount: 0,
+          blinkClosedStart: null,
+          lastBlinkTime: null,
+          openFrames: 0,
+          smoothedBlink: null,
+          smoothedEar: null,
+          smoothedSmile: null,
+          smoothedYaw: null,
+          smoothedPitch: null,
+          completedChallenges: [],
+          faceMatched: false,
+          livenessPassed: false,
+          bestDistance: 1.0,
+          noFaceFrames: 0,
+          multipleFacesFrames: 0,
+          stableFaceCount: 0,
+          challengeStartedAt: 0,
+          challengeDeadline: 0,
+          challengeTimeoutMs: 12000,
+          active: true,
+          lastVideoTimestamp: 0,
+          hasApprovedRecovery: hasApprovedRecovery,
+          recoveryRequestId: recoveryRequestId,
+          newDescriptor: null
+        };
+
+        showMsg('reregMsg', hasApprovedRecovery
+          ? '✓ Recovery approved. Starting liveness verification for new face capture...'
+          : 'Camera active. Verify your current registered face to begin re-registration.');
+
+        const liveDot = document.getElementById('reregLiveDot');
+        if (liveDot) liveDot.className = 'status-chip-dot active';
+        const liveText = document.getElementById('reregLiveText');
+        if (liveText) liveText.textContent = hasApprovedRecovery
+          ? 'Recovery: Liveness Active'
+          : 'Verifying Current Face';
+
+        if (scannerWrap) scannerWrap.classList.add('is-scanning');
+
+        await waitForVideoReady(video, sessionToken);
+        if (sessionToken !== currentReregToken || !reregSession?.active) return;
+
+        scheduleNextReregFrame(60);
+      } catch (err) {
+        showMsg('reregMsg', 'error', 'Camera access error: ' + err.message);
+        if (startBtn) startBtn.disabled = false;
+        stopReregVideoStream();
+      }
+    }
+
+    async function checkApprovedRecoveryRequest(uid, studentDocData = null) {
+      try {
+        const snap = await db.collection('faceReRegistrationRequests')
+          .where('studentUid', '==', uid)
+          .where('status', '==', 'approved')
+          .get();
+        if (snap.empty) return null;
+
+        let lastReregTime = 0;
+        if (studentDocData?.lastReregistrationAt?.toMillis) {
+          lastReregTime = studentDocData.lastReregistrationAt.toMillis();
+        } else {
+          const sDoc = await db.collection('students').doc(uid).get().catch(() => null);
+          const lr = sDoc?.data()?.lastReregistrationAt;
+          if (lr?.toMillis) lastReregTime = lr.toMillis();
+        }
+
+        for (const doc of snap.docs) {
+          const data = doc.data();
+          const approvedTime = (data.serverApprovedAt?.toMillis ? data.serverApprovedAt.toMillis() : null) ||
+                               (data.reviewedAt?.toMillis ? data.reviewedAt.toMillis() : null) ||
+                               (data.createdAt?.toMillis ? data.createdAt.toMillis() : 0);
+          if (approvedTime > lastReregTime) {
+            return doc;
+          }
+        }
+        return null;
+      } catch (e) {
+        console.warn('[Rereg] Recovery request check error:', e);
+        return null;
+      }
+    }
+
+    function stopReregVideoStream() {
+      if (!reregSession) return;
+      currentReregToken++;
+      if (reregLoopTimer) {
+        clearTimeout(reregLoopTimer);
+        reregLoopTimer = null;
+      }
+      if (reregSession) {
+        reregSession.active = false;
+      }
+      isProcessingReregFrame = false;
+
+      const video = document.getElementById('reregVideo');
+      if (video && video.srcObject) {
+        const stream = video.srcObject;
+        if (stream && stream.getTracks) {
+          stream.getTracks().forEach(track => { try { track.stop(); } catch (e) {} });
+        }
+        video.srcObject = null;
+      }
+      const wrap = document.getElementById('reregScannerWrap');
+      if (wrap) wrap.classList.remove('is-scanning');
+    }
+
+    function scheduleNextReregFrame(delayMs = 60) {
+      if (!reregSession || !reregSession.active) return;
+      if (reregLoopTimer) clearTimeout(reregLoopTimer);
+      reregLoopTimer = setTimeout(processReregFrame, delayMs);
+    }
+
+    async function processReregFrame() {
+      const session = reregSession;
+      if (!session || !session.active || session.token !== currentReregToken) return;
+      if (isProcessingReregFrame) {
+        scheduleNextReregFrame(30);
+        return;
+      }
+
+      isProcessingReregFrame = true;
+      try {
+        const video = document.getElementById('reregVideo');
+        if (!video || video.readyState < 2 || video.videoWidth === 0) {
+          isProcessingLivenessFrame = false;
+          scheduleNextReregFrame(60);
+          return;
+        }
+
+        const canvas = document.getElementById('reregCanvas');
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+          canvas.width = video.videoWidth || 640;
+          canvas.height = video.videoHeight || 480;
+        }
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        if (!faceLandmarkerInstance) {
+          await initializeFaceLandmarker();
+        }
+
+        let frameTimestamp = performance.now();
+        if (frameTimestamp <= (session.lastVideoTimestamp || 0)) {
+          frameTimestamp = (session.lastVideoTimestamp || 0) + 1;
+        }
+        session.lastVideoTimestamp = frameTimestamp;
+
+        const mpResults = faceLandmarkerInstance.detectForVideo(video, frameTimestamp);
+
+        if (!session.active || session.token !== currentReregToken) {
+          isProcessingReregFrame = false;
+          return;
+        }
+
+        const numDetected = (mpResults.faceLandmarks || []).length;
+
+        // CASE 0 FACES
+        if (numDetected === 0) {
+          session.noFaceFrames = (session.noFaceFrames || 0) + 1;
+          session.stableFaceCount = 0;
+
+          if (session.state === FaceReregState.VERIFYING_CURRENT ||
+              session.state === FaceReregState.VERIFYING_CURRENT_LIVENESS) {
+            updateReregHUDStatus('NO_FACE', 'Face not detected — position face in frame', 0);
+          } else if (session.state === FaceReregState.CAPTURING_NEW) {
+            updateReregHUDStatus('NO_FACE', 'Face lost. Please look at the camera.', 0);
+          }
+
+          isProcessingReregFrame = false;
+          scheduleNextReregFrame(80);
+          return;
+        }
+
+        // CASE 2+ FACES
+        if (numDetected > 1) {
+          session.multipleFacesFrames = (session.multipleFacesFrames || 0) + 1;
+          session.stableFaceCount = 0;
+          updateReregHUDStatus('MULTIPLE_FACES', 'Only one person should be visible', numDetected);
+          isProcessingReregFrame = false;
+          scheduleNextReregFrame(80);
+          return;
+        }
+
+        // EXACTLY 1 FACE
+        session.noFaceFrames = 0;
+        session.multipleFacesFrames = 0;
+
+        const landmarks = mpResults.faceLandmarks[0];
+        const blendshapes = (mpResults.faceBlendshapes && mpResults.faceBlendshapes[0]) ? mpResults.faceBlendshapes[0] : null;
+        const blendshapesMap = extractBlendshapeScores(blendshapes);
+        const matrix = (mpResults.facialTransformationMatrixes && mpResults.facialTransformationMatrixes[0]) ? mpResults.facialTransformationMatrixes[0] : null;
+
+        const currentYaw = computeFacialYaw(landmarks, matrix);
+        const currentPitch = computeFacialPitch(landmarks, matrix);
+        const currentSmile = ((blendshapesMap['mouthSmileLeft'] || 0) + (blendshapesMap['mouthSmileRight'] || 0)) / 2;
+        const currentBlink = ((blendshapesMap['eyeBlinkLeft'] || 0) + (blendshapesMap['eyeBlinkRight'] || 0)) / 2;
+
+        // Face size validation
+        const faceHeight = Math.abs(landmarks[152].y - landmarks[10].y);
+        if (faceHeight < 0.16) {
+          session.stableFaceCount = 0;
+          updateReregHUDStatus('TOO_SMALL', 'Move closer to the camera.', 1);
+          isProcessingReregFrame = false;
+          scheduleNextReregFrame(80);
+          return;
+        }
+
+        // =====================================================================
+        // STATE: VERIFYING_CURRENT — Face search for initial verification
+        // =====================================================================
+        if (session.state === FaceReregState.VERIFYING_CURRENT) {
+          session.stableFaceCount = (session.stableFaceCount || 0) + 1;
+          updateReregHUDStatus('FACE_DETECTING', `Face detected — hold still (${session.stableFaceCount}/3)...`, 1);
+
+          if (session.stableFaceCount >= 3) {
+            // Transition to baseline calibration
+            session.state = FaceReregState.VERIFYING_CURRENT_LIVENESS;
+            session.baselineSamples = { yaw: [], pitch: [], smile: [], blink: [] };
+            updateReregHUDStatus('FACE_DETECTED', 'Establishing neutral baseline... Hold still.', 1);
+          }
+
+          isProcessingReregFrame = false;
+          scheduleNextReregFrame(70);
+          return;
+        }
+
+        // =====================================================================
+        // STATE: VERIFYING_CURRENT_LIVENESS — Baseline + Liveness (same as attendance)
+        // =====================================================================
+        if (session.state === FaceReregState.VERIFYING_CURRENT_LIVENESS) {
+          if (session.baselineSamples.yaw.length < BASELINE_CONFIG.REQUIRED_FRAMES) {
+            // Collecting baseline
+            session.baselineSamples.yaw.push(currentYaw);
+            session.baselineSamples.pitch.push(currentPitch);
+            session.baselineSamples.smile.push(currentSmile);
+            session.baselineSamples.blink.push(currentBlink);
+
+            const count = session.baselineSamples.yaw.length;
+            updateReregHUDStatus('FACE_DETECTED', `Calibrating baseline (${count}/${BASELINE_CONFIG.REQUIRED_FRAMES})...`, 1);
+
+            if (count >= BASELINE_CONFIG.REQUIRED_FRAMES) {
+              session.neutralYaw = median(session.baselineSamples.yaw);
+              session.neutralPitch = median(session.baselineSamples.pitch);
+              session.neutralSmile = median(session.baselineSamples.smile);
+              session.neutralBlink = median(session.baselineSamples.blink);
+
+              session.state = FaceReregState.VERIFYING_CURRENT_LIVENESS;
+              session.currentIndex = 0;
+              resetChallengeState(session, session.sequence[0]);
+              session.challengeStartedAt = Date.now();
+              session.challengeDeadline = session.challengeStartedAt + session.challengeTimeoutMs;
+
+              const firstChallenge = LIVENESS_CHALLENGES[session.sequence[0]];
+              updateChallengePromptUI(firstChallenge, 1, session.sequence.length);
+              updateReregBannerUI(firstChallenge.shortPrompt);
+              showMsg('reregMsg', 'info', `Verify your current face — Challenge 1: ${firstChallenge.shortPrompt}.`);
+            }
+
+            isProcessingReregFrame = false;
+            scheduleNextReregFrame(60);
+            return;
+          }
+
+          // Liveness challenge evaluation (reuses the existing challenge runner)
+          const currentChallengeId = session.sequence[session.currentIndex];
+          const challengePassed = evaluateChallengeStep(
+            currentChallengeId, landmarks, blendshapesMap, matrix, session, frameTimestamp
+          );
+
+          // Also compare face identity against stored descriptor
+          if (!session.faceMatched && session.stableFaceCount >= 3) {
+            try {
+              const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.35 });
+              const detections = await faceapi.detectAllFaces(canvas, detectorOptions).withFaceLandmarks().withFaceDescriptors();
+              if (detections && detections.length === 1) {
+                const distance = faceapi.euclideanDistance(detections[0].descriptor, session.storedDescriptor);
+                if (distance < session.bestDistance) {
+                  session.bestDistance = distance;
+                }
+                if (distance <= faceDistanceThreshold) {
+                  session.faceMatched = true;
+                  updateReregFaceDot('active', 'Face: Matched');
+                }
+              }
+            } catch (recogErr) {
+              console.warn('[Rereg] Face identity check error:', recogErr);
+            }
+          }
+
+          if (challengePassed) {
+            session.completedChallenges.push(currentChallengeId);
+            session.currentIndex++;
+
+            if (session.currentIndex >= session.sequence.length) {
+              // Liveness complete
+              if (session.faceMatched) {
+                session.livenessPassed = true;
+                session.state = FaceReregState.LIVENESS_PASSED;
+
+                const liveText = document.getElementById('reregLiveText');
+                if (liveText) liveText.textContent = 'Liveness: Passed';
+
+                showMsg('reregMsg', 'success', '✓ Current face verified and liveness passed. Now look at the camera to capture your new face.');
+                enableCaptureNewBtn();
+              } else {
+                // Liveness passed but face didn't match stored descriptor
+                const matchPct = Math.max(0, Math.round((1 - session.bestDistance) * 100));
+                showMsg('reregMsg', 'error', `Current face does not match your registered face (${matchPct}% confidence match). If you cannot verify your current face, use the recovery request option.`);
+                stopReregVideoStream();
+                resetReregUI();
+              }
+              return;
+            } else {
+              // Advance to next challenge
+              const nextChallengeId = session.sequence[session.currentIndex];
+              resetChallengeState(session, nextChallengeId);
+              session.challengeStartedAt = Date.now();
+              session.challengeDeadline = session.challengeStartedAt + session.challengeTimeoutMs;
+
+              const nextChallenge = LIVENESS_CHALLENGES[nextChallengeId];
+              updateChallengePromptUI(nextChallenge, session.currentIndex + 1, session.sequence.length);
+              updateReregBannerUI(nextChallenge.shortPrompt);
+
+              showMsg('reregMsg', 'info', `Challenge ${session.currentIndex + 1} of ${session.sequence.length}: ${nextChallenge.shortPrompt}`);
+            }
+          }
+
+          // Timer / timeout handling
+          const remainingMs = session.challengeDeadline ? Math.max(0, session.challengeDeadline - Date.now()) : session.challengeTimeoutMs;
+          if (remainingMs <= 0) {
+            handleReregLivenessFailure('Liveness timed out. Please try again.');
+            return;
+          }
+
+          isProcessingReregFrame = false;
+          scheduleNextReregFrame(60);
+          return;
+        }
+
+        // =====================================================================
+        // STATE: LIVENESS_PASSED → waiting for user to click "Capture & Save New Face"
+        // =====================================================================
+        if (session.state === FaceReregState.LIVENESS_PASSED) {
+          // Check face presence — face should be present for capture
+          session.stableFaceCount = (session.stableFaceCount || 0) + 1;
+          updateReregHUDStatus('FACE_DETECTED', 'Position your new face in the camera frame.', 1);
+          isProcessingReregFrame = false;
+          scheduleNextReregFrame(100);
+          return;
+        }
+      } catch (err) {
+        console.error('[Rereg] Liveness frame error:', err);
+      } finally {
+        isProcessingReregFrame = false;
+      }
+
+      scheduleNextReregFrame(60);
+    }
+
+    function updateReregHUDStatus(type, message, personCount) {
+      const banner = document.getElementById('reregLiveText');
+      if (banner && message) banner.textContent = message;
+      const faceDot = document.getElementById('reregFaceDot');
+      const faceText = document.getElementById('reregFaceText');
+      if (personCount !== undefined && faceDot && faceText) {
+        if (personCount === 1) {
+          faceDot.className = 'status-chip-dot active';
+          faceText.textContent = 'Face: Detected';
+        } else if (personCount > 1) {
+          faceDot.className = 'status-chip-dot error';
+          faceText.textContent = `Face: Multiple`;
+        } else {
+          faceDot.className = 'status-chip-dot warning';
+          faceText.textContent = 'Face: Not Detected';
+        }
+      }
+    }
+
+    function updateReregBannerUI(text) {
+      const banner = document.getElementById('hudLivenessBanner');
+      if (banner) {
+        banner.style.display = 'inline-flex';
+        banner.className = 'hud-liveness-banner';
+      }
+      const bannerIcon = document.getElementById('hudLivenessIcon');
+      if (bannerIcon) bannerIcon.textContent = '📷';
+      const bannerText = document.getElementById('hudLivenessText');
+      if (bannerText) bannerText.textContent = text;
+    }
+
+    function updateReregFaceDot(className, text) {
+      const dot = document.getElementById('reregFaceDot');
+      const txt = document.getElementById('reregFaceText');
+      if (dot) dot.className = `status-chip-dot ${className}`;
+      if (txt) txt.textContent = text;
+    }
+
+    function enableCaptureNewBtn() {
+      const captureBtn = document.getElementById('captureReregBtn');
+      if (captureBtn) {
+        captureBtn.disabled = false;
+        captureBtn.classList.add('btn-primary-pulse');
+      }
+    }
+
+    function handleReregLivenessFailure(reason) {
+      stopReregVideoStream();
+      showMsg('reregMsg', 'error', reason || 'Re-registration verification failed.');
+      resetReregUI();
+    }
+
+    function resetReregUI() {
+      const startBtn = document.getElementById('startReregBtn');
+      const captureBtn = document.getElementById('captureReregBtn');
+      const wrap = document.getElementById('reregScannerWrap');
+      const canvas = document.getElementById('reregCanvas');
+
+      if (startBtn) {
+        startBtn.style.display = 'inline-flex';
+        startBtn.disabled = false;
+      }
+      if (captureBtn) {
+        captureBtn.disabled = true;
+        captureBtn.classList.remove('btn-primary-pulse');
+      }
+      if (wrap) wrap.style.display = 'none';
+      if (canvas) canvas.style.display = 'none';
+
+      const liveDot = document.getElementById('reregLiveDot');
+      if (liveDot) liveDot.className = 'status-chip-dot';
+      const liveText = document.getElementById('reregLiveText');
+      if (liveText) liveText.textContent = 'Liveness: Standby';
+      const faceDot = document.getElementById('reregFaceDot');
+      if (faceDot) faceDot.className = 'status-chip-dot';
+      const faceText = document.getElementById('reregFaceText');
+      if (faceText) faceText.textContent = 'Face: Standby';
+    }
+
+    async function captureNewFace() {
+      const captureBtn = document.getElementById('captureReregBtn');
+      const video = document.getElementById('reregVideo');
+      const canvas = document.getElementById('reregCanvas');
+      if (captureBtn) captureBtn.disabled = true;
+      if (!reregSession || !reregSession.active || !reregSession.livenessPassed) return;
+
+      reregSession.state = FaceReregState.CAPTURING_NEW;
+      showMsg('reregMsg', 'info', 'Capturing new face descriptor...');
+
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      try {
+        const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.35 }))
+          .withFaceLandmarks()
+          .withFaceDescriptors();
+
+        if (!detections || detections.length === 0) {
+          showMsg('reregMsg', 'error', 'Face not detected. Please position your face clearly in the camera frame.');
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
+
+        if (detections.length > 1) {
+          showMsg('reregMsg', 'error', 'Multiple faces detected. Only one person should be in the camera frame.');
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
+
+        const newDescriptor = Array.from(detections[0].descriptor);
+        const uid = auth.currentUser.uid;
+
+        // 10. Rate limiting check — server-enforced cooldown
+        const studentDoc = await db.collection('students').doc(uid).get();
+        const lastRereg = studentDoc.data()?.lastReregistrationAt;
+        if (lastRereg && lastRereg.toDate) {
+          const elapsed = Date.now() - lastRereg.toDate().getTime();
+          const cooldownMs = 24 * 60 * 60 * 1000; // 24 hours
+          if (elapsed < cooldownMs) {
+            const remaining = Math.ceil((cooldownMs - elapsed) / (60 * 60 * 1000));
+            showMsg('reregMsg', 'error', `Rate limit: You must wait ${remaining} more hour(s) before re-registering again.`);
+            stopReregVideoStream();
+            resetReregUI();
+            return;
+          }
+        }
+
+        // 11. Save new descriptor and audit metadata
+        // OLD descriptor is preserved in memory until this write succeeds
+        const method = reregSession.hasApprovedRecovery ? 'approved_recovery' : 'normal_reregistration';
+        const auditEntry = {
+          timestamp: firebase.firestore.Timestamp.now(),
+          method: method,
+          faceDistance: reregSession.bestDistance || 0,
+          challengesCompleted: [...reregSession.completedChallenges],
+          recoveryRequestId: reregSession.hasApprovedRecovery ? (reregSession.recoveryRequestId || null) : null
+        };
+
+        await db.collection('students').doc(uid).update({
+          faceDescriptor: newDescriptor,
+          faceRegistered: true,
+          lastReregistrationAt: firebase.firestore.FieldValue.serverTimestamp(),
+          reregistrationAudit: firebase.firestore.FieldValue.arrayUnion(auditEntry)
+        });
+
+        reregSession.state = FaceReregState.COMPLETING;
+        showMsg('reregMsg', 'success', '✓ Face re-registered successfully! Your new face is now used for attendance.');
+
+        stopReregVideoStream();
+        resetReregUI();
+
+        // Update UI badges
+        const reregBadge = document.getElementById('reregBadge');
+        if (reregBadge) {
+          reregBadge.textContent = 'Face Registered';
+          reregBadge.className = 'badge green';
+        }
+        faceRegistered = true;
+        localStorage.setItem('faceRegistered', 'true');
+
+        // Close recovery modal if open
+        const recoveryModal = document.getElementById('recoveryModal');
+        if (recoveryModal) recoveryModal.style.display = 'none';
+
+      } catch (err) {
+        console.error('[Rereg] Capture/save error:', err);
+        showMsg('reregMsg', 'error', 'Failed to save new face: ' + err.message + '. Your existing face registration has been preserved.');
+        stopReregVideoStream();
+        resetReregUI();
+      }
+    }
+
+    // =========================================================================
+    // RECOVERY REQUEST FLOW
+    // =========================================================================
+
+    async function openRecoveryRequestModal() {
+      if (!auth.currentUser || !auth.currentUser.uid) {
+        alert('Authentication required.');
+        return;
+      }
+
+      const uid = auth.currentUser.uid;
+
+      // Check if there's already a pending request
+      try {
+        const pendingSnap = await db.collection('faceReRegistrationRequests')
+          .where('studentUid', '==', uid)
+          .where('status', '==', 'pending')
+          .limit(1)
+          .get();
+        if (!pendingSnap.empty) {
+          alert('You already have a pending face re-registration request. Please wait for Faculty/Admin review.');
+          return;
+        }
+
+        // Check if there's an active (unconsumed) approved request already
+        const activeApprovedDoc = await checkApprovedRecoveryRequest(uid);
+        if (activeApprovedDoc) {
+          alert('You have an approved recovery request. Please use "Re-register Face" to proceed with verification.');
+          return;
+        }
+      } catch (e) {
+        console.error('[Recovery] Check error:', e);
+      }
+
+      const modal = document.getElementById('recoveryModal');
+      if (modal) modal.style.display = 'flex';
+
+      const reasonInput = document.getElementById('recoveryReason');
+      if (reasonInput) reasonInput.value = '';
+
+      const charCount = document.getElementById('recoveryCharCount');
+      if (charCount) charCount.textContent = '0 / 500';
+
+      const msgEl = document.getElementById('recoveryModalMsg');
+      if (msgEl) {
+        msgEl.style.display = 'none';
+        msgEl.textContent = '';
+      }
+    }
+
+    function closeRecoveryModal() {
+      const modal = document.getElementById('recoveryModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function closeRecoveryModalOnBackdrop(e) {
+      if (e.target.id === 'recoveryModal') closeRecoveryModal();
+    }
+
+    function updateRecoveryCharCount() {
+      const reasonInput = document.getElementById('recoveryReason');
+      const countEl = document.getElementById('recoveryCharCount');
+      if (reasonInput && countEl) {
+        const len = reasonInput.value.length;
+        countEl.textContent = `${len} / 500`;
+        if (len >= 480) {
+          countEl.style.color = '#ef4444';
+        } else {
+          countEl.style.color = 'var(--text-muted)';
+        }
+      }
+    }
+
+    async function submitRecoveryRequest(e) {
+      if (e) e.preventDefault();
+      const reasonInput = document.getElementById('recoveryReason');
+      const submitBtn = document.getElementById('submitRecoveryBtn');
+      const msgEl = document.getElementById('recoveryModalMsg');
+
+      const reason = (reasonInput?.value || '').trim();
+      if (!reason) {
+        showRecoveryMsg('error', 'Reason is required.');
+        return;
+      }
+      if (reason.length > 500) {
+        showRecoveryMsg('error', 'Reason must be at most 500 characters.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      showRecoveryMsg('info', 'Submitting recovery request...');
+
+      try {
+        const uid = auth.currentUser.uid;
+        const reqDocId = `${uid}_${Date.now()}`;
+
+        // Determine subject/faculty routing from ALL enrolled subjects (not arbitrary first)
+        const enrolledSubjects = Array.isArray(studentSubjectDocs) ? studentSubjectDocs : [];
+        const subjectIds = enrolledSubjects.map(s => s.id || '').filter(Boolean);
+        const needsAdminReview = subjectIds.length === 0;
+
+        // Primary routing fields: use first enrolled subject's faculty if available
+        let requestSubjectId = '';
+        let requestFacultyUid = '';
+        let requestFacultyId = '';
+        if (enrolledSubjects.length > 0) {
+          const primary = enrolledSubjects[0];
+          requestSubjectId = primary.id || '';
+          requestFacultyUid = primary.facultyUid || primary.facultyId || '';
+          requestFacultyId = primary.facultyId || '';
+        }
+
+        const newRequest = {
+          studentUid: uid,
+          studentName: studentName || 'Student',
+          studentUsn: studentUsn,
+          studentDept: studentDept,
+          studentSemester: parseInt(studentSemester, 10) || 1,
+          studentSection: studentSection || 'A',
+          subjectId: requestSubjectId,
+          facultyUid: requestFacultyUid,
+          facultyId: requestFacultyId,
+          subjectIds,
+          needsAdminReview,
+          reason: reason,
+          status: 'pending',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection('faceReRegistrationRequests').doc(reqDocId).set(newRequest);
+        showRecoveryMsg('success', needsAdminReview
+          ? '✓ Recovery request submitted. Admin review required — no faculty assigned to your subjects yet.'
+          : '✓ Recovery request submitted. Faculty/Admin will review and approve before you can re-register.');
+
+        setTimeout(() => {
+          closeRecoveryModal();
+        }, 1500);
+
+      } catch (err) {
+        console.error('[Recovery] Submit error:', err);
+        showRecoveryMsg('error', 'Failed to submit request: ' + err.message);
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Request';
+        }
+      }
+    }
+
+    function showRecoveryMsg(type, text) {
+      const msgEl = document.getElementById('recoveryModalMsg');
+      if (!msgEl) return;
+      msgEl.textContent = text;
+      msgEl.className = 'msg ' + type;
+      msgEl.style.display = 'block';
     }
 
     // =========================================================================
@@ -2537,7 +3479,12 @@
         }
 
         // 3. Stored biometric descriptor verification
-        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : null;
+        if (!currentAuthUid) {
+          showMsg('attMsg', 'error', 'User is not authenticated. Please sign in again.');
+          if (startBtn) startBtn.disabled = false;
+          return;
+        }
         const studentDoc = await db.collection('students').doc(currentAuthUid).get();
         if (!studentDoc.exists || !studentDoc.data().faceDescriptor) {
           showMsg('attMsg', 'error', 'Please complete Face Biometrics Enrollment first.');
@@ -3093,7 +4040,7 @@
           date: null
         },
         enrollment: {
-          studentUid: currentAuthUser?.uid || studentUid || null,
+          studentUid: currentAuthUser?.uid || null,
           subjectExists: null,
           subjectFacultyUid: null,
           subjectFacultyId: null,
@@ -3370,8 +4317,8 @@
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB');
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
-      
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : null;
+
       const subjectObj = studentSubjectDocs.find(s => s.id === subjectId);
       const subName = session?.subjectName || subjectObj?.subjectName || studentSubjectsMap[subjectId] || 'Course Subject';
       const subCode = session?.subjectCode || subjectObj?.subjectCode || '';
@@ -3379,7 +4326,7 @@
       const attendanceDocId = `${sessionId}_${currentAuthUid}`;
       attendanceDebug.attendanceId = {
         attendanceDocId,
-        expectedFormat: '${sessionId}_${studentUid}'
+        expectedFormat: '${sessionId}_${currentAuthUid}'
       };
       attendanceDebug.write.documentId = attendanceDocId;
 
@@ -3459,7 +4406,7 @@
         }
 
         const attendancePayload = {
-          studentId: studentId || currentAuthUid,
+          studentId: currentAuthUid,
           studentUid: currentAuthUid,
           studentName: studentName || 'Student',
           studentUsn: (studentUsn || '').toUpperCase(),
@@ -3636,8 +4583,8 @@
       const reqCountEl = document.getElementById('myRequestsCount');
 
       try {
-        const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
-        if (!authUid) return;
+        if (!auth.currentUser) return;
+        const authUid = auth.currentUser.uid;
 
         const queries = [
           db.collection('attendanceCorrectionRequests')
@@ -3882,7 +4829,7 @@
         return;
       }
 
-      const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+      const authUid = auth.currentUser ? auth.currentUser.uid : null;
 
       // Duplicate check: verified attendance
       if (attendanceRecordsBySessionId[session.id]) {
@@ -4012,7 +4959,7 @@
       showCorrectionModalMsg('info', 'Submitting attendance correction request...');
 
       try {
-        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : studentUid;
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : null;
         if (!currentAuthUid) {
           throw new Error('You must be signed in to submit a request.');
         }
@@ -4042,7 +4989,7 @@
         const facultyName = selectedCorrectionSession.facultyName || subjectObj?.facultyName || 'Faculty';
 
         const newRequest = {
-          studentId: studentId || currentAuthUid,
+          studentId: currentAuthUid,
           studentUid: currentAuthUid,
           studentName: studentName,
           studentUsn: studentUsn,
@@ -4118,8 +5065,8 @@
     async function loadMyAttendance() {
       const tbody = document.getElementById('recordsTable');
       try {
-        const authUid = auth.currentUser ? auth.currentUser.uid : studentUid;
-        if (!authUid) return;
+        if (!auth.currentUser) return;
+        const authUid = auth.currentUser.uid;
 
         const queries = [
           db.collection('attendance').where('studentUid', '==', authUid).get().catch(() => null)
@@ -4261,6 +5208,7 @@
       }
       stopVideoStream(document.getElementById('attVideo'));
       stopVideoStream(document.getElementById('regVideo'));
+      stopReregVideoStream();
       try {
         await auth.signOut();
       } catch (e) {
@@ -4277,10 +5225,40 @@
       }
       stopVideoStream(document.getElementById('attVideo'));
       stopVideoStream(document.getElementById('regVideo'));
+      stopReregVideoStream();
     }
 
     window.addEventListener('pagehide', handlePageTeardown);
     window.addEventListener('beforeunload', handlePageTeardown);
+
+    function toggleMobileNav() {
+      const header = document.querySelector('.app-header');
+      const btn = document.querySelector('.nav-toggle-btn');
+      if (!header || !btn) return;
+      const isOpen = header.classList.toggle('nav-open');
+      btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+
+    document.addEventListener('click', function(e) {
+      const header = document.querySelector('.app-header');
+      if (!header || !header.classList.contains('nav-open')) return;
+      if (!header.contains(e.target)) {
+        header.classList.remove('nav-open');
+        const btn = document.querySelector('.nav-toggle-btn');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const header = document.querySelector('.app-header');
+        if (header && header.classList.contains('nav-open')) {
+          header.classList.remove('nav-open');
+          const btn = document.querySelector('.nav-toggle-btn');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+      }
+    });
   </script>
 </body>
 </html>

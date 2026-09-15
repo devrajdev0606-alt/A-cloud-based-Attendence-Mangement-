@@ -103,6 +103,7 @@
               <div class="input-wrap" style="margin-bottom: 0;">
                 <span class="input-icon">🔒</span>
                 <input type="password" id="password" placeholder="Min 6 chars" required minlength="6" autocomplete="new-password" />
+                <button type="button" class="pass-toggle-btn" onclick="togglePasswordVisibility('password', this)" aria-label="Toggle password visibility" title="Show/Hide password">👁️</button>
               </div>
             </div>
             <div>
@@ -110,6 +111,7 @@
               <div class="input-wrap" style="margin-bottom: 0;">
                 <span class="input-icon">🔒</span>
                 <input type="password" id="confirmPassword" placeholder="Repeat pass" required minlength="6" autocomplete="new-password" />
+                <button type="button" class="pass-toggle-btn" onclick="togglePasswordVisibility('confirmPassword', this)" aria-label="Toggle password visibility" title="Show/Hide password">👁️</button>
               </div>
             </div>
           </div>
@@ -353,6 +355,17 @@
         submitBtn.textContent = 'Create Student Account';
       }
     });
+
+    function togglePasswordVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      const isPass = input.type === 'password';
+      input.type = isPass ? 'text' : 'password';
+      if (btn) {
+        btn.innerHTML = isPass ? '🙈' : '👁️';
+        btn.setAttribute('aria-label', isPass ? 'Hide password' : 'Show password');
+      }
+    }
   </script>
 </body>
 </html>

@@ -48,10 +48,11 @@
             <input type="text" id="studentEmail" placeholder="Student ID or Email" required autocomplete="username" />
           </label>
 
-          <label class="input-wrap">
+          <div class="input-wrap">
             <span class="input-icon">🔒</span>
             <input type="password" id="studentPassword" placeholder="Password" required autocomplete="current-password" />
-          </label>
+            <button type="button" class="pass-toggle-btn" onclick="togglePasswordVisibility('studentPassword', this)" aria-label="Toggle password visibility" title="Show/Hide password">👁️</button>
+          </div>
 
           <a href="reset-password.html" class="forgot">Forgot Password?</a>
           <button type="button" id="studentLoginBtn" class="btn btn-student" onclick="loginStudent()">LOGIN AS STUDENT</button>
@@ -73,10 +74,11 @@
             <input type="email" id="facultyEmail" placeholder="Teacher Institutional Email" required autocomplete="username" />
           </label>
 
-          <label class="input-wrap">
+          <div class="input-wrap">
             <span class="input-icon">🔒</span>
             <input type="password" id="facultyPassword" placeholder="Password" required autocomplete="current-password" />
-          </label>
+            <button type="button" class="pass-toggle-btn" onclick="togglePasswordVisibility('facultyPassword', this)" aria-label="Toggle password visibility" title="Show/Hide password">👁️</button>
+          </div>
 
           <a href="#" class="forgot" onclick="alert('Please contact your system administrator to reset your faculty credentials.'); return false;">Forgot Password?</a>
           <button type="button" id="facultyLoginBtn" class="btn btn-teacher" onclick="loginFaculty()">LOGIN AS TEACHER</button>
@@ -323,11 +325,15 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    if (localStorage.getItem('studentId')) {
-      window.location.replace('dashboard.html');
-    } else if (localStorage.getItem('facultyId')) {
-      window.location.replace('faculty_dashboard.html');
-    }
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        if (localStorage.getItem('studentId')) {
+          window.location.replace('dashboard.html');
+        } else if (localStorage.getItem('facultyId')) {
+          window.location.replace('faculty_dashboard.html');
+        }
+      }
+    });
 
     let cachedDeptOptionsHtml = null;
 
@@ -1058,6 +1064,17 @@
 
     // Pre-fetch departments
     loadDepartmentOptionsForRegistration();
+
+    function togglePasswordVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      const isPass = input.type === 'password';
+      input.type = isPass ? 'text' : 'password';
+      if (btn) {
+        btn.innerHTML = isPass ? '🙈' : '👁️';
+        btn.setAttribute('aria-label', isPass ? 'Hide password' : 'Show password');
+      }
+    }
   </script>
 </body>
 </html>
