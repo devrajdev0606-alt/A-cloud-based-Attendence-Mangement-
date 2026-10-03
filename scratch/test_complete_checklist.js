@@ -63,15 +63,26 @@ async function runChecklistTests() {
   // Setup Firebase credentials
   const credPath = path.join(os.homedir(), '.config', 'configstore', 'firebase-tools.json');
   const credData = JSON.parse(fs.readFileSync(credPath, 'utf8'));
+  const refreshToken = credData.tokens?.refresh_token;
   const token = credData.tokens?.access_token;
-  const authClient = new OAuth2Client();
-  authClient.setCredentials({ access_token: token });
+  const FIREBASE_CLI_CLIENT_ID = '563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com';
+  const FIREBASE_CLI_CLIENT_SECRET = 'j9iVZfS8kkCEFUPaAeJV0sAi';
+
+  const authClient = new OAuth2Client(FIREBASE_CLI_CLIENT_ID, FIREBASE_CLI_CLIENT_SECRET);
+  if (refreshToken) {
+    authClient.setCredentials({ refresh_token: refreshToken });
+  } else {
+    authClient.setCredentials({ access_token: token });
+  }
 
   if (!admin.apps.length) {
     admin.initializeApp({
       projectId: PROJECT_ID,
       credential: {
-        getAccessToken: () => Promise.resolve({ access_token: token, expires_in: 3600 })
+        getAccessToken: async () => {
+          const res = await authClient.getAccessToken();
+          return { access_token: res.token || token, expires_in: 3600 };
+        }
       }
     });
   }
@@ -95,13 +106,14 @@ async function runChecklistTests() {
     // 1. Import ONE valid student
     // ----------------------------------------------------
     const ts1 = Date.now();
+    const randSuffix = Math.floor(Math.random() * 900 + 100);
     const student1 = {
       name: 'Ananya Sharma',
-      usn: '1CD23CS' + String(ts1).slice(-3),
+      usn: '1CD23CS' + String(ts1).slice(-4) + randSuffix,
       sem: '5',
       sec: 'A',
       dept: 'CSE',
-      email: `ananya.${ts1}@cit.edu`
+      email: `ananya.${ts1}.${randSuffix}@cit.edu`
     };
 
     console.log(`\n--- Test 1: Import ONE Valid Student (${student1.email}) ---`);
@@ -122,11 +134,11 @@ async function runChecklistTests() {
     // ----------------------------------------------------
     // 2. Import MULTIPLE valid students (3 students in batch)
     // ----------------------------------------------------
-    const ts2 = Date.now() + 100;
+    const ts2 = Date.now() + 500;
     const batchStudents = [
-      { name: 'Karthik Raja', usn: '1CD23CS' + String(ts2).slice(-3), sem: '5', sec: 'B', dept: 'CSE', email: `karthik.${ts2}@cit.edu` },
-      { name: 'Pooja Hegde', usn: '1CD23IS' + String(ts2 + 1).slice(-3), sem: '3', sec: 'A', dept: 'ISE', email: `pooja.${ts2}@cit.edu` },
-      { name: 'Sameer Khan', usn: '1CD23CS' + String(ts2 + 2).slice(-3), sem: '7', sec: 'A', dept: 'CSE', email: `sameer.${ts2}@cit.edu` }
+      { name: 'Karthik Raja', usn: '1CD23CS' + String(ts2).slice(-4) + '11', sem: '5', sec: 'B', dept: 'CSE', email: `karthik.${ts2}.11@cit.edu` },
+      { name: 'Pooja Hegde', usn: '1CD23IS' + String(ts2 + 1).slice(-4) + '22', sem: '3', sec: 'A', dept: 'ISE', email: `pooja.${ts2}.22@cit.edu` },
+      { name: 'Sameer Khan', usn: '1CD23CS' + String(ts2 + 2).slice(-4) + '33', sem: '7', sec: 'A', dept: 'CSE', email: `sameer.${ts2}.33@cit.edu` }
     ];
 
     console.log(`\n--- Test 2: Import MULTIPLE Valid Students (3 rows) ---`);

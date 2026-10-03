@@ -3,7 +3,9 @@ const { setGlobalOptions } = require('firebase-functions/v2');
 const admin = require('firebase-admin');
 const https = require('https');
 
-admin.initializeApp();
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 setGlobalOptions({ region: 'us-central1', maxInstances: 10 });
 
 const db = admin.firestore();
@@ -275,7 +277,7 @@ exports.deleteAdminEntity = onCall(async request => {
   return deleteEntity(type, id);
 });
 
-const WEB_API_KEY = 'AIzaSyC1x0R-CKUh7sGonAYiqXMNemeLW-6bdvU';
+const WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || 'AIzaSyC1x0R-CKUh7sGonAYiqXMNemeLW-6bdvU';
 
 function triggerPasswordResetEmail(email) {
   return new Promise(resolve => {
@@ -329,7 +331,7 @@ async function loadDepartmentsMap() {
   return map;
 }
 
-async function importSingleStudent(student, departmentsMap) {
+async function importSingleStudent(student, departmentsMap, cachedSubjects = null) {
   const name = String(student.name || '').trim();
   const usn = String(student.usn || '').trim().toUpperCase();
   const email = String(student.email || '').trim().toLowerCase();
@@ -358,15 +360,7 @@ async function importSingleStudent(student, departmentsMap) {
 
   // Department match against existing departments
   const normalizedDeptKey = deptInput.toLowerCase();
-  let matchedDept = departmentsMap.get(normalizedDeptKey);
-  if (!matchedDept) {
-    for (const [key, d] of departmentsMap.entries()) {
-      if (d.id.toLowerCase() === normalizedDeptKey || d.name.toLowerCase() === normalizedDeptKey || (d.normalizedName && d.normalizedName.toLowerCase() === normalizedDeptKey)) {
-        matchedDept = d;
-        break;
-      }
-    }
-  }
+  const matchedDept = departmentsMap.get(normalizedDeptKey);
   if (!matchedDept) {
     return { name, usn, email, status: 'failed', result: 'Department not found', reason: `Department "${deptInput}" does not match an existing department` };
   }
@@ -425,6 +419,15 @@ async function importSingleStudent(student, departmentsMap) {
   const uid = authUser.uid;
 
   // 4. Create Firestore Student Profile and Unique Index Records
+  const parentName = String(student.parentName || student.guardianName || `${name}'s Parent`).trim();
+  const rawParentPhone = String(student.parentPhone || student.parentMobile || student.phone || '9876543210').trim();
+  // Basic Indian phone normalization
+  let parentPhoneNorm = rawParentPhone.replace(/[\s\-().]/g, '');
+  if (parentPhoneNorm.startsWith('+91')) parentPhoneNorm = parentPhoneNorm.slice(3);
+  else if (parentPhoneNorm.startsWith('91') && parentPhoneNorm.length === 12) parentPhoneNorm = parentPhoneNorm.slice(2);
+  else if (parentPhoneNorm.startsWith('0') && parentPhoneNorm.length === 11) parentPhoneNorm = parentPhoneNorm.slice(1);
+  const parentPhone = /^[6-9]\d{9}$/.test(parentPhoneNorm) ? parentPhoneNorm : '9876543210';
+
   const studentDoc = {
     uid: uid,
     name: name,
@@ -435,6 +438,9 @@ async function importSingleStudent(student, departmentsMap) {
     department: deptName || deptId,
     semester: sem,
     section: sec,
+    parentName: parentName,
+    parentPhone: parentPhone,
+    smsEnabled: student.smsEnabled !== false,
     faceRegistered: false,
     createdAt: FieldValue.serverTimestamp(),
     approvedAt: FieldValue.serverTimestamp()
@@ -468,12 +474,12 @@ async function importSingleStudent(student, departmentsMap) {
 
   // 5. Auto-enroll in matching subjects for Dept + Semester + Section
   try {
-    const subjectsSnap = await db.collection('subjects').get();
-    const enrollBatch = db.batch();
+    const subjectsList = cachedSubjects || (await db.collection('subjects').get()).docs.map(d => ({ ref: d.ref, data: d.data() }));
+    let enrollBatch = db.batch();
     let enrollCount = 0;
 
-    subjectsSnap.forEach(subDoc => {
-      const sub = subDoc.data();
+    for (const subItem of subjectsList) {
+      const sub = subItem.data;
       const subDept = String(sub.departmentId || sub.department || '').trim().toLowerCase();
       const stuDeptId = String(deptId).trim().toLowerCase();
       const stuDeptName = String(deptName).trim().toLowerCase();
@@ -485,15 +491,20 @@ async function importSingleStudent(student, departmentsMap) {
         const roster = Array.isArray(sub.enrolledRoster) ? sub.enrolledRoster : [];
         const alreadyIn = roster.some(r => r && (r.id === uid || r.uid === uid));
         const updatedRoster = alreadyIn ? roster : [...roster, { id: uid, name: name, usn: usn }];
-        enrollBatch.update(subDoc.ref, {
+        enrollBatch.update(subItem.ref, {
           studentIds: FieldValue.arrayUnion(uid),
           enrolledRoster: updatedRoster
         });
+        sub.enrolledRoster = updatedRoster;
         enrollCount++;
+        if (enrollCount % 450 === 0) {
+          await enrollBatch.commit();
+          enrollBatch = db.batch();
+        }
       }
-    });
+    }
 
-    if (enrollCount > 0) {
+    if (enrollCount % 450 !== 0 && enrollCount > 0) {
       await enrollBatch.commit();
     }
   } catch (enrollErr) {
@@ -552,13 +563,15 @@ exports.importStudents = onCall(async request => {
   }
 
   const departmentsMap = await loadDepartmentsMap();
+  const subjectsSnap = await db.collection('subjects').get();
+  const cachedSubjects = subjectsSnap.docs.map(doc => ({ ref: doc.ref, data: doc.data() }));
   const results = [];
   let importedCount = 0;
   let failedCount = 0;
   let skippedCount = 0;
 
   for (const stu of students) {
-    const rowResult = await importSingleStudent(stu, departmentsMap);
+    const rowResult = await importSingleStudent(stu, departmentsMap, cachedSubjects);
     results.push(rowResult);
     if (rowResult.status === 'success' || rowResult.status === 'partial_success') {
       importedCount++;
@@ -684,16 +697,13 @@ exports.approveFaceReRegistration = onCall(async request => {
     throw new HttpsError('not-found', 'Student profile not found.');
   }
 
-  const batch = db.batch();
-  batch.update(requestRef, {
+  await requestRef.update({
     status: 'approved',
     approvedBy: callerUid,
     serverApprovedAt: FieldValue.serverTimestamp(),
     reviewReason: reason,
     reviewedAt: FieldValue.serverTimestamp()
   });
-
-  await batch.commit();
 
   return {
     success: true,

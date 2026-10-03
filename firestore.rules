@@ -70,6 +70,10 @@ service cloud.firestore {
         isOwner(studentId) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'faceDescriptor',
+          'faceEmbedding',
+          'faceEmbeddingModel',
+          'faceEmbeddingVersion',
+          'faceEmbeddingUpdatedAt',
           'faceRegistered',
           'lastReregistrationAt',
           'reregistrationAudit'
@@ -127,11 +131,11 @@ service cloud.firestore {
 
       function isEnrolledStudent() {
         return ('studentIds' in resource.data) && (
-          request.auth.uid in resource.data.studentIds ||
+          resource.data.studentIds.hasAny([request.auth.uid]) ||
           (
             exists(/databases/$(database)/documents/students/$(request.auth.uid)) &&
             'studentId' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data &&
-            get(/databases/$(database)/documents/students/$(request.auth.uid)).data.studentId in resource.data.studentIds
+            resource.data.studentIds.hasAny([get(/databases/$(database)/documents/students/$(request.auth.uid)).data.studentId])
           )
         );
       }
@@ -199,11 +203,11 @@ service cloud.firestore {
           && exists(/databases/$(database)/documents/subjects/$(resource.data.subjectId))
           && 'studentIds' in get(/databases/$(database)/documents/subjects/$(resource.data.subjectId)).data
           && (
-            request.auth.uid in get(/databases/$(database)/documents/subjects/$(resource.data.subjectId)).data.studentIds ||
+            get(/databases/$(database)/documents/subjects/$(resource.data.subjectId)).data.studentIds.hasAny([request.auth.uid]) ||
             (
               exists(/databases/$(database)/documents/students/$(request.auth.uid)) &&
               'studentId' in get(/databases/$(database)/documents/students/$(request.auth.uid)).data &&
-              get(/databases/$(database)/documents/students/$(request.auth.uid)).data.studentId in get(/databases/$(database)/documents/subjects/$(resource.data.subjectId)).data.studentIds
+              get(/databases/$(database)/documents/subjects/$(resource.data.subjectId)).data.studentIds.hasAny([get(/databases/$(database)/documents/students/$(request.auth.uid)).data.studentId])
             )
           );
       }
@@ -283,10 +287,10 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.subjectId == request.resource.data.subjectId
           && 'studentIds' in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data
           && (
-            request.auth.uid in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds ||
+            get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds.hasAny([request.auth.uid]) ||
             (
               'studentId' in request.resource.data &&
-              request.resource.data.studentId in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds &&
+              get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds.hasAny([request.resource.data.studentId]) &&
               (
                 (
                   request.resource.data.studentId is string &&
@@ -342,8 +346,8 @@ service cloud.firestore {
           )
           && 'studentIds' in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data
           && (
-            ('studentUid' in request.resource.data && request.resource.data.studentUid in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds) ||
-            ('studentId' in request.resource.data && request.resource.data.studentId in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds)
+            ('studentUid' in request.resource.data && get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds.hasAny([request.resource.data.studentUid])) ||
+            ('studentId' in request.resource.data && get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds.hasAny([request.resource.data.studentId]))
           );
       }
 
@@ -407,10 +411,10 @@ service cloud.firestore {
           && 'studentIds' in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data
           && (
             // Authenticated student is enrolled in subject
-            request.auth.uid in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds ||
+            get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds.hasAny([request.auth.uid]) ||
             (
               'studentId' in request.resource.data &&
-              request.resource.data.studentId in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds &&
+              get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds.hasAny([request.resource.data.studentId]) &&
               (
                 (
                   request.resource.data.studentId is string &&
@@ -494,6 +498,61 @@ service cloud.firestore {
     // Legacy alias collection match (if present in historical test data)
     match /attendanceRecords/{recordId} {
       allow read, write: if isAdmin();
+    }
+
+    // =========================================================================
+    // NOTIFICATION LOGS COLLECTION (Parent Absence SMS Notifications)
+    // =========================================================================
+    // Stores deterministic absence notification dispatch records.
+    // Contains studentName, subjectName, masked phone (parentPhoneMasked).
+    // Read: Admin or authenticated Faculty assigned to the session.
+    // Create: Admin or authenticated Faculty for the conducted session.
+    // Update / Delete: Strictly admin only.
+    // Students: Strictly denied.
+    // =========================================================================
+    match /notificationLogs/{logId} {
+      function isFacultyForLog() {
+        return isSignedIn() && (
+          ('facultyUid' in resource.data && resource.data.facultyUid == request.auth.uid) ||
+          ('facultyId' in resource.data && resource.data.facultyId == request.auth.uid) ||
+          (
+            'sessionId' in resource.data &&
+            resource.data.sessionId is string &&
+            resource.data.sessionId != '' &&
+            exists(/databases/$(database)/documents/attendanceSessions/$(resource.data.sessionId)) &&
+            (
+              get(/databases/$(database)/documents/attendanceSessions/$(resource.data.sessionId)).data.facultyUid == request.auth.uid ||
+              get(/databases/$(database)/documents/attendanceSessions/$(resource.data.sessionId)).data.facultyId == request.auth.uid
+            )
+          )
+        );
+      }
+
+      function isValidFacultyLogCreate() {
+        return isSignedIn() && (
+          ('facultyUid' in request.resource.data && request.resource.data.facultyUid == request.auth.uid) ||
+          ('facultyId' in request.resource.data && request.resource.data.facultyId == request.auth.uid) ||
+          (
+            'sessionId' in request.resource.data &&
+            request.resource.data.sessionId is string &&
+            request.resource.data.sessionId != '' &&
+            exists(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)) &&
+            (
+              get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.facultyUid == request.auth.uid ||
+              get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.facultyId == request.auth.uid
+            )
+          )
+        )
+        && 'sessionId' in request.resource.data
+        && 'studentUid' in request.resource.data
+        && 'notificationType' in request.resource.data
+        && request.resource.data.notificationType == 'absence'
+        && logId == request.resource.data.sessionId + '_' + request.resource.data.studentUid + '_absence';
+      }
+
+      allow read: if isAdmin() || isFacultyForLog();
+      allow create: if isAdmin() || isValidFacultyLogCreate();
+      allow update, delete: if isAdmin();
     }
 
     // =========================================================================

@@ -188,25 +188,14 @@
 
       let createdAuthUser = null;
       try {
-        // 1. Check unique email in uniqueEmails, faculty, and pending registrationRequests
-        const emailDoc = await db.collection('uniqueEmails').doc(email).get().catch(() => null);
-        if (emailDoc && emailDoc.exists) {
-          msg.textContent = 'Faculty with this email already exists.';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          return;
-        }
+        // 1. Check unique email in uniqueEmails, faculty, and pending registrationRequests concurrently
+        const [emailDoc, emailSnap, pendingEmailSnap] = await Promise.all([
+          db.collection('uniqueEmails').doc(email).get().catch(() => null),
+          db.collection('faculty').where('email', '==', email).get().catch(() => null),
+          db.collection('registrationRequests').where('email', '==', email).where('status', '==', 'pending').get().catch(() => null)
+        ]);
 
-        const emailSnap = await db.collection('faculty').where('email', '==', email).get().catch(() => null);
-        if (emailSnap && !emailSnap.empty) {
-          msg.textContent = 'Faculty with this email already exists.';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          return;
-        }
-
-        const pendingEmailSnap = await db.collection('registrationRequests').where('email', '==', email).where('status', '==', 'pending').get().catch(() => null);
-        if (pendingEmailSnap && !pendingEmailSnap.empty) {
+        if ((emailDoc && emailDoc.exists) || (emailSnap && !emailSnap.empty) || (pendingEmailSnap && !pendingEmailSnap.empty)) {
           msg.textContent = 'Faculty with this email already exists.';
           msg.className = 'msg error';
           msg.style.display = 'block';

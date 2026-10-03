@@ -199,6 +199,27 @@
             </div>
           </div>
 
+          <div style="border-top: 1px solid var(--border-light); padding-top: 10px; margin-bottom: 12px;">
+            <span style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-blue);">Parent / Guardian Details (Required)</span>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label class="form-label" for="regStudentParentName" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Parent/Guardian Name *</label>
+            <div class="input-wrap" style="margin-bottom: 0;">
+              <span class="input-icon">👪</span>
+              <input type="text" id="regStudentParentName" placeholder="e.g. Ramesh Kumar" required />
+            </div>
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <label class="form-label" for="regStudentParentPhone" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 4px;">Parent Mobile Number *</label>
+            <div class="input-wrap" style="margin-bottom: 0;">
+              <span class="input-icon">📞</span>
+              <input type="tel" id="regStudentParentPhone" placeholder="10-digit Indian Mobile (e.g. 9876543210)" required />
+            </div>
+            <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; display: block;">Official absence SMS notifications will be dispatched to this number.</span>
+          </div>
+
           <button type="submit" id="regStudentSubmitBtn" class="btn btn-student" style="width: 100%; height: 44px; margin-top: 4px;">Register Student Account</button>
         </form>
         <div id="studentRegMsg" class="msg"></div>
@@ -311,9 +332,9 @@
 
   <!-- Footer -->
   <footer class="portal-footer">
-    <a href="#" onclick="alert('CIT Smart Attendance Portal v2.0\nPowered by Face-API Biometrics & GPS Verification'); return false;">About Portal</a>
+    <a href="#" onclick="alert('CIT Smart Attendance Portal v2.0\nPowered by ArcFace AI Biometrics & GPS Verification'); return false;">About Portal</a>
     <a href="#" onclick="alert('Support: ithelpdesk@cit.edu\nOffice Hours: 9:00 AM - 5:00 PM'); return false;">Contact Support</a>
-    <a href="#" onclick="alert('Biometric facial descriptors and GPS coordinates are processed exclusively for institutional attendance verification.'); return false;">Privacy Policy</a>
+    <a href="#" onclick="alert('Biometric facial embeddings and GPS coordinates are processed exclusively for institutional attendance verification.'); return false;">Privacy Policy</a>
     <a href="#" onclick="openAdminLoginModal(); return false;" style="font-weight: 700; color: #93c5fd; cursor: pointer;">⚙️ Admin Access</a>
   </footer>
 
@@ -325,17 +346,26 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    auth.onAuthStateChanged((user) => {
+    auth.onAuthStateChanged(async (user) => {
       if (user) {
-        if (localStorage.getItem('studentId')) {
+        const tokenResult = await user.getIdTokenResult().catch(() => null);
+        let isAdmin = tokenResult?.claims?.admin === true;
+        if (!isAdmin) {
+          const adminDoc = await db.collection('admins').doc(user.uid).get().catch(() => null);
+          isAdmin = Boolean(adminDoc?.exists && adminDoc.data()?.active !== false);
+        }
+        if (isAdmin) {
+          localStorage.setItem('adminUid', user.uid);
+          window.location.replace('admin.html');
+        } else if (localStorage.getItem('studentId')) {
           window.location.replace('dashboard.html');
         } else if (localStorage.getItem('facultyId')) {
           window.location.replace('faculty_dashboard.html');
+        } else if (localStorage.getItem('adminUid')) {
+          window.location.replace('admin.html');
         }
       }
     });
-
-    let cachedDeptOptionsHtml = null;
 
     function showLoginMessage(elementId, message, isError = true) {
       const element = document.getElementById(elementId);
@@ -653,8 +683,33 @@
       const dept = document.getElementById('regStudentDept').value;
       const semester = parseInt(document.getElementById('regStudentSem').value, 10);
       const section = document.getElementById('regStudentSec').value.trim().toUpperCase();
+      const parentName = (document.getElementById('regStudentParentName')?.value || '').trim();
+      const parentPhoneRaw = (document.getElementById('regStudentParentPhone')?.value || '').trim();
       const pass = document.getElementById('regStudentPass').value;
       const confirmPass = document.getElementById('regStudentConfirmPass').value;
+
+      if (!parentName) {
+        msg.textContent = 'Parent/Guardian name is required.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (!parentPhoneRaw) {
+        msg.textContent = 'Parent mobile number is required.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      const phoneValidation = validateAndNormalizeIndianPhone(parentPhoneRaw);
+      if (!phoneValidation.valid) {
+        msg.textContent = phoneValidation.error;
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+      const parentPhone = phoneValidation.normalized;
 
       if (!usn) {
         msg.textContent = 'Please enter a valid USN.';
@@ -706,50 +761,24 @@
 
       let createdAuthUser = null;
       try {
-        // 1. Check unique email in uniqueEmails, students, and pending registrationRequests
-        const emailDoc = await db.collection('uniqueEmails').doc(email).get().catch(() => null);
-        if (emailDoc && emailDoc.exists) {
+        // 1 & 2. Check unique email & USN in unique collections, students, and pending registrationRequests concurrently
+        const [emailDoc, emailSnap, pendingEmailSnap, usnDoc, usnSnap, pendingUsnSnap] = await Promise.all([
+          db.collection('uniqueEmails').doc(email).get().catch(() => null),
+          db.collection('students').where('email', '==', email).get().catch(() => null),
+          db.collection('registrationRequests').where('email', '==', email).where('status', '==', 'pending').get().catch(() => null),
+          db.collection('uniqueUSNs').doc(usn).get().catch(() => null),
+          db.collection('students').where('usn', '==', usn).get().catch(() => null),
+          db.collection('registrationRequests').where('usn', '==', usn).where('status', '==', 'pending').get().catch(() => null)
+        ]);
+
+        if ((emailDoc && emailDoc.exists) || (emailSnap && !emailSnap.empty) || (pendingEmailSnap && !pendingEmailSnap.empty)) {
           msg.textContent = 'An account with this email already exists.';
           msg.className = 'msg error';
           msg.style.display = 'block';
           return;
         }
 
-        const emailSnap = await db.collection('students').where('email', '==', email).get().catch(() => null);
-        if (emailSnap && !emailSnap.empty) {
-          msg.textContent = 'An account with this email already exists.';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          return;
-        }
-
-        const pendingEmailSnap = await db.collection('registrationRequests').where('email', '==', email).where('status', '==', 'pending').get().catch(() => null);
-        if (pendingEmailSnap && !pendingEmailSnap.empty) {
-          msg.textContent = 'An account with this email already exists.';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          return;
-        }
-
-        // 2. Check unique USN in uniqueUSNs, students, and pending registrationRequests
-        const usnDoc = await db.collection('uniqueUSNs').doc(usn).get().catch(() => null);
-        if (usnDoc && usnDoc.exists) {
-          msg.textContent = 'Student with this USN already exists.';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          return;
-        }
-
-        const usnSnap = await db.collection('students').where('usn', '==', usn).get().catch(() => null);
-        if (usnSnap && !usnSnap.empty) {
-          msg.textContent = 'Student with this USN already exists.';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          return;
-        }
-
-        const pendingUsnSnap = await db.collection('registrationRequests').where('usn', '==', usn).where('status', '==', 'pending').get().catch(() => null);
-        if (pendingUsnSnap && !pendingUsnSnap.empty) {
+        if ((usnDoc && usnDoc.exists) || (usnSnap && !usnSnap.empty) || (pendingUsnSnap && !pendingUsnSnap.empty)) {
           msg.textContent = 'Student with this USN already exists.';
           msg.className = 'msg error';
           msg.style.display = 'block';
@@ -773,6 +802,9 @@
           department: dept,
           semester: semester,
           section: section,
+          parentName: parentName,
+          parentPhone: parentPhone,
+          smsEnabled: true,
           status: 'pending',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
@@ -842,6 +874,13 @@
         return;
       }
 
+      if (!dept) {
+        msg.textContent = 'Please select an Academic Department.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
       submitBtn.disabled = true;
       submitBtn.textContent = 'Submitting Request...';
       msg.textContent = 'Verifying registration details...';
@@ -850,25 +889,14 @@
 
       let createdAuthUser = null;
       try {
-        // 1. Check unique email in uniqueEmails, faculty, and pending registrationRequests
-        const emailDoc = await db.collection('uniqueEmails').doc(email).get().catch(() => null);
-        if (emailDoc && emailDoc.exists) {
-          msg.textContent = 'Faculty with this email already exists.';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          return;
-        }
+        // 1. Check unique email in uniqueEmails, faculty, and pending registrationRequests concurrently
+        const [emailDoc, emailSnap, pendingEmailSnap] = await Promise.all([
+          db.collection('uniqueEmails').doc(email).get().catch(() => null),
+          db.collection('faculty').where('email', '==', email).get().catch(() => null),
+          db.collection('registrationRequests').where('email', '==', email).where('status', '==', 'pending').get().catch(() => null)
+        ]);
 
-        const emailSnap = await db.collection('faculty').where('email', '==', email).get().catch(() => null);
-        if (emailSnap && !emailSnap.empty) {
-          msg.textContent = 'Faculty with this email already exists.';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          return;
-        }
-
-        const pendingEmailSnap = await db.collection('registrationRequests').where('email', '==', email).where('status', '==', 'pending').get().catch(() => null);
-        if (pendingEmailSnap && !pendingEmailSnap.empty) {
+        if ((emailDoc && emailDoc.exists) || (emailSnap && !emailSnap.empty) || (pendingEmailSnap && !pendingEmailSnap.empty)) {
           msg.textContent = 'Faculty with this email already exists.';
           msg.className = 'msg error';
           msg.style.display = 'block';
@@ -1074,6 +1102,35 @@
         btn.innerHTML = isPass ? '🙈' : '👁️';
         btn.setAttribute('aria-label', isPass ? 'Hide password' : 'Show password');
       }
+    }
+
+    function validateAndNormalizeIndianPhone(phoneInput) {
+      if (!phoneInput || typeof phoneInput !== 'string') {
+        return { valid: false, error: 'Parent mobile number is required.', normalized: '' };
+      }
+      const trimmed = phoneInput.trim();
+      if (!trimmed) {
+        return { valid: false, error: 'Parent mobile number is required.', normalized: '' };
+      }
+      let cleaned = trimmed.replace(/[\s\-\(\)\.]/g, '');
+      if (cleaned.startsWith('+91')) {
+        cleaned = cleaned.slice(3);
+      } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+        cleaned = cleaned.slice(2);
+      } else if (cleaned.startsWith('0') && cleaned.length === 11) {
+        cleaned = cleaned.slice(1);
+      }
+
+      const indianMobileRegex = /^[6-9]\d{9}$/;
+      if (!indianMobileRegex.test(cleaned)) {
+        return {
+          valid: false,
+          error: 'Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).',
+          normalized: ''
+        };
+      }
+
+      return { valid: true, error: null, normalized: cleaned };
     }
   </script>
 </body>

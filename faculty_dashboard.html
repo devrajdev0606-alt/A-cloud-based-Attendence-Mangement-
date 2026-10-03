@@ -8,6 +8,41 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Responsive Styling for Dedicated Parent SMS Logs Section */
+    .parent-sms-table-desktop {
+      display: block;
+    }
+    .parent-sms-cards-mobile {
+      display: none;
+    }
+    @media (max-width: 640px) {
+      .parent-sms-table-desktop {
+        display: none !important;
+      }
+      .parent-sms-cards-mobile {
+        display: flex !important;
+        flex-direction: column;
+        gap: 12px;
+      }
+    }
+    .sms-mobile-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .sms-mobile-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+  </style>
 </head>
 <body style="display: none;">
   <!-- Mesh Background Scene -->
@@ -251,6 +286,66 @@
       </div>
     </div>
 
+    <!-- Dedicated Section: Parent SMS Logs Card -->
+    <div class="collapsible-card" id="parentSmsLogsCard">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <div class="collapsible-title">
+          <h2>📱 Parent SMS Logs</h2>
+          <span class="badge blue" id="parentSmsTotalBadge">0 Logs</span>
+        </div>
+        <span class="collapsible-chevron">▾</span>
+      </div>
+      <div class="collapsible-body">
+        <p class="card-desc">Review automated parent SMS notifications dispatched for absent students across your class sessions.</p>
+        
+        <!-- Filter Toolbar -->
+        <div class="sms-filter-row" style="margin-bottom: 16px; gap: 10px; display: flex; flex-wrap: wrap; align-items: center;">
+          <input type="text" id="smsLogSearch" placeholder="🔍 Search student name or USN..." oninput="filterParentSmsLogs()" style="flex: 2 1 180px; min-width: 160px; padding: 7px 12px; font-size: 0.84rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-color);" />
+          <select id="smsLogSubjectFilter" onchange="filterParentSmsLogs()" style="flex: 1 1 150px; min-width: 130px; padding: 7px 12px; font-size: 0.84rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-color);">
+            <option value="all">All Subjects</option>
+          </select>
+          <select id="smsLogStatusFilter" onchange="filterParentSmsLogs()" style="flex: 1 1 140px; min-width: 130px; padding: 7px 12px; font-size: 0.84rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-color);">
+            <option value="all" selected>All Statuses</option>
+            <option value="demo_sent">ℹ️ Demo SMS Sent</option>
+            <option value="sent">🟢 SMS Sent</option>
+            <option value="failed">🔴 SMS Failed</option>
+          </select>
+          <input type="date" id="smsLogDateFilter" onchange="filterParentSmsLogs()" style="flex: 1 1 130px; min-width: 120px; padding: 6px 10px; font-size: 0.84rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-color);" title="Filter by Session Date" />
+          <button type="button" class="btn btn-primary" onclick="loadParentSmsLogs()" style="padding: 7px 14px; font-size: 0.84rem; border-radius: 8px;">🔄 Refresh</button>
+          <button type="button" id="smsLogClearFilterBtn" class="btn" onclick="clearParentSmsFilters()" style="display:none; padding: 7px 12px; font-size: 0.82rem; background: rgba(255,255,255,0.06); color: var(--text-muted); border-radius: 8px;">✕ Clear Session Filter</button>
+        </div>
+
+        <div id="smsLogSessionFilterBanner" style="display: none; margin-bottom: 12px; padding: 8px 12px; background: rgba(37,99,235,0.08); border: 1px solid rgba(37,99,235,0.25); border-radius: 8px; font-size: 0.82rem; color: var(--accent-blue, #2563eb); justify-content: space-between; align-items: center;">
+          <span id="smsLogSessionBannerText">Filtered by selected session</span>
+          <button type="button" onclick="clearParentSmsFilters()" style="background: none; border: none; color: inherit; cursor: pointer; text-decoration: underline; font-size: 0.8rem; font-weight: 600;">Show All Sessions</button>
+        </div>
+
+        <!-- Desktop Table View -->
+        <div class="table-responsive parent-sms-table-desktop">
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Parent</th>
+                <th>Subject</th>
+                <th>Status</th>
+                <th>Date / Time</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="parentSmsLogsTbody">
+              <tr><td colspan="6" class="empty">Click Refresh or expand to load Parent SMS Logs...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Mobile Responsive Cards Container -->
+        <div id="parentSmsLogsMobileContainer" class="parent-sms-cards-mobile" style="display: none;">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </div>
+
     <!-- Collapsible 7: Attendance Analytics Card -->
     <div class="collapsible-card" id="analyticsCard">
       <div class="collapsible-header" onclick="toggleCollapsible(this)">
@@ -303,8 +398,86 @@
             </tbody>
           </table>
         </div>
-        <div class="btn-row" style="justify-content: flex-end; width: 100%; margin-top: 14px;">
+        <div class="btn-row" style="justify-content: space-between; width: 100%; margin-top: 14px;">
+          <button type="button" id="sessionParentSmsBtn" class="btn" style="background: rgba(37,99,235,0.1); color: var(--accent-blue, #2563eb); border: 1px solid rgba(37,99,235,0.3); font-size: 0.82rem; padding: 6px 12px; border-radius: 8px; font-weight: 600;" onclick="navigateToParentSmsLogsFromSession()">📱 View SMS Logs</button>
           <button type="button" class="btn back-btn" onclick="closeSessionAttendanceModal()">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Attendance Completed Summary Modal -->
+  <div id="attendanceCompletionModal" class="modal-overlay" style="display:none;" onclick="closeAttendanceCompletionModalOnBackdrop(event)">
+    <div class="modal-card" style="max-width: 480px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="badge green">✓ Attendance Completed</span>
+          <h2 id="completionModalSubject" style="margin-top:4px; font-size:1.25rem;">Session Attendance Finalized</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeAttendanceCompletionModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="completionModalMeta" style="font-size:0.88rem; color:var(--text-muted); margin-bottom:16px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;"></div>
+        
+        <!-- Attendance Stats Overview -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:16px;">
+          <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border-color); border-radius:10px; padding:12px 8px; text-align:center;">
+            <div style="font-size:0.72rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Enrolled</div>
+            <div id="completionEnrolledCount" style="font-size:1.4rem; font-weight:800; color:var(--text-color); margin-top:2px;">0</div>
+          </div>
+          <div style="background:rgba(16, 185, 129, 0.08); border:1px solid rgba(16, 185, 129, 0.25); border-radius:10px; padding:12px 8px; text-align:center;">
+            <div style="font-size:0.72rem; color:var(--emerald-dark); font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Present</div>
+            <div id="completionPresentCount" style="font-size:1.4rem; font-weight:800; color:var(--emerald-dark); margin-top:2px;">0</div>
+          </div>
+          <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:10px; padding:12px 8px; text-align:center;">
+            <div style="font-size:0.72rem; color:var(--crimson-dark); font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Absent</div>
+            <div id="completionAbsentCount" style="font-size:1.4rem; font-weight:800; color:var(--crimson-dark); margin-top:2px;">0</div>
+          </div>
+        </div>
+
+        <!-- Absence & SMS Status Notice -->
+        <div id="completionSmsSummary" style="margin-bottom:18px;"></div>
+
+        <!-- Modal Actions -->
+        <div class="btn-row" style="display:flex; justify-content:space-between; align-items:center; width:100%; gap:10px; flex-wrap:wrap;">
+          <button type="button" id="completionViewSmsBtn" class="btn" style="background:rgba(37,99,235,0.1); color:var(--accent-blue, #2563eb); border:1px solid rgba(37,99,235,0.3); font-weight:600; padding:8px 14px; font-size:0.85rem;" onclick="viewParentSmsLogsFromModal()">📱 View Parent SMS Logs</button>
+          <button type="button" class="btn submit-btn" style="padding:8px 20px; font-size:0.85rem;" onclick="closeAttendanceCompletionModal()">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parent SMS Log Details Modal -->
+  <div id="smsDetailsModal" class="modal-overlay" style="display:none;" onclick="closeSmsDetailsModalOnBackdrop(event)">
+    <div class="modal-card" style="max-width: 500px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="badge blue">Parent Absence Alert</span>
+          <h2 style="margin-top:4px;">SMS Notification Details</h2>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeSmsDetailsModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; margin-bottom: 14px; font-size: 0.86rem; line-height: 1.6;">
+          <div style="margin-bottom: 6px;"><strong>Student:</strong> <span id="smsDetailStudent">-</span> (<span id="smsDetailUsn">-</span>)</div>
+          <div style="margin-bottom: 6px;"><strong>Parent Phone:</strong> <span id="smsDetailPhone" style="font-family:monospace; font-weight:600;">-</span></div>
+          <div style="margin-bottom: 6px;"><strong>Subject:</strong> <span id="smsDetailSubject">-</span></div>
+          <div style="margin-bottom: 6px;"><strong>Session Date/Time:</strong> <span id="smsDetailDateTime">-</span></div>
+          <div style="margin-bottom: 6px;"><strong>Status:</strong> <span id="smsDetailStatus">-</span></div>
+          <div><strong>Provider Mode:</strong> <span id="smsDetailProvider">-</span></div>
+        </div>
+
+        <div style="margin-bottom: 14px;">
+          <div style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:6px;">SMS Message Dispatched</div>
+          <div id="smsDetailMessage" style="padding: 10px 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem; font-family: monospace; white-space: pre-wrap; color: var(--text-color);"></div>
+        </div>
+
+        <div id="smsDetailErrorContainer" style="display:none; margin-bottom:14px; padding:10px 12px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; font-size:0.82rem; color:#fca5a5;">
+          <strong>Delivery Note:</strong> <span id="smsDetailErrorText"></span>
+        </div>
+
+        <div class="btn-row" style="justify-content:flex-end;">
+          <button type="button" class="btn submit-btn" onclick="closeSmsDetailsModal()">Close</button>
         </div>
       </div>
     </div>
@@ -380,6 +553,9 @@
       const card = headerEl.closest('.collapsible-card');
       if (card) {
         card.classList.toggle('open');
+        if (card.id === 'parentSmsLogsCard' && card.classList.contains('open') && allFacultySmsLogs.length === 0) {
+          loadParentSmsLogs();
+        }
       }
     }
 
@@ -456,7 +632,7 @@
         }
       }
 
-      if (!facultyData) {
+      if (!facultyData || facultyData.active === false || facultyData.status === 'inactive') {
         // Not an active/approved faculty account
         await auth.signOut();
         localStorage.clear();
@@ -1423,10 +1599,12 @@
         });
 
         const snapshots = await Promise.all(queries);
+        let lastStoppedSessionId = null;
         for (const snapshot of snapshots) {
           if (snapshot && !snapshot.empty) {
             for (const doc of snapshot.docs) {
               await db.collection('attendanceSessions').doc(doc.id).update({ active: false });
+              lastStoppedSessionId = doc.id;
             }
           }
         }
@@ -1437,9 +1615,645 @@
           loadSubjects();
           loadFacultyTimetable();
         }, 500);
+
+        if (lastStoppedSessionId) {
+          await processSessionCompletionSummary(lastStoppedSessionId, subjectId);
+        }
       } catch (err) {
         statusMsg.className = 'msg error';
         statusMsg.textContent = 'Error: ' + err.message;
+      }
+    }
+
+    let activeSessionModalSessionId = null;
+    let activeSessionModalSubjectId = null;
+
+    function maskPhoneNumberClient(phone) {
+      if (!phone) return 'Not Provided';
+      const clean = String(phone).replace(/\D/g, '');
+      const digits = clean.startsWith('91') && clean.length === 12 ? clean.slice(2) : clean;
+      if (digits.length >= 10) {
+        const firstTwo = digits.slice(0, 2);
+        const lastTwo = digits.slice(-2);
+        return `${firstTwo}${'*'.repeat(digits.length - 4)}${lastTwo}`;
+      }
+      return '******';
+    }
+
+    let lastCompletedSessionData = null;
+    let allFacultySmsLogs = [];
+    let activeSmsSessionFilter = null;
+
+    function formatSmsStatusBadge(status) {
+      if (status === 'sent') {
+        return '<span class="badge green" style="font-weight:700;">🟢 SMS Sent</span>';
+      } else if (status === 'failed') {
+        return '<span class="badge red" style="font-weight:700;">🔴 SMS Failed</span>';
+      } else {
+        return '<span class="badge blue" style="font-weight:700;">ℹ️ Demo SMS Sent</span>';
+      }
+    }
+
+    function formatLogDateTime(log) {
+      if (log.createdAt && log.createdAt.toDate) {
+        const d = log.createdAt.toDate();
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        return `${day}/${month}/${year} ${time}`;
+      }
+      if (log.timestamp && log.timestamp.toDate) {
+        const d = log.timestamp.toDate();
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        return `${day}/${month}/${year} ${time}`;
+      }
+      if (log.sessionDate) {
+        return log.sessionDate;
+      }
+      return 'Recent';
+    }
+
+    function formatLogMobileDateTime(log) {
+      if (log.createdAt && log.createdAt.toDate) {
+        const d = log.createdAt.toDate();
+        const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        return { date: dateStr, time: timeStr };
+      }
+      return { date: log.sessionDate || 'Today', time: '-' };
+    }
+
+    function matchLogDate(log, selectedDateYMD) {
+      if (!selectedDateYMD) return true;
+      if (log.createdAt && log.createdAt.toDate) {
+        const d = log.createdAt.toDate();
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (iso === selectedDateYMD) return true;
+      }
+      if (log.timestamp && log.timestamp.toDate) {
+        const d = log.timestamp.toDate();
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (iso === selectedDateYMD) return true;
+      }
+      if (log.sessionDate) {
+        const [y, m, d] = selectedDateYMD.split('-');
+        const ddmmyyyy = `${d}/${m}/${y}`;
+        const dmySlash = `${parseInt(d, 10)}/${parseInt(m, 10)}/${y}`;
+        if (log.sessionDate.includes(ddmmyyyy) || log.sessionDate.includes(dmySlash)) return true;
+        const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const monthName = months[parseInt(m, 10) - 1];
+        if (monthName && log.sessionDate.includes(monthName) && log.sessionDate.includes(y) && log.sessionDate.includes(String(parseInt(d, 10)))) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function populateSmsSubjectFilterOptions() {
+      const select = document.getElementById('smsLogSubjectFilter');
+      if (!select) return;
+      const currentVal = select.value;
+
+      const subjectsMap = new Map();
+      (assignedSubjectDocs || []).forEach(doc => {
+        const data = doc.data();
+        const name = data.subjectName || data.name || doc.id;
+        subjectsMap.set(doc.id, name);
+      });
+      allFacultySmsLogs.forEach(log => {
+        if (log.subjectId && log.subjectName) {
+          subjectsMap.set(log.subjectId, log.subjectName);
+        }
+      });
+
+      let html = '<option value="all">All Subjects</option>';
+      subjectsMap.forEach((name, id) => {
+        html += `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`;
+      });
+      select.innerHTML = html;
+      if (currentVal && subjectsMap.has(currentVal)) {
+        select.value = currentVal;
+      }
+    }
+
+    async function loadParentSmsLogs(targetSessionId = null) {
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : (facultyUid || facultyId);
+      if (!currentAuthUid) return;
+
+      if (targetSessionId) {
+        activeSmsSessionFilter = targetSessionId;
+      }
+
+      const tbody = document.getElementById('parentSmsLogsTbody');
+      const mobileContainer = document.getElementById('parentSmsLogsMobileContainer');
+      const badge = document.getElementById('parentSmsTotalBadge');
+
+      if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty">Loading Parent SMS Logs...</td></tr>';
+      if (mobileContainer) mobileContainer.innerHTML = '<p class="empty">Loading Parent SMS Logs...</p>';
+
+      try {
+        const query = db.collection('notificationLogs').where('facultyUid', '==', currentAuthUid);
+        const snapshot = await query.get();
+        const logs = [];
+        snapshot.forEach(doc => {
+          logs.push({ id: doc.id, ...doc.data() });
+        });
+
+        if (currentFacultyDocId && currentFacultyDocId !== currentAuthUid) {
+          try {
+            const snap2 = await db.collection('notificationLogs').where('facultyId', '==', currentFacultyDocId).get();
+            snap2.forEach(doc => {
+              if (!logs.some(l => l.id === doc.id)) {
+                logs.push({ id: doc.id, ...doc.data() });
+              }
+            });
+          } catch (e) {
+            // Ignored
+          }
+        }
+
+        logs.sort((a, b) => {
+          const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.timestamp?.toDate ? a.timestamp.toDate().getTime() : 0);
+          const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.timestamp?.toDate ? b.timestamp.toDate().getTime() : 0);
+          return timeB - timeA;
+        });
+
+        allFacultySmsLogs = logs;
+        populateSmsSubjectFilterOptions();
+        renderParentSmsLogs();
+      } catch (err) {
+        console.error('Error loading parent SMS logs:', err);
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="empty" style="color:var(--crimson-dark);">Failed to load SMS logs: ${escapeHtml(err.message)}</td></tr>`;
+        if (mobileContainer) mobileContainer.innerHTML = `<p class="empty" style="color:var(--crimson-dark);">Failed to load SMS logs: ${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    function filterParentSmsLogs() {
+      renderParentSmsLogs();
+    }
+
+    function clearParentSmsFilters() {
+      activeSmsSessionFilter = null;
+      const searchEl = document.getElementById('smsLogSearch');
+      const subEl = document.getElementById('smsLogSubjectFilter');
+      const statEl = document.getElementById('smsLogStatusFilter');
+      const dateEl = document.getElementById('smsLogDateFilter');
+      if (searchEl) searchEl.value = '';
+      if (subEl) subEl.value = 'all';
+      if (statEl) statEl.value = 'all';
+      if (dateEl) dateEl.value = '';
+      renderParentSmsLogs();
+    }
+
+    function navigateToParentSmsLogs(sessionId = null, subjectId = null) {
+      const card = document.getElementById('parentSmsLogsCard');
+      if (card) {
+        if (!card.classList.contains('open')) {
+          card.classList.add('open');
+        }
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      if (subjectId) {
+        const subSelect = document.getElementById('smsLogSubjectFilter');
+        if (subSelect) {
+          subSelect.value = subjectId;
+        }
+      }
+      loadParentSmsLogs(sessionId);
+    }
+
+    function renderParentSmsLogs() {
+      const tbody = document.getElementById('parentSmsLogsTbody');
+      const mobileContainer = document.getElementById('parentSmsLogsMobileContainer');
+      const badge = document.getElementById('parentSmsTotalBadge');
+      const banner = document.getElementById('smsLogSessionFilterBanner');
+      const bannerText = document.getElementById('smsLogSessionBannerText');
+      const clearBtn = document.getElementById('smsLogClearFilterBtn');
+
+      const searchVal = (document.getElementById('smsLogSearch')?.value || '').toLowerCase().trim();
+      const subVal = document.getElementById('smsLogSubjectFilter')?.value || 'all';
+      const statVal = document.getElementById('smsLogStatusFilter')?.value || 'all';
+      const dateVal = document.getElementById('smsLogDateFilter')?.value || '';
+
+      const filtered = allFacultySmsLogs.filter(log => {
+        if (activeSmsSessionFilter && log.sessionId !== activeSmsSessionFilter) {
+          return false;
+        }
+        if (subVal !== 'all' && log.subjectId !== subVal && log.subjectName !== subVal) {
+          return false;
+        }
+        if (statVal !== 'all') {
+          if (statVal === 'demo_sent' && log.status !== 'demo_sent' && log.status !== 'mock') return false;
+          if (statVal === 'sent' && log.status !== 'sent') return false;
+          if (statVal === 'failed' && log.status !== 'failed') return false;
+        }
+        if (dateVal && !matchLogDate(log, dateVal)) {
+          return false;
+        }
+        if (searchVal) {
+          const name = (log.studentName || '').toLowerCase();
+          const usn = (log.usn || '').toLowerCase();
+          if (!name.includes(searchVal) && !usn.includes(searchVal)) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      if (badge) {
+        badge.textContent = `${filtered.length} Log${filtered.length === 1 ? '' : 's'}`;
+      }
+
+      if (activeSmsSessionFilter) {
+        if (banner) banner.style.display = 'flex';
+        if (clearBtn) clearBtn.style.display = 'inline-block';
+        const sampleLog = allFacultySmsLogs.find(l => l.sessionId === activeSmsSessionFilter);
+        const sessDesc = sampleLog ? `${sampleLog.subjectName || 'Course'} (${sampleLog.sessionDate || 'Session'})` : 'Selected Session';
+        if (bannerText) bannerText.textContent = `Filtered by session: ${sessDesc}`;
+      } else {
+        if (banner) banner.style.display = 'none';
+        if (clearBtn) clearBtn.style.display = 'none';
+      }
+
+      if (filtered.length === 0) {
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty">No Parent SMS Logs found matching criteria.</td></tr>';
+        }
+        if (mobileContainer) {
+          mobileContainer.innerHTML = '<p class="empty">No Parent SMS Logs found matching criteria.</p>';
+        }
+        return;
+      }
+
+      // Render Desktop Rows
+      if (tbody) {
+        tbody.innerHTML = filtered.map(log => {
+          const maskedPhone = maskPhoneNumberClient(log.parentPhoneMasked || log.parentPhone || '9876543210');
+          const dateTimeStr = formatLogDateTime(log);
+          const safeLogId = escapeHtml(log.id);
+
+          return `
+            <tr>
+              <td>
+                <strong style="color:var(--text-color);">${escapeHtml(log.studentName || 'Student')}</strong>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:1px;">USN: ${escapeHtml(log.usn || 'N/A')}</div>
+              </td>
+              <td>
+                <span style="font-family:monospace; font-weight:600; color:var(--text-color); font-size:0.86rem;">${escapeHtml(maskedPhone)}</span>
+              </td>
+              <td>
+                <span style="font-weight:500;">${escapeHtml(log.subjectName || '-')}</span>
+              </td>
+              <td>
+                ${formatSmsStatusBadge(log.status)}
+              </td>
+              <td style="font-size:0.82rem; color:var(--text-muted);">
+                ${escapeHtml(dateTimeStr)}
+              </td>
+              <td>
+                <button type="button" class="btn" style="padding:4px 10px; font-size:0.75rem; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:6px;" onclick="openSmsDetailsModal('${safeLogId}')">View Details</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Render Mobile Cards
+      if (mobileContainer) {
+        mobileContainer.innerHTML = filtered.map(log => {
+          const maskedPhone = maskPhoneNumberClient(log.parentPhoneMasked || log.parentPhone || '9876543210');
+          const mDate = formatLogMobileDateTime(log);
+          const safeLogId = escapeHtml(log.id);
+
+          return `
+            <div class="sms-mobile-card">
+              <div class="sms-mobile-card-header">
+                <div>${formatSmsStatusBadge(log.status)}</div>
+                <div style="font-size:0.76rem; color:var(--text-muted); font-weight:600;">🕒 ${escapeHtml(mDate.time)}</div>
+              </div>
+              <div style="margin-top:2px;">
+                <strong style="font-size:0.96rem; color:var(--text-color);">${escapeHtml(log.studentName || 'Student')}</strong>
+                <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">
+                  USN: <span style="color:var(--text-color); font-weight:600;">${escapeHtml(log.usn || 'N/A')}</span>
+                </div>
+              </div>
+              <div style="font-size:0.83rem; color:var(--text-muted); line-height:1.55; margin-top:2px;">
+                <div>Parent: <strong style="font-family:monospace; color:var(--text-color);">${escapeHtml(maskedPhone)}</strong></div>
+                <div>Subject: <strong style="color:var(--text-color);">${escapeHtml(log.subjectName || 'Subject')}</strong></div>
+                <div>Date: <strong style="color:var(--text-color);">${escapeHtml(mDate.date)}</strong></div>
+              </div>
+              <div style="margin-top:4px; text-align:right;">
+                <button type="button" class="btn" style="padding:5px 12px; font-size:0.75rem; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:6px;" onclick="openSmsDetailsModal('${safeLogId}')">View Details</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function openSmsDetailsModal(logId) {
+      const log = allFacultySmsLogs.find(l => l.id === logId);
+      if (!log) return;
+      const modal = document.getElementById('smsDetailsModal');
+      if (!modal) return;
+
+      const maskedPhone = maskPhoneNumberClient(log.parentPhoneMasked || log.parentPhone || '9876543210');
+      const dateTimeStr = formatLogDateTime(log);
+
+      const stuEl = document.getElementById('smsDetailStudent');
+      const usnEl = document.getElementById('smsDetailUsn');
+      const phoneEl = document.getElementById('smsDetailPhone');
+      const subjEl = document.getElementById('smsDetailSubject');
+      const dtEl = document.getElementById('smsDetailDateTime');
+      const statEl = document.getElementById('smsDetailStatus');
+      const provEl = document.getElementById('smsDetailProvider');
+      const msgEl = document.getElementById('smsDetailMessage');
+      const errCont = document.getElementById('smsDetailErrorContainer');
+      const errText = document.getElementById('smsDetailErrorText');
+
+      if (stuEl) stuEl.textContent = log.studentName || 'Student';
+      if (usnEl) usnEl.textContent = log.usn || 'N/A';
+      if (phoneEl) phoneEl.textContent = maskedPhone;
+      if (subjEl) subjEl.textContent = log.subjectName || '-';
+      if (dtEl) dtEl.textContent = dateTimeStr;
+      if (statEl) statEl.innerHTML = formatSmsStatusBadge(log.status);
+
+      const prov = log.provider || log.providerMode || 'mock';
+      if (provEl) provEl.textContent = prov === 'mock' ? 'Demo Mode (Mock SMS Provider)' : `Live Gateway (${prov})`;
+      if (msgEl) msgEl.textContent = log.message || 'CIT Alert: Absence notification dispatched to parent.';
+
+      if (log.status === 'failed' && log.error) {
+        if (errCont) errCont.style.display = 'block';
+        if (errText) errText.textContent = log.error;
+      } else {
+        if (errCont) errCont.style.display = 'none';
+      }
+
+      modal.style.display = 'flex';
+    }
+
+    function closeSmsDetailsModal() {
+      const modal = document.getElementById('smsDetailsModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function closeSmsDetailsModalOnBackdrop(e) {
+      if (e.target.id === 'smsDetailsModal') {
+        closeSmsDetailsModal();
+      }
+    }
+
+    function openAttendanceCompletionModal(data) {
+      if (!data) return;
+      lastCompletedSessionData = data;
+      const modal = document.getElementById('attendanceCompletionModal');
+      if (!modal) return;
+
+      const titleEl = document.getElementById('completionModalSubject');
+      const metaEl = document.getElementById('completionModalMeta');
+      const enrolledEl = document.getElementById('completionEnrolledCount');
+      const presentEl = document.getElementById('completionPresentCount');
+      const absentEl = document.getElementById('completionAbsentCount');
+      const summaryEl = document.getElementById('completionSmsSummary');
+
+      const subjName = data.subjectName || 'Course Attendance Finalized';
+      if (titleEl) titleEl.textContent = subjName;
+
+      // Construct clean human-readable session summary without raw Firestore ID
+      const dateVal = data.date || new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      let timeVal = '';
+      if (data.startTime && data.endTime) {
+        timeVal = `${data.startTime} – ${data.endTime}`;
+      } else if (data.startTime) {
+        timeVal = `Started: ${data.startTime}`;
+      } else if (data.time) {
+        timeVal = data.time;
+      }
+      const classNumVal = data.classNumber ? `Class Session #${data.classNumber}` : '';
+
+      const parts = [`📅 ${dateVal}`];
+      if (timeVal) parts.push(`🕒 ${timeVal}`);
+      if (classNumVal) parts.push(`🏷️ ${classNumVal}`);
+
+      if (metaEl) {
+        metaEl.innerHTML = parts.join(' &nbsp;•&nbsp; ');
+      }
+
+      if (enrolledEl) enrolledEl.textContent = data.totalEnrolled ?? 0;
+      if (presentEl) presentEl.textContent = data.presentCount ?? 0;
+      if (absentEl) absentEl.textContent = data.absentCount ?? 0;
+
+      const absentCount = data.absentCount || 0;
+      if (summaryEl) {
+        if (absentCount === 0) {
+          summaryEl.innerHTML = `
+            <div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); border-radius:8px; padding:10px 14px; text-align:center; font-size:0.86rem; color:var(--emerald-dark); font-weight:600;">
+              ✓ All students were present. Zero parent SMS notifications required.
+            </div>`;
+        } else {
+          summaryEl.innerHTML = `
+            <div style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); border-radius:8px; padding:10px 14px; text-align:center; font-size:0.86rem; color:var(--crimson-dark); font-weight:600;">
+              ⚠️ ${absentCount} absent student${absentCount > 1 ? 's' : ''} recorded. Automated parent SMS processed.
+            </div>`;
+        }
+      }
+
+      modal.style.display = 'flex';
+    }
+
+    function closeAttendanceCompletionModal() {
+      const modal = document.getElementById('attendanceCompletionModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function closeAttendanceCompletionModalOnBackdrop(e) {
+      if (e.target.id === 'attendanceCompletionModal') {
+        closeAttendanceCompletionModal();
+      }
+    }
+
+    function viewParentSmsLogsFromModal() {
+      const sid = lastCompletedSessionData?.sessionId;
+      const subId = lastCompletedSessionData?.subjectId;
+      closeAttendanceCompletionModal();
+      navigateToParentSmsLogs(sid, subId);
+    }
+
+    function navigateToParentSmsLogsFromSession() {
+      const sid = activeSessionModalSessionId;
+      const subId = activeSessionModalSubjectId;
+      closeSessionAttendanceModal();
+      navigateToParentSmsLogs(sid, subId);
+    }
+
+    async function computeSessionAbsenceSummaryClient(sessionId, subjectId) {
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+
+      // 1. Fetch Subject doc
+      let subjectData = null;
+      const cachedSub = (assignedSubjectDocs || []).find(d => d.id === subjectId);
+      if (cachedSub) {
+        subjectData = cachedSub.data();
+      } else {
+        const subSnap = await db.collection('subjects').doc(subjectId).get().catch(() => null);
+        if (subSnap && subSnap.exists) subjectData = subSnap.data();
+      }
+
+      // 2. Fetch Session doc
+      const sessionSnap = await db.collection('attendanceSessions').doc(sessionId).get().catch(() => null);
+      const sessionData = sessionSnap && sessionSnap.exists ? sessionSnap.data() : null;
+
+      const subjName = subjectData?.subjectName || sessionData?.subjectName || 'Course Subject';
+      const sessionDate = sessionData?.date || new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+      // 3. Enrolled students
+      let enrolledStudents = Array.isArray(subjectData?.enrolledRoster) ? subjectData.enrolledRoster : [];
+      if (!enrolledStudents.length && Array.isArray(subjectData?.studentIds)) {
+        enrolledStudents = subjectData.studentIds.map(id => ({ id, name: 'Student', usn: '' }));
+      }
+
+      // 4. Query attendance records for this session
+      const attQueries = [
+        db.collection('attendance').where('facultyUid', '==', currentAuthUid).where('sessionId', '==', sessionId).get().catch(() => null),
+        db.collection('attendance').where('facultyId', '==', currentAuthUid).where('sessionId', '==', sessionId).get().catch(() => null)
+      ];
+      const attSnaps = await Promise.all(attQueries);
+      const presentSet = new Set();
+      attSnaps.forEach(snap => {
+        if (!snap || snap.empty) return;
+        snap.forEach(doc => {
+          const a = doc.data();
+          if (a.studentUid) presentSet.add(a.studentUid);
+          if (a.studentId) presentSet.add(a.studentId);
+        });
+      });
+
+      // 5. Calculate Absent Students (Enrolled - Present)
+      const absentStudents = enrolledStudents.filter(stu => {
+        const stuId = stu.id || stu.uid;
+        return !presentSet.has(stuId);
+      });
+
+      const presentCount = enrolledStudents.length - absentStudents.length;
+      const absentCount = absentStudents.length;
+
+      // 6. Process notifications & check duplicates
+      let newlyGenerated = 0;
+      let previouslySent = 0;
+      const notificationResults = [];
+
+      for (const stu of absentStudents) {
+        const stuUid = stu.id || stu.uid;
+        const notificationDocId = `${sessionId}_${stuUid}_absence`;
+        const logDoc = await db.collection('notificationLogs').doc(notificationDocId).get().catch(() => null);
+
+        if (logDoc && logDoc.exists) {
+          previouslySent++;
+          const data = logDoc.data();
+          notificationResults.push({
+            studentUid: stuUid,
+            studentName: data.studentName || stu.name,
+            usn: data.usn || stu.usn || '',
+            parentPhoneMasked: data.parentPhoneMasked || '******',
+            status: data.status || 'demo_sent',
+            error: data.error || null,
+            isNew: false
+          });
+        } else {
+          const maskedPhone = maskPhoneNumberClient(stu.parentPhone || stu.phone || '9876543210');
+          const studentName = stu.name || 'Student';
+          const usn = stu.usn || '';
+
+          const logData = {
+            sessionId: sessionId,
+            studentUid: stuUid,
+            studentName: studentName,
+            usn: usn,
+            subjectId: subjectId,
+            subjectName: subjName,
+            sessionDate: sessionDate,
+            parentPhoneMasked: maskedPhone,
+            notificationType: 'absence',
+            providerMode: 'mock',
+            status: 'demo_sent',
+            message: `CIT Alert: Your ward ${studentName} was marked ABSENT for ${subjName} on ${sessionDate}. CIT Attendance Dept.`,
+            facultyUid: currentAuthUid,
+            source: 'system_session_finalization',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          };
+
+          await db.collection('notificationLogs').doc(notificationDocId).set(logData).catch(err => {
+            console.warn('[Notification Log] Write error caught:', err.message);
+          });
+          newlyGenerated++;
+
+          notificationResults.push({
+            studentUid: stuUid,
+            studentName: studentName,
+            usn: usn,
+            parentPhoneMasked: maskedPhone,
+            status: 'demo_sent',
+            isNew: true
+          });
+        }
+      }
+
+      return {
+        success: true,
+        sessionId,
+        subjectId,
+        subjectName: subjName,
+        date: sessionDate,
+        startTime: sessionData?.startTime || null,
+        endTime: sessionData?.endTime || null,
+        classNumber: sessionData?.classNumber || null,
+        totalEnrolled: enrolledStudents.length,
+        presentCount,
+        absentCount,
+        notificationsGenerated: newlyGenerated,
+        previouslySent,
+        absentStudents: notificationResults
+      };
+    }
+
+    async function processSessionCompletionSummary(sessionId, subjectId) {
+      try {
+        const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+        
+        let summaryData = null;
+        try {
+          const token = await auth.currentUser?.getIdToken().catch(() => null);
+          const headers = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          const res = await fetch('http://localhost:3001/api/finalize-attendance-sms', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ sessionId, subjectId, facultyUid: currentAuthUid })
+          });
+          if (res.ok) {
+            summaryData = await res.json();
+          }
+        } catch (fetchErr) {
+          console.warn('[processSessionCompletionSummary] Backend server unreachable, using client computation:', fetchErr);
+        }
+
+        if (!summaryData) {
+          summaryData = await computeSessionAbsenceSummaryClient(sessionId, subjectId);
+        }
+
+        openAttendanceCompletionModal(summaryData);
+
+        // Refresh Parent SMS logs in background if already loaded
+        if (allFacultySmsLogs && allFacultySmsLogs.length > 0) {
+          loadParentSmsLogs().catch(() => null);
+        }
+      } catch (err) {
+        console.error('Error generating attendance completion summary:', err);
       }
     }
 
@@ -1451,6 +2265,8 @@
       const badge = document.getElementById('sessionModalBadge');
 
       if (!modal) return;
+      activeSessionModalSessionId = sessionId;
+      activeSessionModalSubjectId = subjectId;
       modal.style.display = 'flex';
       if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="empty">Loading student attendance roster...</td></tr>';
 
@@ -1527,8 +2343,15 @@
         const totalCount = students.length;
         const pct = totalCount > 0 ? ((presentCount / totalCount) * 100).toFixed(1) : '0.0';
 
+        let timeDisplay = '';
+        if (sessionData?.startTime && sessionData?.endTime) {
+          timeDisplay = ` • 🕒 <strong>${sessionData.startTime} – ${sessionData.endTime}</strong>`;
+        } else if (sessionData?.startTime) {
+          timeDisplay = ` • 🕒 <strong>Started ${sessionData.startTime}</strong>`;
+        }
+
         if (meta) {
-          meta.innerHTML = `📅 Date: <strong>${dateStr}</strong> • Class <strong>#${classNum}</strong> • Present: <strong style="color:var(--emerald-dark);">${presentCount} / ${totalCount}</strong> (${pct}%)`;
+          meta.innerHTML = `📅 Date: <strong>${dateStr}</strong>${timeDisplay} • Class <strong>#${classNum}</strong> • Present: <strong style="color:var(--emerald-dark);">${presentCount} / ${totalCount}</strong> (${pct}%)`;
         }
 
         if (!tbody) return;
@@ -2311,8 +3134,8 @@
         // Admin sees all pending requests (server-enforced via Firestore rules)
         try {
           if (cachedIsAdmin === null) {
-            const token = auth.currentUser?.token || {};
-            if (token.admin === true) {
+            const tokenResult = await auth.currentUser?.getIdTokenResult().catch(() => null);
+            if (tokenResult?.claims?.admin === true) {
               cachedIsAdmin = true;
             } else {
               const adminDoc = await db.collection('admins').doc(currentAuthUid).get().catch(() => null);

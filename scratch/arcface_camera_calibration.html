@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ArcFace Camera Calibration</title>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js"></script>
+  <style>
+    :root { color-scheme: dark; --bg: #10161b; --panel: #182229; --line: #30404a; --text: #edf4f5; --muted: #9db0b5; --accent: #49c5b6; --warn: #f4b860; --bad: #f17b72; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 15% 0%, #203942, var(--bg) 42%); color: var(--text); font: 15px/1.45 system-ui, sans-serif; }
+    main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 48px; }
+    h1, h2 { margin: 0; letter-spacing: .01em; } h1 { font-size: clamp(1.6rem, 4vw, 2.5rem); } h2 { font-size: 1.05rem; }
+    header { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 24px; } header p { max-width: 620px; color: var(--muted); margin: 8px 0 0; }
+    .grid { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(340px, 1.25fr); gap: 16px; }
+    .panel { background: color-mix(in srgb, var(--panel) 94%, transparent); border: 1px solid var(--line); border-radius: 10px; padding: 18px; box-shadow: 0 14px 36px #0003; }
+    .wide { grid-column: 1 / -1; }
+    .video-wrap { position: relative; overflow: hidden; border-radius: 8px; background: #071014; aspect-ratio: 4 / 3; }
+    video { display: block; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .reticle { position: absolute; inset: 14% 22%; border: 2px solid var(--accent); border-radius: 42%; pointer-events: none; opacity: .8; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+    button, select { border: 1px solid var(--line); border-radius: 6px; background: #223039; color: var(--text); min-height: 38px; padding: 8px 12px; font: inherit; }
+    button { cursor: pointer; } button:hover:not(:disabled) { border-color: var(--accent); } button:disabled { cursor: not-allowed; opacity: .45; }
+    button.primary { background: #167b72; border-color: #4fd1c1; } button.warn { background: #765126; border-color: var(--warn); }
+    label { color: var(--muted); font-size: .9rem; } .status { color: var(--muted); margin: 14px 0 0; min-height: 24px; } .status.ok { color: var(--accent); } .status.error { color: var(--bad); }
+    dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 18px; margin: 14px 0 0; } dt { color: var(--muted); } dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; } th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: right; } th:first-child, td:first-child { text-align: left; } th { color: var(--muted); font-weight: 600; }
+    .score-good { color: var(--accent); } .score-bad { color: var(--warn); } .empty { color: var(--muted); }
+    .capture-log { max-height: 260px; overflow: auto; } .capture-log td { font-size: .88rem; }
+    code { color: #bdebe5; } small { color: var(--muted); }
+    @media (max-width: 760px) { main { width: min(100% - 20px, 620px); padding-top: 20px; } header { display: block; } .grid { grid-template-columns: 1fr; } .wide { grid-column: auto; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><h1>ArcFace Camera Calibration</h1><p>Real-camera identity diagnostics only. No attendance writes, Firestore access, threshold changes, liveness decisions, images, or raw embeddings are stored.</p></div>
+      <button id="downloadBtn" class="warn" disabled>Export score report</button>
+    </header>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Camera</h2>
+        <div class="video-wrap"><video id="camera" autoplay muted playsinline></video><div class="reticle"></div></div>
+        <div class="row"><button id="startCameraBtn" class="primary">Start camera</button><button id="stopCameraBtn" disabled>Stop camera</button></div>
+        <p id="status" class="status">Load the model, then start the camera.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Model and preprocessing</h2>
+        <dl id="modelDetails"><dt>Model</dt><dd>models/w600k_mbf.onnx</dd><dt>Graph</dt><dd>Not loaded</dd><dt>Input</dt><dd>Not loaded</dd><dt>Output</dt><dd>Not loaded</dd><dt>Pipeline</dt><dd>RGB, 112x112, NCHW, (x - 127.5) / 128</dd><dt>Alignment</dt><dd>MediaPipe eye-center transform</dd></dl>
+        <div class="row"><button id="loadModelBtn" class="primary">Load model and landmarks</button></div>
+        <p><small>Capture labels are manual: use Student A and Student B consistently. This page does not authenticate either person.</small></p>
+      </section>
+
+      <section class="panel wide">
+        <h2>Capture samples</h2>
+        <div class="row">
+          <label for="person">Person</label><select id="person"><option value="A">Student A</option><option value="B">Student B</option></select>
+          <button id="referenceBtn" disabled>Capture reference</button><button id="referenceSetBtn" disabled>Capture 5-frame reference</button><button id="sampleBtn" disabled>Capture probe sample</button><button id="sampleSetBtn" disabled>Capture 5-frame probe set</button><button id="temporalBtn" disabled>Capture 10-frame temporal set</button><button id="repeatBtn" disabled>Repeat same frame</button><button id="clearBtn">Clear captures</button>
+        </div>
+        <p id="captureHelp" class="status">Capture one reference for each person, then capture several probe samples for each person under varied conditions.</p>
+        <div class="capture-log"><table><thead><tr><th>Capture</th><th>Label</th><th>Embedding</th><th>Norm</th><th>Face px</th><th>Eyes px</th><th>Roll</th><th>Yaw</th><th>Pitch</th><th>Blur</th><th>Brightness</th><th>Inference</th></tr></thead><tbody id="captureRows"><tr><td colspan="12" class="empty">No captures yet.</td></tr></tbody></table></div>
+      </section>
+
+      <section class="panel wide">
+        <h2>Score distributions</h2>
+        <table><thead><tr><th>Comparison</th><th>Alignment</th><th>Samples</th><th>Min</th><th>Max</th><th>Mean</th><th>Median</th><th>Std dev</th></tr></thead><tbody id="statsRows"><tr><td colspan="8" class="empty">References and probe samples are required.</td></tr></tbody></table>
+        <table><thead><tr><th>Reference account</th><th>Probe face</th><th>Current 2-eye</th><th>5-point</th><th>Classification</th></tr></thead><tbody id="scoreRows"><tr><td colspan="5" class="empty">No scores yet.</td></tr></tbody></table>
+      </section>
+    </div>
+  </main>
+
+  <script type="module">
+    const MODEL_URL = '../models/w600k_mbf.onnx';
+    const MODEL_NAME = 'arcface_mobilefacenet';
+    const MODEL_VERSION = 'w600k_mbf_v1';
+    const EMBEDDING_SIZE = 512;
+    const captures = { A: { reference: null, referenceSet: [], aggregateVector: null, aggregateFiveVector: null, probes: [], temporalSets: [] }, B: { reference: null, referenceSet: [], aggregateVector: null, aggregateFiveVector: null, probes: [], temporalSets: [] } };
+    const determinismTests = [];
+    let session = null;
+    let landmarker = null;
+    let stream = null;
+    let visionModule = null;
+    let captureIndex = 0;
+    let lastVideoTimestamp = -1;
+    const timings = { modelLoadMs: null, landmarkLoadMs: null, inferenceMs: [] };
+    const $ = id => document.getElementById(id);
+
+    function setStatus(message, type = '') { const el = $('status'); el.textContent = message; el.className = `status ${type}`; }
+    function stats(values) {
+      if (!values.length) return null;
+      const sorted = [...values].sort((a, b) => a - b);
+      return { count: values.length, min: sorted[0], max: sorted[sorted.length - 1], mean: values.reduce((a, b) => a + b, 0) / values.length, median: sorted[Math.floor(sorted.length / 2)] };
+    }
+    function format(value) { return Number.isFinite(value) ? value.toFixed(6) : '-'; }
+    function l2Normalize(values) {
+      let sum = 0; for (const value of values) sum += value * value;
+      const norm = Math.sqrt(sum);
+      const result = new Float32Array(values.length);
+      for (let index = 0; index < values.length; index++) result[index] = values[index] / (norm || 1e-10);
+      return { vector: result, norm };
+    }
+    function similarity(left, right) { let dot = 0; for (let index = 0; index < EMBEDDING_SIZE; index++) dot += left[index] * right[index]; return dot; }
+
+    function landmarkPoints(source, landmarks) {
+      const width = source.videoWidth || source.width;
+      const height = source.videoHeight || source.height;
+      const point = index => ({ x: landmarks[index].x * width, y: landmarks[index].y * height });
+      return {
+        width,
+        height,
+        left: { x: (landmarks[33].x + landmarks[133].x) * width / 2, y: (landmarks[33].y + landmarks[133].y) * height / 2 },
+        right: { x: (landmarks[362].x + landmarks[263].x) * width / 2, y: (landmarks[362].y + landmarks[263].y) * height / 2 },
+        nose: point(1),
+        mouthLeft: point(61),
+        mouthRight: point(291)
+      };
+    }
+
+    function createAlignedCanvas(source, sourcePoints, targetPoints) {
+      const width = source.videoWidth || source.width;
+      const height = source.videoHeight || source.height;
+      const sourceCenter = { x: 0, y: 0 };
+      const targetCenter = { x: 0, y: 0 };
+      sourcePoints.forEach(point => { sourceCenter.x += point.x; sourceCenter.y += point.y; });
+      targetPoints.forEach(point => { targetCenter.x += point.x; targetCenter.y += point.y; });
+      sourceCenter.x /= sourcePoints.length; sourceCenter.y /= sourcePoints.length;
+      targetCenter.x /= targetPoints.length; targetCenter.y /= targetPoints.length;
+      let variance = 0; let a = 0; let b = 0;
+      sourcePoints.forEach((point, index) => {
+        const sx = point.x - sourceCenter.x; const sy = point.y - sourceCenter.y;
+        const tx = targetPoints[index].x - targetCenter.x; const ty = targetPoints[index].y - targetCenter.y;
+        variance += sx * sx + sy * sy; a += sx * tx + sy * ty; b += sx * ty - sy * tx;
+      });
+      const magnitude = Math.max(Math.hypot(a, b), 1e-8);
+      const scale = magnitude / Math.max(variance, 1e-8);
+      const cosine = a / magnitude; const sine = b / magnitude;
+      const canvas = document.createElement('canvas'); canvas.width = 112; canvas.height = 112;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      context.fillStyle = '#000'; context.fillRect(0, 0, 112, 112); context.save();
+      const translateX = targetCenter.x - scale * (cosine * sourceCenter.x - sine * sourceCenter.y);
+      const translateY = targetCenter.y - scale * (sine * sourceCenter.x + cosine * sourceCenter.y);
+      context.setTransform(scale * cosine, scale * sine, -scale * sine, scale * cosine, translateX, translateY);
+      context.drawImage(source, 0, 0, width, height); context.restore();
+      canvas.alignmentTransform = { matrix: [scale * cosine, scale * sine, -scale * sine, scale * cosine, translateX, translateY], scale, rotationDeg: Math.atan2(sine, cosine) * 180 / Math.PI, sourceCenter, targetCenter };
+      return canvas;
+    }
+
+    function alignFaceCanvas(source, landmarks) {
+      const width = source.videoWidth || source.width;
+      const height = source.videoHeight || source.height;
+      const leftX = ((landmarks[33].x + landmarks[133].x) / 2) * width;
+      const leftY = ((landmarks[33].y + landmarks[133].y) / 2) * height;
+      const rightX = ((landmarks[362].x + landmarks[263].x) / 2) * width;
+      const rightY = ((landmarks[362].y + landmarks[263].y) / 2) * height;
+      const dx = rightX - leftX;
+      const dy = rightY - leftY;
+      const scale = 35.24 / Math.max(Math.hypot(dx, dy), 1);
+      const angle = Math.atan2(dy, dx);
+      const midpointX = (leftX + rightX) / 2;
+      const midpointY = (leftY + rightY) / 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = 112; canvas.height = 112;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      context.fillStyle = '#000'; context.fillRect(0, 0, 112, 112);
+      context.save();
+      context.translate(55.91, 51.60); context.rotate(-angle); context.scale(scale, scale); context.translate(-midpointX, -midpointY);
+      context.drawImage(source, 0, 0, width, height); context.restore();
+      canvas.alignmentTransform = { matrix: [scale * Math.cos(angle), -scale * Math.sin(angle), scale * Math.sin(angle), scale * Math.cos(angle), 55.91 - scale * (Math.cos(angle) * midpointX + Math.sin(angle) * midpointY), 51.60 - scale * (-Math.sin(angle) * midpointX + Math.cos(angle) * midpointY)], scale, rotationDeg: angle * 180 / Math.PI, sourceCenter: { x: midpointX, y: midpointY }, targetCenter: { x: 55.91, y: 51.60 } };
+      return canvas;
+    }
+
+    function alignFaceCanvasFivePoint(source, landmarks) {
+      const points = landmarkPoints(source, landmarks);
+      const sourcePoints = [points.left, points.right, points.nose, points.mouthLeft, points.mouthRight];
+      const targetPoints = [{ x: 38.2946, y: 51.6963 }, { x: 73.5318, y: 51.5014 }, { x: 56.0252, y: 71.7366 }, { x: 41.5493, y: 92.3655 }, { x: 70.7299, y: 92.2041 }];
+      return createAlignedCanvas(source, sourcePoints, targetPoints);
+    }
+
+    function captureQuality(source, landmarks) {
+      const points = landmarkPoints(source, landmarks);
+      const xs = landmarks.map(point => point.x * points.width); const ys = landmarks.map(point => point.y * points.height);
+      const faceWidth = Math.max(...xs) - Math.min(...xs); const faceHeight = Math.max(...ys) - Math.min(...ys);
+      const eyeDistance = Math.hypot(points.right.x - points.left.x, points.right.y - points.left.y);
+      const rollDeg = Math.atan2(points.right.y - points.left.y, points.right.x - points.left.x) * 180 / Math.PI;
+      const eyeMid = { x: (points.left.x + points.right.x) / 2, y: (points.left.y + points.right.y) / 2 };
+      return { faceWidth, faceHeight, faceAreaRatio: faceWidth * faceHeight / (points.width * points.height), eyeDistance, eyeLeft: points.left, eyeRight: points.right, nose: points.nose, mouthLeft: points.mouthLeft, mouthRight: points.mouthRight, rollDeg, yaw: (points.nose.x - eyeMid.x) / Math.max(eyeDistance, 1), pitch: (points.nose.y - eyeMid.y) / Math.max(eyeDistance, 1) };
+    }
+
+    function imageQuality(canvas) {
+      const pixels = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, 112, 112).data;
+      let sum = 0; let sumSquares = 0; let blurSum = 0; const count = 112 * 112; const gray = new Float32Array(count);
+      for (let index = 0; index < count; index++) { const offset = index * 4; const value = (pixels[offset] + pixels[offset + 1] + pixels[offset + 2]) / 3; gray[index] = value; sum += value; sumSquares += value * value; }
+      for (let y = 1; y < 111; y++) for (let x = 1; x < 111; x++) { const index = y * 112 + x; const laplacian = gray[index - 112] + gray[index - 1] + gray[index + 1] + gray[index + 112] - 4 * gray[index]; blurSum += laplacian * laplacian; }
+      const brightness = sum / count;
+      return { brightness, contrast: Math.sqrt(Math.max(0, sumSquares / count - brightness * brightness)), blur: blurSum / (110 * 110) };
+    }
+
+    async function createEmbedding(canvas, captureId, alignment) {
+      const start = performance.now();
+      const pixels = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, 112, 112).data;
+      const data = new Float32Array(3 * 112 * 112);
+      for (let index = 0; index < 112 * 112; index++) {
+        const pixel = index * 4;
+        data[index] = (pixels[pixel] - 127.5) / 128;
+        data[112 * 112 + index] = (pixels[pixel + 1] - 127.5) / 128;
+        data[2 * 112 * 112 + index] = (pixels[pixel + 2] - 127.5) / 128;
+      }
+      const outputMap = await session.run({ 'input.1': new ort.Tensor('float32', data, [1, 3, 112, 112]) });
+      const output = outputMap['516'] || Object.values(outputMap)[0];
+      const raw = output.data.slice(0, EMBEDDING_SIZE);
+      const invalid = raw.filter(value => !Number.isFinite(value)).length;
+      if (raw.length !== EMBEDDING_SIZE || invalid) throw new Error(`Invalid model output: length=${raw.length}, nonFinite=${invalid}`);
+      const normalized = l2Normalize(raw);
+      timings.inferenceMs.push(performance.now() - start);
+      return { captureId, alignment, vector: normalized.vector, norm: Math.sqrt(normalized.vector.reduce((sum, value) => sum + value * value, 0)), rawNorm: normalized.norm, min: Math.min(...raw), max: Math.max(...raw), nanCount: 0, infinityCount: 0, inferenceMs: timings.inferenceMs.at(-1) };
+    }
+
+    async function loadModels() {
+      if (session && landmarker) return;
+      const modelStart = performance.now();
+      setStatus('Loading ONNX model...', '');
+      session = await ort.InferenceSession.create(MODEL_URL, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+      timings.modelLoadMs = performance.now() - modelStart;
+      const landmarkStart = performance.now();
+      visionModule = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+      const resolver = await visionModule.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+      try {
+        landmarker = await visionModule.FaceLandmarker.createFromOptions(resolver, { baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task', delegate: 'GPU' }, runningMode: 'VIDEO', numFaces: 2, minFaceDetectionConfidence: .5, minFacePresenceConfidence: .5, minTrackingConfidence: .5 });
+      } catch (error) {
+        landmarker = await visionModule.FaceLandmarker.createFromOptions(resolver, { baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task', delegate: 'CPU' }, runningMode: 'VIDEO', numFaces: 2, minFaceDetectionConfidence: .5, minFacePresenceConfidence: .5, minTrackingConfidence: .5 });
+      }
+      timings.landmarkLoadMs = performance.now() - landmarkStart;
+      $('modelDetails').innerHTML = `<dt>Model</dt><dd>${MODEL_URL}</dd><dt>Graph</dt><dd>${session.inputNames[0]} → ${session.outputNames[0]}</dd><dt>Input</dt><dd>${session.inputMetadata?.[0]?.shape?.join(' x ') || '1 x 3 x 112 x 112'}</dd><dt>Output</dt><dd>${session.outputMetadata?.[0]?.shape?.join(' x ') || '1 x 512'}</dd><dt>Pipeline</dt><dd>RGB, 112x112, NCHW, (x - 127.5) / 128</dd><dt>Alignment</dt><dd>MediaPipe eye-center transform</dd>`;
+      setStatus(`Models ready. ONNX load ${timings.modelLoadMs.toFixed(1)} ms; landmarks ${timings.landmarkLoadMs.toFixed(1)} ms.`, 'ok');
+      $('startCameraBtn').disabled = false; $('referenceBtn').disabled = !stream; $('referenceSetBtn').disabled = !stream; $('sampleBtn').disabled = !stream; $('sampleSetBtn').disabled = !stream; $('temporalBtn').disabled = !stream; $('repeatBtn').disabled = !stream;
+    }
+
+    async function startCamera() {
+      if (!session || !landmarker) { setStatus('Load the model and landmarks first.', 'error'); return; }
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+      $('camera').srcObject = stream; await $('camera').play();
+      $('startCameraBtn').disabled = true; $('stopCameraBtn').disabled = false; $('referenceBtn').disabled = false; $('referenceSetBtn').disabled = false; $('sampleBtn').disabled = false; $('sampleSetBtn').disabled = false; $('temporalBtn').disabled = false; $('repeatBtn').disabled = false;
+      setStatus('Camera ready. Keep exactly one face inside the reticle.', 'ok');
+    }
+    function stopCamera() { if (stream) stream.getTracks().forEach(track => track.stop()); stream = null; $('camera').srcObject = null; $('startCameraBtn').disabled = !session; $('stopCameraBtn').disabled = true; $('referenceBtn').disabled = true; $('referenceSetBtn').disabled = true; $('sampleBtn').disabled = true; $('sampleSetBtn').disabled = true; $('temporalBtn').disabled = true; $('repeatBtn').disabled = true; }
+
+    function averageVectors(samples, field) {
+      const values = new Float32Array(EMBEDDING_SIZE);
+      samples.forEach(sample => sample[field].forEach((value, index) => { values[index] += value; }));
+      return l2Normalize(values).vector;
+    }
+
+    async function captureOne(kind) {
+      if (!stream || !landmarker) return;
+      const video = $('camera');
+      const timestamp = Math.max(performance.now(), lastVideoTimestamp + 1); lastVideoTimestamp = timestamp;
+      const result = landmarker.detectForVideo(video, timestamp);
+      const faces = result.faceLandmarks || [];
+      if (faces.length !== 1) { setStatus(`Capture rejected: expected exactly one face, detected ${faces.length}.`, 'error'); return; }
+      const landmarks = faces[0];
+      if (landmarks.length < 363) { setStatus('Capture rejected: incomplete landmarks.', 'error'); return; }
+      const captureId = ++captureIndex;
+      const aligned = alignFaceCanvas(video, landmarks);
+      const alignedFive = alignFaceCanvasFivePoint(video, landmarks);
+      const embedding = await createEmbedding(aligned, captureId, 'two-eye');
+      const fiveEmbedding = await createEmbedding(alignedFive, captureId, 'five-point');
+      const person = $('person').value;
+      return { id: captureId, person, kind, ...embedding, fiveVector: fiveEmbedding.vector, fiveNorm: fiveEmbedding.norm, quality: { ...captureQuality(video, landmarks), ...imageQuality(aligned), currentTransform: aligned.alignmentTransform, fivePointTransform: alignedFive.alignmentTransform, alignedSize: { width: 112, height: 112 } }, capturedAt: new Date().toISOString() };
+    }
+
+    async function capture(kind, count = 1) {
+      if (!stream || !landmarker) return;
+      const samples = [];
+      for (let index = 0; index < count; index++) {
+        const sample = await captureOne(kind);
+        if (!sample) return;
+        samples.push(sample);
+        if (index + 1 < count) { setStatus(`Capturing ${index + 1}/${count}; keep your face steady...`); await new Promise(resolve => setTimeout(resolve, 140)); }
+      }
+      const person = $('person').value;
+      if (kind === 'reference') { captures[person].reference = samples[0]; captures[person].referenceSet = samples; captures[person].aggregateVector = averageVectors(samples, 'vector'); captures[person].aggregateFiveVector = averageVectors(samples, 'fiveVector'); }
+      else { captures[person].probes.push(...samples); if (kind === 'temporal') captures[person].temporalSets.push(samples); }
+      setStatus(`${person === 'A' ? 'Student A' : 'Student B'} ${kind} capture${count > 1 ? ' set' : ''} complete. Raw vectors remain memory-only.`, 'ok');
+      render();
+    }
+
+    async function repeatSameFrame() {
+      if (!stream || !landmarker) return;
+      const video = $('camera'); const timestamp = Math.max(performance.now(), lastVideoTimestamp + 1); lastVideoTimestamp = timestamp;
+      const result = landmarker.detectForVideo(video, timestamp); const faces = result.faceLandmarks || [];
+      if (faces.length !== 1) { setStatus(`Repeat rejected: expected exactly one face, detected ${faces.length}.`, 'error'); return; }
+      const aligned = alignFaceCanvas(video, faces[0]); const captureId = ++captureIndex;
+      const first = await createEmbedding(aligned, captureId, 'two-eye'); const second = await createEmbedding(aligned, captureId, 'two-eye-repeat');
+      determinismTests.push({ captureId, similarity: similarity(first.vector, second.vector), first: { norm: first.norm, min: first.min, max: first.max }, second: { norm: second.norm, min: second.min, max: second.max } });
+      setStatus(`Same-frame repeat #${captureId}: cosine ${format(determinismTests.at(-1).similarity)}.`, 'ok');
+    }
+
+    function scoresFor(account, probePerson, alignment = 'current', aggregate = false) {
+      const reference = captures[account].reference;
+      if (!reference) return [];
+      const referenceVector = aggregate ? captures[account][alignment === 'five' ? 'aggregateFiveVector' : 'aggregateVector'] : reference[alignment === 'five' ? 'fiveVector' : 'vector'];
+      return captures[probePerson].probes.map(probe => ({ account, probePerson, probeId: probe.id, score: similarity(referenceVector, probe[alignment === 'five' ? 'fiveVector' : 'vector']), quality: probe.quality }));
+    }
+    function allScores(alignment = 'current', aggregate = false) { return [...scoresFor('A', 'A', alignment, aggregate), ...scoresFor('A', 'B', alignment, aggregate), ...scoresFor('B', 'A', alignment, aggregate), ...scoresFor('B', 'B', alignment, aggregate)]; }
+    function render() {
+      const rows = [];
+      for (const person of ['A', 'B']) {
+        const samples = [...captures[person].referenceSet, ...captures[person].probes].filter(Boolean);
+        for (const sample of samples) { const q = sample.quality || {}; rows.push(`<tr><td>#${sample.id}</td><td>Student ${person} ${sample.kind}</td><td>512</td><td>${format(sample.norm)}</td><td>${format(q.faceWidth)}×${format(q.faceHeight)}</td><td>${format(q.eyeDistance)}</td><td>${format(q.rollDeg)}°</td><td>${format(q.yaw)}</td><td>${format(q.pitch)}</td><td>${format(q.blur)}</td><td>${format(q.brightness)}</td><td>${format(sample.inferenceMs)} ms</td></tr>`); }
+      }
+      $('captureRows').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="12" class="empty">No captures yet.</td></tr>';
+      const groups = [['Genuine A→A', 'A', 'A'], ['Impostor A→B', 'A', 'B'], ['Impostor B→A', 'B', 'A'], ['Genuine B→B', 'B', 'B']];
+      const statRows = [];
+      for (const [name, account, probe] of groups) for (const alignment of ['current', 'five']) { const summary = stats(scoresFor(account, probe, alignment).map(item => item.score)); const values = scoresFor(account, probe, alignment).map(item => item.score); const deviation = summary ? Math.sqrt(values.reduce((sum, value) => sum + (value - summary.mean) ** 2, 0) / values.length) : null; statRows.push(`<tr><td>${name}</td><td>${alignment === 'current' ? '2-eye' : '5-point'}</td><td>${summary?.count || 0}</td><td>${summary ? format(summary.min) : '-'}</td><td>${summary ? format(summary.max) : '-'}</td><td>${summary ? format(summary.mean) : '-'}</td><td>${summary ? format(summary.median) : '-'}</td><td>${deviation === null ? '-' : format(deviation)}</td></tr>`); }
+      $('statsRows').innerHTML = statRows.join('');
+      const currentScores = allScores('current'); const fiveScores = allScores('five');
+      $('scoreRows').innerHTML = currentScores.length ? currentScores.map((item, index) => { const five = fiveScores[index]; const genuine = item.account === item.probePerson; return `<tr><td>Student ${item.account}</td><td>Student ${item.probePerson} #${item.probeId}</td><td class="${genuine ? 'score-good' : 'score-bad'}">${format(item.score)}</td><td class="${genuine ? 'score-good' : 'score-bad'}">${format(five.score)}</td><td>${genuine ? 'GENUINE' : 'IMPOSTOR'}</td></tr>`; }).join('') : '<tr><td colspan="5" class="empty">No scores yet.</td></tr>';
+      $('downloadBtn').disabled = !currentScores.length;
+    }
+
+    function scoreDetails(sample) {
+      if (sample.kind === 'reference') return null;
+      const result = {};
+      for (const account of ['A', 'B']) if (captures[account].reference) result[account] = { twoEye: similarity(captures[account].reference.vector, sample.vector), fivePoint: similarity(captures[account].reference.fiveVector, sample.fiveVector), aggregateTwoEye: similarity(captures[account].aggregateVector, sample.vector), aggregateFivePoint: similarity(captures[account].aggregateFiveVector, sample.fiveVector) };
+      return result;
+    }
+
+    function matrix(samples, field) { return samples.map(row => samples.map(column => similarity(row[field], column[field]))); }
+
+    function distributionSummary(values) {
+      const summary = stats(values); if (!summary) return null;
+      return { ...summary, stdDev: Math.sqrt(values.reduce((sum, value) => sum + (value - summary.mean) ** 2, 0) / values.length) };
+    }
+
+    function report() {
+      const scores = allScores();
+      const health = ['A', 'B'].flatMap(person => {
+        const samples = [...captures[person].referenceSet, ...captures[person].probes].filter(Boolean);
+        return samples.map(sample => ({ id: sample.id, person: sample.person, kind: sample.kind, length: EMBEDDING_SIZE, norm: sample.norm, fivePointNorm: sample.fiveNorm, min: sample.min, max: sample.max, nanCount: sample.nanCount, infinityCount: sample.infinityCount, inferenceMs: sample.inferenceMs, captureId: sample.id, score: scoreDetails(sample), quality: sample.quality }));
+      });
+      const temporal = {};
+      for (const person of ['A', 'B']) temporal[person] = captures[person].temporalSets.map(samples => ({ captureIds: samples.map(sample => sample.id), twoEyeCosineMatrix: matrix(samples, 'vector'), fivePointCosineMatrix: matrix(samples, 'fiveVector'), twoEyeSummary: distributionSummary(samples.flatMap((row, rowIndex) => samples.slice(rowIndex + 1).map(column => similarity(row.vector, column.vector)))), fivePointSummary: distributionSummary(samples.flatMap((row, rowIndex) => samples.slice(rowIndex + 1).map(column => similarity(row.fiveVector, column.fiveVector)))) }));
+      const distributions = { genuineAtoA: scores.filter(item => item.account === 'A' && item.probePerson === 'A').map(item => item.score), impostorAtoB: scores.filter(item => item.account === 'A' && item.probePerson === 'B').map(item => item.score), impostorBtoA: scores.filter(item => item.account === 'B' && item.probePerson === 'A').map(item => item.score), genuineBtoB: scores.filter(item => item.account === 'B' && item.probePerson === 'B').map(item => item.score) };
+      return { generatedAt: new Date().toISOString(), model: { path: MODEL_URL, name: MODEL_NAME, version: MODEL_VERSION, input: session?.inputMetadata?.[0] || null, output: session?.outputMetadata?.[0] || null, preprocessing: 'RGB, 112x112, NCHW, (pixel - 127.5) / 128.0' }, alignment: { current: 'MediaPipe landmarks 33/133 and 362/263, eye-center similarity transform', diagnostic: 'MediaPipe eye centers, nose 1, mouth corners 61/291, five-point similarity transform' }, metric: 'cosine similarity on L2-normalized vectors; higher is more similar', captures: { references: { A: Boolean(captures.A.reference), B: Boolean(captures.B.reference) }, referenceSetCounts: { A: captures.A.referenceSet.length, B: captures.B.referenceSet.length }, probeCounts: { A: captures.A.probes.length, B: captures.B.probes.length }, embeddingHealth: health }, distributions, distributionSummary: Object.fromEntries(Object.entries(distributions).map(([name, values]) => [name, distributionSummary(values)])), temporal, determinismTests, timings: { modelLoadMs: timings.modelLoadMs, landmarkLoadMs: timings.landmarkLoadMs, averageInferenceMs: timings.inferenceMs.length ? timings.inferenceMs.reduce((a, b) => a + b, 0) / timings.inferenceMs.length : null }, scores: { currentTwoEye: scores, fivePoint: allScores('five'), aggregateTwoEye: allScores('current', true), aggregateFivePoint: allScores('five', true) } };
+    }
+
+    function clearCaptures() { captures.A = { reference: null, referenceSet: [], aggregateVector: null, aggregateFiveVector: null, probes: [], temporalSets: [] }; captures.B = { reference: null, referenceSet: [], aggregateVector: null, aggregateFiveVector: null, probes: [], temporalSets: [] }; determinismTests.length = 0; render(); setStatus('Captures cleared.'); }
+    $('loadModelBtn').addEventListener('click', () => loadModels().catch(error => setStatus(`Model setup failed: ${error.message}`, 'error')));
+    $('startCameraBtn').addEventListener('click', () => startCamera().catch(error => setStatus(`Camera setup failed: ${error.message}`, 'error')));
+    $('stopCameraBtn').addEventListener('click', stopCamera);
+    $('referenceBtn').addEventListener('click', () => capture('reference').catch(error => setStatus(`Capture failed: ${error.message}`, 'error')));
+    $('referenceSetBtn').addEventListener('click', () => capture('reference', 5).catch(error => setStatus(`Reference set failed: ${error.message}`, 'error')));
+    $('sampleBtn').addEventListener('click', () => capture('probe').catch(error => setStatus(`Capture failed: ${error.message}`, 'error')));
+    $('sampleSetBtn').addEventListener('click', () => capture('probe', 5).catch(error => setStatus(`Probe set failed: ${error.message}`, 'error')));
+    $('temporalBtn').addEventListener('click', () => capture('temporal', 10).catch(error => setStatus(`Temporal set failed: ${error.message}`, 'error')));
+    $('repeatBtn').addEventListener('click', () => repeatSameFrame().catch(error => setStatus(`Repeat test failed: ${error.message}`, 'error')));
+    $('clearBtn').addEventListener('click', clearCaptures);
+    $('downloadBtn').addEventListener('click', () => { const blob = new Blob([JSON.stringify(report(), null, 2)], { type: 'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'arcface-camera-calibration-report.json'; link.click(); URL.revokeObjectURL(link.href); });
+    window.addEventListener('pagehide', stopCamera);
+    render();
+  </script>
+</body>
+</html>

@@ -200,13 +200,17 @@
         return;
       }
       const rows = records.map(r => {
-        const distDisplay = r.distance ? Number(r.distance).toFixed(1) + ' m' : '-';
+        let statusBadge = '<span class="badge green">● Present (Verified)</span>';
+        if (r.attendanceMethod === 'correction' || r.source === 'faculty_correction') {
+          statusBadge = '<span class="badge blue">● Faculty Correction</span>';
+        }
+        const distDisplay = r.distance ? Number(r.distance).toFixed(1) + ' m' : (r.attendanceMethod === 'correction' ? 'Correction' : '-');
         return `<tr>
           <td><strong>${escapeHtml(r.studentName || 'Student')}</strong></td>
           <td>${escapeHtml(r.date || '-')}</td>
           <td>${escapeHtml(r.time || '-')}</td>
           <td><span class="badge blue">${escapeHtml(distDisplay)}</span></td>
-          <td><span class="badge green">● Present (Verified)</span></td>
+          <td>${statusBadge}</td>
         </tr>`;
       });
       tbody.innerHTML = rows.join('');

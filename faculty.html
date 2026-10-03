@@ -116,6 +116,14 @@
         }
 
         if (faculty) {
+          if (faculty.active === false || faculty.status === 'inactive') {
+            await auth.signOut();
+            localStorage.clear();
+            msg.textContent = 'This faculty account is inactive. Please contact the administration.';
+            msg.className = 'msg error';
+            msg.style.display = 'block';
+            return;
+          }
           localStorage.setItem('facultyId', facultyId);
           localStorage.setItem('facultyUid', user.uid);
           localStorage.setItem('facultyName', faculty.name || 'Faculty');

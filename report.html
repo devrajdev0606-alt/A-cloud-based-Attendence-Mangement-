@@ -167,7 +167,18 @@
 
       if (!isReportInitialized) {
         isReportInitialized = true;
-        loadFilters().then(() => loadAttendance());
+        Promise.all([loadFilters(), db.collection('attendance').get()])
+          .then(([_, snapshot]) => {
+            allRecords = [];
+            snapshot.forEach(doc => allRecords.push({ id: doc.id, ...doc.data() }));
+            allRecords.sort((a, b) => (b.timestamp?.toDate?.() || 0) - (a.timestamp?.toDate?.() || 0));
+            updateStats(allRecords);
+            renderTable(allRecords);
+          })
+          .catch(err => {
+            document.getElementById('recordsTable').innerHTML = '<tr><td colspan="7" class="empty" style="color:var(--crimson-dark);">Error loading records</td></tr>';
+            console.error(err);
+          });
       }
     });
 
@@ -201,26 +212,26 @@
         
         let subjectSelect = document.getElementById('subjectFilter');
         subjectSelect.innerHTML = '<option value="">All Subjects</option>';
-        const seenSub = new Set();
         subjectSnap.forEach(doc => {
           const s = doc.data();
-          const key = (s.subjectName || '').trim().toLowerCase();
-          if (!seenSub.has(key)) {
-            seenSub.add(key);
-            subjectSelect.innerHTML += `<option value="${doc.id}">${s.subjectName}${s.subjectCode ? ` (${s.subjectCode})` : ''}</option>`;
-          }
+          const secText = s.section ? ` - Sec ${s.section}` : '';
+          const semText = s.semester ? ` (Sem ${s.semester}${secText})` : (secText ? ` (${secText.trim()})` : '');
+          const codeText = s.subjectCode ? ` [${s.subjectCode}]` : '';
+          const opt = document.createElement('option');
+          opt.value = doc.id;
+          opt.textContent = `${s.subjectName || 'Subject'}${codeText}${semText}`;
+          subjectSelect.appendChild(opt);
         });
         
         let facultySelect = document.getElementById('facultyFilter');
         facultySelect.innerHTML = '<option value="">All Faculty</option>';
-        const seenFac = new Set();
         facultySnap.forEach(doc => {
           const f = doc.data();
-          const key = (f.name || '').trim().toLowerCase();
-          if (!seenFac.has(key)) {
-            seenFac.add(key);
-            facultySelect.innerHTML += `<option value="${doc.id}">${f.name}</option>`;
-          }
+          const deptText = (f.department || f.dept) ? ` (${deptMap[f.department || f.dept] || f.department || f.dept})` : '';
+          const opt = document.createElement('option');
+          opt.value = doc.id;
+          opt.textContent = `${f.name || 'Faculty'}${deptText}`;
+          facultySelect.appendChild(opt);
         });
       } catch (err) {
         console.error(err);

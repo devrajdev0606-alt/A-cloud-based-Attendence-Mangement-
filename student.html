@@ -120,6 +120,14 @@
         }
 
         if (student) {
+          if (student.active === false || student.status === 'inactive') {
+            await auth.signOut();
+            localStorage.clear();
+            msg.textContent = 'This student account is inactive. Please contact the administration.';
+            msg.className = 'msg error';
+            msg.style.display = 'block';
+            return;
+          }
           localStorage.setItem('studentId', studentId);
           localStorage.setItem('studentUid', user.uid);
           localStorage.setItem('studentName', student.name || 'Student');

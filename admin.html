@@ -127,6 +127,11 @@
                 <option value="D">Section D</option>
               </select>
             </div>
+            <div style="border-top: 1px solid var(--border-light, #e2e8f0); padding-top: 10px; margin-top: 2px;">
+              <div style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-blue, #2563eb); margin-bottom: 8px;">Parent / Guardian Details (Required for SMS)</div>
+              <input type="text" id="studentParentName" placeholder="Parent/Guardian Name *" required style="margin-bottom: 10px; width: 100%;" />
+              <input type="tel" id="studentParentPhone" placeholder="Parent Mobile Number (10-digit Indian) *" required style="width: 100%;" />
+            </div>
             <button type="submit" class="btn submit-btn full" style="margin-top: 4px;">Register Student</button>
           </form>
           <div id="studentMsg" class="msg"></div>
@@ -926,19 +931,20 @@
       try {
         let deptSnap, stuSnap, facSnap, subSnap;
         if (!filterDept) {
-          [stuSnap, facSnap, subSnap] = await Promise.all([
+          [stuSnap, facSnap, subSnap, deptSnap] = await Promise.all([
             db.collection('students').get(),
             db.collection('faculty').get(),
-            db.collection('subjects').get()
+            db.collection('subjects').get(),
+            db.collection('departments').get()
           ]);
         } else {
-          [stuSnap, facSnap, subSnap] = await Promise.all([
+          [stuSnap, facSnap, subSnap, deptSnap] = await Promise.all([
             db.collection('students').where('dept', '==', filterDept).get(),
             db.collection('faculty').where('department', '==', filterDept).get(),
-            db.collection('subjects').where('departmentId', '==', filterDept).get()
+            db.collection('subjects').where('departmentId', '==', filterDept).get(),
+            db.collection('departments').get()
           ]);
         }
-        deptSnap = await db.collection('departments').get();
         deptMap = {};
         deptSnap.forEach(doc => { deptMap[doc.id] = doc.data().name; });
         let rows = [];
@@ -1819,6 +1825,9 @@
               semester: studentSem,
               section: studentSec,
               phone: studentPhone,
+              parentName: (currentReq.parentName || '').trim(),
+              parentPhone: (currentReq.parentPhone || '').trim(),
+              smsEnabled: currentReq.smsEnabled !== false,
               faceRegistered: false,
               createdAt: currentReq.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
               approvedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1848,10 +1857,10 @@
             // Direction A: Auto-Enroll Student into all existing subjects matching Dept + Semester + Section
             try {
               const subSnap = await db.collection('subjects').get();
-              const enrollBatch = db.batch();
+              let enrollBatch = db.batch();
               let matchedCount = 0;
 
-              subSnap.forEach(subDoc => {
+              for (const subDoc of subSnap.docs) {
                 const sub = subDoc.data();
                 const studentObj = {
                   dept: studentDept,
@@ -1872,10 +1881,14 @@
                     enrolledRoster: updatedRoster
                   });
                   matchedCount++;
+                  if (matchedCount % 450 === 0) {
+                    await enrollBatch.commit();
+                    enrollBatch = db.batch();
+                  }
                 }
-              });
+              }
 
-              if (matchedCount > 0) {
+              if (matchedCount % 450 !== 0 && matchedCount > 0) {
                 await enrollBatch.commit();
               }
             } catch (enrollErr) {
@@ -1930,6 +1943,18 @@
         return uid;
       } finally {
         try { await secondaryApp.delete(); } catch(e) {}
+      }
+    }
+
+    async function deleteAuthUserWithoutSignout(email, password) {
+      const secondaryAppName = 'SecondaryAuthCleanup_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+      const secondaryApp = firebase.initializeApp(firebaseConfig, secondaryAppName);
+      try {
+        const secondaryAuth = secondaryApp.auth();
+        await secondaryAuth.signInWithEmailAndPassword(email, password);
+        await secondaryAuth.currentUser.delete();
+      } finally {
+        try { await secondaryApp.delete(); } catch (e) {}
       }
     }
 
@@ -2005,6 +2030,31 @@
       const dept = document.getElementById('studentDept').value;
       const semester = parseInt(document.getElementById('studentSem').value, 10) || 1;
       const section = (document.getElementById('studentSec').value || 'A').trim().toUpperCase();
+      const parentName = (document.getElementById('studentParentName')?.value || '').trim();
+      const parentPhoneRaw = (document.getElementById('studentParentPhone')?.value || '').trim();
+
+      if (!parentName) {
+        msg.textContent = 'Parent/Guardian name is required.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      if (!parentPhoneRaw) {
+        msg.textContent = 'Parent mobile number is required.';
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+
+      const phoneValidation = validateAndNormalizeIndianPhone(parentPhoneRaw);
+      if (!phoneValidation.valid) {
+        msg.textContent = phoneValidation.error;
+        msg.className = 'msg error';
+        msg.style.display = 'block';
+        return;
+      }
+      const parentPhone = phoneValidation.normalized;
 
       if (!usn) {
         msg.textContent = 'Please enter a valid Student USN.';
@@ -2074,6 +2124,9 @@
           department: dept,
           semester: semester,
           section: section,
+          parentName: parentName,
+          parentPhone: parentPhone,
+          smsEnabled: true,
           faceRegistered: false,
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           approvedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -2098,9 +2151,9 @@
         // Direction A: Auto-enroll in matching existing subjects for Dept + Semester + Section
         try {
           const subSnap = await db.collection('subjects').get();
-          const enrollBatch = db.batch();
+          let enrollBatch = db.batch();
           let matchedCount = 0;
-          subSnap.forEach(subDoc => {
+          for (const subDoc of subSnap.docs) {
             const sub = subDoc.data();
             const studentObj = {
               dept: dept,
@@ -2119,9 +2172,13 @@
                 enrolledRoster: updatedRoster
               });
               matchedCount++;
+              if (matchedCount % 450 === 0) {
+                await enrollBatch.commit();
+                enrollBatch = db.batch();
+              }
             }
-          });
-          if (matchedCount > 0) {
+          }
+          if (matchedCount % 450 !== 0 && matchedCount > 0) {
             await enrollBatch.commit();
           }
         } catch (enrollErr) {
@@ -2136,6 +2193,11 @@
         await updateStats();
         renderListing();
       } catch (err) {
+        if (createdUid) {
+          try { await deleteAuthUserWithoutSignout(email, password); } catch (cleanupErr) {
+            console.error('[Student Auth Rollback] Failed to remove orphaned account:', cleanupErr);
+          }
+        }
         let errorMsg = err.message;
         if (err.code === 'auth/email-already-in-use') {
           errorMsg = 'An account with this email already exists.';
@@ -2385,23 +2447,22 @@
             });
           }
 
-          // Async duplicate check against Firestore for valid candidates
-          for (const item of studentRows) {
-            if (item.status === 'Ready to import') {
-              try {
-                const [usnDoc, emailDoc] = await Promise.all([
-                  db.collection('uniqueUSNs').doc(item.usn).get(),
-                  db.collection('uniqueEmails').doc(item.email).get()
-                ]);
-                if (usnDoc.exists || emailDoc.exists) {
-                  item.status = 'Invalid row';
-                  item.reason = 'Already exists';
-                }
-              } catch (e) {
-                console.warn('Firestore preview uniqueness check error:', e);
+          // Async duplicate check against Firestore for valid candidates (parallelized)
+          const readyCandidates = studentRows.filter(item => item.status === 'Ready to import');
+          await Promise.all(readyCandidates.map(async (item) => {
+            try {
+              const [usnDoc, emailDoc] = await Promise.all([
+                db.collection('uniqueUSNs').doc(item.usn).get(),
+                db.collection('uniqueEmails').doc(item.email).get()
+              ]);
+              if (usnDoc.exists || emailDoc.exists) {
+                item.status = 'Invalid row';
+                item.reason = 'Already exists';
               }
+            } catch (e) {
+              console.warn('Firestore preview uniqueness check error:', e);
             }
-          }
+          }));
 
           parsedCsvStudents = studentRows;
 
@@ -2657,6 +2718,11 @@
         await updateStats();
         renderListing();
       } catch (err) {
+        if (createdUid) {
+          try { await deleteAuthUserWithoutSignout(email, password); } catch (cleanupErr) {
+            console.error('[Faculty Auth Rollback] Failed to remove orphaned account:', cleanupErr);
+          }
+        }
         let errorMsg = err.message;
         if (err.code === 'auth/email-already-in-use') {
           errorMsg = 'Faculty with this email already exists.';
@@ -2683,7 +2749,7 @@
       const section = (document.getElementById('subjectSec').value || 'A').trim().toUpperCase();
       const facultyId = document.getElementById('subjectFaculty').value;
       
-      const plannedInput = document.getElementById('subjectPlannedClasses')?.value || document.getElementById('subjectTotalHours')?.value;
+      const plannedInput = document.getElementById('subjectPlannedClasses')?.value;
       const plannedClasses = parseInt(plannedInput, 10) || 60;
       const minAttendance = parseInt(document.getElementById('subjectMinAttendance')?.value, 10) || 75;
 
@@ -3619,6 +3685,35 @@
         }
       }
     });
+
+    function validateAndNormalizeIndianPhone(phoneInput) {
+      if (!phoneInput || typeof phoneInput !== 'string') {
+        return { valid: false, error: 'Parent mobile number is required.', normalized: '' };
+      }
+      const trimmed = phoneInput.trim();
+      if (!trimmed) {
+        return { valid: false, error: 'Parent mobile number is required.', normalized: '' };
+      }
+      let cleaned = trimmed.replace(/[\s\-\(\)\.]/g, '');
+      if (cleaned.startsWith('+91')) {
+        cleaned = cleaned.slice(3);
+      } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+        cleaned = cleaned.slice(2);
+      } else if (cleaned.startsWith('0') && cleaned.length === 11) {
+        cleaned = cleaned.slice(1);
+      }
+
+      const indianMobileRegex = /^[6-9]\d{9}$/;
+      if (!indianMobileRegex.test(cleaned)) {
+        return {
+          valid: false,
+          error: 'Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).',
+          normalized: ''
+        };
+      }
+
+      return { valid: true, error: null, normalized: cleaned };
+    }
   </script>
 </body>
 </html>

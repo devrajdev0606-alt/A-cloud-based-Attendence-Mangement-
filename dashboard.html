@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body style="display:none;">
   <!-- Mesh Background Scene -->
   <div class="bg-scene">
     <div class="overlay"></div>
@@ -530,7 +530,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.1/dist/face-api.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js"></script>
   <script>
     const db = firebase.firestore();
     const auth = firebase.auth();
@@ -558,9 +558,12 @@
     let distanceThreshold = 10;
     let gpsAccuracyThreshold = 50;
     let gpsAttemptToken = 0;
-    const faceDistanceThreshold = 0.6;
+    const ARCFACE_SIMILARITY_THRESHOLD = 0.50;
+    const ARCFACE_EMBEDDING_SIZE = 512;
+    const ARCFACE_MODEL_URL = 'models/w600k_mbf.onnx';
+    const ARCFACE_MODEL_NAME = 'arcface_mobilefacenet';
+    const ARCFACE_MODEL_VERSION = 'w600k_mbf_v1';
     let modelsLoaded = false;
-    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.1/weights';
 
     // =========================================================================
     // ACADEMIC ENROLLMENT MATCHING HELPERS
@@ -637,7 +640,7 @@
       if (!user) {
         unsubscribeActiveSessions();
         localStorage.clear();
-        window.location.replace('student.html');
+        window.location.replace('index.html');
         return;
       }
 
@@ -658,7 +661,7 @@
       }
 
       // Parallelize authoritative profile retrieval and department mapping
-      const [, studentDoc] = await Promise.all([
+      let [, studentDoc] = await Promise.all([
         loadDepartmentMap(),
         db.collection('students').doc(user.uid).get().catch(() => null)
       ]);
@@ -674,12 +677,12 @@
         }
       }
 
-      if (!studentData) {
+      if (!studentData || studentData.active === false || studentData.status === 'inactive') {
         // Not an active/approved student account
         unsubscribeActiveSessions();
         await auth.signOut();
         localStorage.clear();
-        window.location.replace('student.html');
+        window.location.replace('index.html');
         return;
       }
 
@@ -692,6 +695,9 @@
       studentSemester = studentData.semester ? String(studentData.semester) : '';
       studentSection = (studentData.section || '').toUpperCase();
       faceRegistered = Boolean(studentData.faceRegistered);
+
+      // Reveal page now that auth is confirmed
+      document.body.style.display = 'block';
 
       // Store only display/UI preferences in localStorage (never security-sensitive UIDs)
       localStorage.setItem('studentName', studentName);
@@ -924,6 +930,222 @@
       return faceLandmarkerLoadingPromise;
     }
 
+    let arcfaceSession = null;
+    let arcfaceLoadingPromise = null;
+
+    async function loadArcFaceModel() {
+      if (arcfaceSession) return arcfaceSession;
+      if (arcfaceLoadingPromise) return arcfaceLoadingPromise;
+
+      arcfaceLoadingPromise = (async () => {
+        try {
+          if (typeof ort === 'undefined') {
+            throw new Error('ONNX Runtime Web library (ort) is not available.');
+          }
+          if (ort.env && ort.env.wasm) {
+            ort.env.wasm.numThreads = Math.min(4, Math.max(1, navigator.hardwareConcurrency || 2));
+            ort.env.wasm.simd = true;
+          }
+          const modelCandidates = [
+            ARCFACE_MODEL_URL,
+            './models/w600k_mbf.onnx',
+            '/models/w600k_mbf.onnx'
+          ];
+          let lastErr = null;
+          for (const url of modelCandidates) {
+            try {
+              arcfaceSession = await ort.InferenceSession.create(url, {
+                executionProviders: ['wasm'],
+                graphOptimizationLevel: 'all'
+              });
+              console.log(`[ArcFace] MobileFaceNet loaded successfully from ${url}`);
+              return arcfaceSession;
+            } catch (candErr) {
+              lastErr = candErr;
+            }
+          }
+          throw lastErr || new Error('Failed to load ArcFace ONNX model.');
+        } catch (err) {
+          console.error('[ArcFace Model Load Error]', err);
+          arcfaceLoadingPromise = null;
+          throw err;
+        }
+      })();
+
+      return arcfaceLoadingPromise;
+    }
+
+    // Canonical 112x112 ArcFace 5-point reference coordinates (InsightFace MobileFaceNet)
+    const TARGET_ARCFACE_5_POINTS = [
+      { x: 38.2946, y: 51.6963 }, // left eye
+      { x: 73.5318, y: 51.5014 }, // right eye
+      { x: 56.0252, y: 71.7366 }, // nose tip
+      { x: 41.5493, y: 92.3655 }, // left mouth corner
+      { x: 70.7299, y: 92.2041 }  // right mouth corner
+    ];
+
+    function extractFiveLandmarks(sourceCanvasOrVideo, landmarks) {
+      const srcW = sourceCanvasOrVideo.videoWidth || sourceCanvasOrVideo.width || 640;
+      const srcH = sourceCanvasOrVideo.videoHeight || sourceCanvasOrVideo.height || 480;
+      return {
+        width: srcW,
+        height: srcH,
+        leftEye: { x: ((landmarks[33].x + landmarks[133].x) / 2) * srcW, y: ((landmarks[33].y + landmarks[133].y) / 2) * srcH },
+        rightEye: { x: ((landmarks[362].x + landmarks[263].x) / 2) * srcW, y: ((landmarks[362].y + landmarks[263].y) / 2) * srcH },
+        nose: { x: landmarks[1].x * srcW, y: landmarks[1].y * srcH },
+        mouthLeft: { x: landmarks[61].x * srcW, y: landmarks[61].y * srcH },
+        mouthRight: { x: landmarks[291].x * srcW, y: landmarks[291].y * srcH }
+      };
+    }
+
+    function checkFaceCaptureQuality(sourceCanvasOrVideo, landmarks) {
+      if (!landmarks || landmarks.length < 363) {
+        return { valid: false, reason: 'Face quality is insufficient. Move closer, face the camera, and try again.' };
+      }
+      const pts = extractFiveLandmarks(sourceCanvasOrVideo, landmarks);
+      const eyeDist = Math.hypot(pts.rightEye.x - pts.leftEye.x, pts.rightEye.y - pts.leftEye.y);
+      if (eyeDist < 28) {
+        return { valid: false, reason: 'Face quality is insufficient. Move closer, face the camera, and try again.' };
+      }
+
+      // Vertical face height ratio in normalized space (forehead landmark 10 to chin landmark 152)
+      const faceHeight = Math.abs(landmarks[152].y - landmarks[10].y);
+      if (faceHeight < 0.16) {
+        return { valid: false, reason: 'Face quality is insufficient. Move closer, face the camera, and try again.' };
+      }
+
+      const eyeMid = { x: (pts.leftEye.x + pts.rightEye.x) / 2, y: (pts.leftEye.y + pts.rightEye.y) / 2 };
+
+      // Yaw: horizontal displacement of nose from eye midpoint normalized by eye distance
+      const yaw = (pts.nose.x - eyeMid.x) / eyeDist;
+      if (Math.abs(yaw) > 0.18) {
+        return { valid: false, reason: 'Face quality is insufficient. Move closer, face the camera, and try again.' };
+      }
+
+      // Pitch: vertical displacement of nose from eye midpoint normalized by eye distance
+      const pitch = (pts.nose.y - eyeMid.y) / eyeDist;
+      if (pitch < 0.20 || pitch > 0.70) {
+        return { valid: false, reason: 'Face quality is insufficient. Move closer, face the camera, and try again.' };
+      }
+
+      // Roll: head tilt angle in degrees
+      const rollDeg = Math.abs(Math.atan2(pts.rightEye.y - pts.leftEye.y, pts.rightEye.x - pts.leftEye.x) * 180 / Math.PI);
+      if (rollDeg > 15) {
+        return { valid: false, reason: 'Face quality is insufficient. Move closer, face the camera, and try again.' };
+      }
+
+      return { valid: true, metrics: { eyeDist, faceHeight, yaw, pitch, rollDeg } };
+    }
+
+    function alignFaceCanvas(sourceCanvasOrVideo, landmarks) {
+      if (!landmarks || landmarks.length < 363) {
+        throw new Error('Invalid facial landmarks for alignment.');
+      }
+      const pts = extractFiveLandmarks(sourceCanvasOrVideo, landmarks);
+      const sourcePoints = [pts.leftEye, pts.rightEye, pts.nose, pts.mouthLeft, pts.mouthRight];
+      const targetPoints = TARGET_ARCFACE_5_POINTS;
+
+      // 2D Umeyama least-squares similarity transformation
+      const n = 5;
+      let srcMeanX = 0, srcMeanY = 0, tgtMeanX = 0, tgtMeanY = 0;
+      for (let i = 0; i < n; i++) {
+        srcMeanX += sourcePoints[i].x; srcMeanY += sourcePoints[i].y;
+        tgtMeanX += targetPoints[i].x; tgtMeanY += targetPoints[i].y;
+      }
+      srcMeanX /= n; srcMeanY /= n; tgtMeanX /= n; tgtMeanY /= n;
+
+      let variance = 0, a = 0, b = 0;
+      for (let i = 0; i < n; i++) {
+        const sx = sourcePoints[i].x - srcMeanX;
+        const sy = sourcePoints[i].y - srcMeanY;
+        const tx = targetPoints[i].x - tgtMeanX;
+        const ty = targetPoints[i].y - tgtMeanY;
+        variance += sx * sx + sy * sy;
+        a += sx * tx + sy * ty;
+        b += sx * ty - sy * tx;
+      }
+      const magnitude = Math.max(Math.hypot(a, b), 1e-8);
+      const scale = magnitude / Math.max(variance, 1e-8);
+      const cosine = a / magnitude;
+      const sine = b / magnitude;
+
+      const translateX = tgtMeanX - scale * (cosine * srcMeanX - sine * srcMeanY);
+      const translateY = tgtMeanY - scale * (sine * srcMeanX + cosine * srcMeanY);
+
+      const alignedCanvas = document.createElement('canvas');
+      alignedCanvas.width = 112;
+      alignedCanvas.height = 112;
+      const ctx = alignedCanvas.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, 112, 112);
+
+      ctx.save();
+      ctx.setTransform(scale * cosine, scale * sine, -scale * sine, scale * cosine, translateX, translateY);
+      ctx.drawImage(sourceCanvasOrVideo, 0, 0, pts.width, pts.height);
+      ctx.restore();
+
+      return alignedCanvas;
+    }
+
+    function aggregateEmbeddings(embeddingList) {
+      if (!embeddingList || !embeddingList.length) return null;
+      if (embeddingList.length === 1) return embeddingList[0];
+      const sumVec = new Float32Array(ARCFACE_EMBEDDING_SIZE);
+      for (const emb of embeddingList) {
+        for (let i = 0; i < ARCFACE_EMBEDDING_SIZE; i++) sumVec[i] += emb[i];
+      }
+      let sumSq = 0;
+      for (let i = 0; i < ARCFACE_EMBEDDING_SIZE; i++) sumSq += sumVec[i] * sumVec[i];
+      const norm = Math.sqrt(sumSq) || 1e-10;
+      const aggregated = new Float32Array(ARCFACE_EMBEDDING_SIZE);
+      for (let i = 0; i < ARCFACE_EMBEDDING_SIZE; i++) aggregated[i] = sumVec[i] / norm;
+      return aggregated;
+    }
+
+    async function generateArcFaceEmbedding(alignedCanvas) {
+      const session = await loadArcFaceModel();
+      const ctx = alignedCanvas.getContext('2d', { willReadFrequently: true });
+      const imgData = ctx.getImageData(0, 0, 112, 112).data;
+
+      const tensorData = new Float32Array(3 * 112 * 112);
+      const rOff = 0;
+      const gOff = 112 * 112;
+      const bOff = 2 * 112 * 112;
+
+      for (let i = 0; i < 112 * 112; i++) {
+        const px = i * 4;
+        tensorData[rOff + i] = (imgData[px] - 127.5) / 128.0;
+        tensorData[gOff + i] = (imgData[px + 1] - 127.5) / 128.0;
+        tensorData[bOff + i] = (imgData[px + 2] - 127.5) / 128.0;
+      }
+
+      const inputTensor = new ort.Tensor('float32', tensorData, [1, 3, 112, 112]);
+      const feeds = { 'input.1': inputTensor };
+      const outputMap = await session.run(feeds);
+      const outTensor = outputMap['516'] || Object.values(outputMap)[0];
+      const rawVector = outTensor.data;
+
+      let sumSq = 0;
+      for (let i = 0; i < 512; i++) sumSq += rawVector[i] * rawVector[i];
+      const norm = Math.sqrt(sumSq) || 1e-10;
+
+      const embedding = new Float32Array(512);
+      for (let i = 0; i < 512; i++) {
+        embedding[i] = rawVector[i] / norm;
+      }
+      return embedding;
+    }
+
+    function computeArcFaceSimilarity(vecA, vecB) {
+      if (!vecA || !vecB) return 0;
+      if (vecA.length !== 512 || vecB.length !== 512) return 0;
+      let dot = 0;
+      for (let i = 0; i < 512; i++) {
+        dot += vecA[i] * vecB[i];
+      }
+      return dot;
+    }
+
     let modelsLoadingPromise = null;
     async function loadModels() {
       if (modelsLoaded) return true;
@@ -933,9 +1155,7 @@
         showMsg('regMsg', 'info', 'Loading biometric AI neural network models, please wait...');
         try {
           await Promise.all([
-            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+            loadArcFaceModel(),
             initializeFaceLandmarker()
           ]);
           modelsLoaded = true;
@@ -1089,12 +1309,14 @@
       // Preserve the selected subject while refreshing options
       if (selectEl) {
         const selectedSubjectId = selectEl.value;
-        selectEl.innerHTML = '<option value="">-- Select Active Subject to Verify --</option>';
+        selectEl.replaceChildren(new Option('-- Select Active Subject to Verify --', ''));
         if (studentSubjectDocs && studentSubjectDocs.length > 0) {
           studentSubjectDocs.forEach(s => {
             const hasLive = Boolean(activeSessions[s.id]);
             const optPrefix = hasLive ? '🟢 [LIVE] ' : '⚪ ';
-            selectEl.innerHTML += `<option value="${s.id}" ${hasLive ? 'data-live="true"' : ''}>${optPrefix}${s.subjectName} (${s.subjectCode || 'Course'})</option>`;
+            const option = new Option(`${optPrefix}${s.subjectName || 'Subject'} (${s.subjectCode || 'Course'})`, s.id);
+            if (hasLive) option.dataset.live = 'true';
+            selectEl.appendChild(option);
           });
           if (selectedSubjectId && activeSessions[selectedSubjectId]) {
             selectEl.value = selectedSubjectId;
@@ -1138,28 +1360,36 @@
       unsubscribeActiveSessions();
       activeSessionsListenerSubjectIds = newSubjectIds;
 
-      studentSubjectDocs.forEach(s => {
+      for (let startIndex = 0; startIndex < newSubjectIds.length; startIndex += 30) {
+        const subjectIdChunk = newSubjectIds.slice(startIndex, startIndex + 30);
         try {
           const unsub = db.collection('attendanceSessions')
-            .where('subjectId', '==', s.id)
+            .where('subjectId', 'in', subjectIdChunk)
             .where('active', '==', true)
             .onSnapshot(
               snapshot => {
                 const now = new Date();
-                let latestForSubject = null;
+                const latestBySubject = {};
                 snapshot.forEach(doc => {
                   const data = doc.data();
                   if (data.expiresAt && data.expiresAt.toDate && data.expiresAt.toDate() <= now) {
                     return;
                   }
-                  if (!latestForSubject || (data.classNumber || 0) > (latestForSubject.classNumber || 0)) {
-                    latestForSubject = { id: doc.id, ...data };
+                  const subjectId = data.subjectId;
+                  const current = latestBySubject[subjectId];
+                  if (!current || (data.classNumber || 0) > (current.classNumber || 0)) {
+                    latestBySubject[subjectId] = { id: doc.id, ...data };
                   }
                 });
 
-                if (latestForSubject) {
-                  activeSessions[s.id] = latestForSubject;
-                  if (latestForSubject.expiresAt && latestForSubject.expiresAt.toDate) {
+                subjectIdChunk.forEach(subjectId => {
+                  const latestForSubject = latestBySubject[subjectId];
+                  if (latestForSubject) {
+                    activeSessions[subjectId] = latestForSubject;
+                  } else {
+                    delete activeSessions[subjectId];
+                  }
+                  if (latestForSubject?.expiresAt && latestForSubject.expiresAt.toDate) {
                     const msUntilExpiry = latestForSubject.expiresAt.toDate().getTime() - Date.now();
                     if (msUntilExpiry > 0 && msUntilExpiry < 24 * 60 * 60 * 1000) {
                       setTimeout(() => {
@@ -1167,13 +1397,11 @@
                       }, msUntilExpiry + 500);
                     }
                   }
-                } else {
-                  delete activeSessions[s.id];
-                }
+                });
                 scheduleActiveSessionsUIUpdate();
               },
               err => {
-                console.error(`[ACTIVE SESSION LISTENER ERROR] Subject: ${s.id} (${s.subjectName || ''}):`, {
+                console.error(`[ACTIVE SESSION LISTENER ERROR] Subjects: ${subjectIdChunk.join(', ')}`, {
                   code: err?.code,
                   message: err?.message,
                   name: err?.name,
@@ -1191,9 +1419,9 @@
             );
           activeSessionsUnsubscribes.push(unsub);
         } catch (err) {
-          console.error(`Failed to register snapshot listener for subject ${s.id}:`, err);
+          console.error(`Failed to register snapshot listener for subjects ${subjectIdChunk.join(', ')}:`, err);
         }
-      });
+      }
     }
 
     async function loadActiveSessions() {
@@ -1456,21 +1684,15 @@
           });
         }
 
-        // 4. Fetch today's sessions & total class attendance counts
+        // 4. Map today's conducted sessions
         todayConductedClassSessions = [];
         sessionAttendanceRecordsMap = {};
         if (sessSnap && !sessSnap.empty) {
-          const attQueries = [];
           sessSnap.forEach(sDoc => {
             const s = { id: sDoc.id, ...sDoc.data() };
             todayConductedClassSessions.push(s);
-            attQueries.push(
-              db.collection('attendance').where('sessionId', '==', sDoc.id).get()
-                .then(snap => { sessionAttendanceRecordsMap[sDoc.id] = snap.size; })
-                .catch(() => { sessionAttendanceRecordsMap[sDoc.id] = 0; })
-            );
+            sessionAttendanceRecordsMap[sDoc.id] = s.presentCount || s.totalPresent || (studentPresentSessionIds.has(s.id) ? 1 : 0);
           });
-          await Promise.all(attQueries);
         }
 
         renderStudentTodaySchedule();
@@ -1816,40 +2038,160 @@
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      showMsg('regMsg', 'info', 'Detecting facial biometric landmarks...');
+      showMsg('regMsg', 'info', 'Analyzing facial positioning and image quality...');
 
       try {
-        const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.35 })).withFaceLandmarks().withFaceDescriptors();
-        if (!detections || detections.length === 0) {
-          showMsg('regMsg', 'error', 'Face not detected. Please position your face clearly in the camera frame.');
+        if (!faceLandmarkerInstance) {
+          await initializeFaceLandmarker();
+        }
+
+        const REQUIRED_FRAMES = 5;
+        const collectedEmbeddings = [];
+        let attempts = 0;
+        const maxAttempts = 16;
+        let lastFailureReason = 'Face quality is insufficient. Move closer, face the camera, and try again.';
+
+        while (collectedEmbeddings.length < REQUIRED_FRAMES && attempts < maxAttempts) {
+          attempts++;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frameTimestamp = performance.now();
+          const mpResults = faceLandmarkerInstance.detectForVideo(video, frameTimestamp);
+          const numDetected = (mpResults.faceLandmarks || []).length;
+
+          if (numDetected === 0) {
+            lastFailureReason = 'Face not detected. Please position your face clearly in the camera frame.';
+            await new Promise(r => setTimeout(r, 100));
+            continue;
+          }
+
+          if (numDetected > 1) {
+            lastFailureReason = 'Multiple faces detected. Only one person is allowed in the camera frame.';
+            const reticle = document.getElementById('regReticle');
+            if (reticle) reticle.className = 'hud-reticle error';
+            showMsg('regMsg', 'error', lastFailureReason);
+            if (captureBtn) captureBtn.disabled = false;
+            return;
+          }
+
+          const landmarks = mpResults.faceLandmarks[0];
+          const quality = checkFaceCaptureQuality(canvas, landmarks);
+          if (!quality.valid) {
+            lastFailureReason = quality.reason || 'Face quality is insufficient. Move closer, face the camera, and try again.';
+            await new Promise(r => setTimeout(r, 100));
+            continue;
+          }
+
+          const alignedCanvas = alignFaceCanvas(canvas, landmarks);
+          const frameEmbedding = await generateArcFaceEmbedding(alignedCanvas);
+
+          if (!frameEmbedding || frameEmbedding.length !== ARCFACE_EMBEDDING_SIZE) {
+            continue;
+          }
+
+          let isValid = true;
+          for (let i = 0; i < ARCFACE_EMBEDDING_SIZE; i++) {
+            if (isNaN(frameEmbedding[i]) || !isFinite(frameEmbedding[i])) {
+              isValid = false;
+              break;
+            }
+          }
+          if (isValid) {
+            collectedEmbeddings.push(frameEmbedding);
+            showMsg('regMsg', 'info', `Enrolling facial template: frame ${collectedEmbeddings.length} of ${REQUIRED_FRAMES}... Hold steady.`);
+          }
+
+          if (collectedEmbeddings.length < REQUIRED_FRAMES) {
+            await new Promise(r => setTimeout(r, 120));
+          }
+        }
+
+        if (collectedEmbeddings.length < REQUIRED_FRAMES) {
+          showMsg('regMsg', 'error', lastFailureReason || 'Face quality is insufficient. Move closer, face the camera, and try again.');
           const reticle = document.getElementById('regReticle');
           if (reticle) reticle.className = 'hud-reticle error';
           if (captureBtn) captureBtn.disabled = false;
           return;
         }
 
-        if (detections.length > 1) {
-          showMsg('regMsg', 'error', 'Multiple faces detected. Only one person is allowed in the camera frame.');
-          const reticle = document.getElementById('regReticle');
-          if (reticle) reticle.className = 'hud-reticle error';
+        showMsg('regMsg', 'info', 'Finalizing robust aggregated biometric template...');
+        const embedding = aggregateEmbeddings(collectedEmbeddings);
+
+        if (!embedding || embedding.length !== ARCFACE_EMBEDDING_SIZE) {
+          showMsg('regMsg', 'error', 'Failed to generate 512-dimensional biometric embedding. Please retry.');
           if (captureBtn) captureBtn.disabled = false;
           return;
         }
 
-        const descriptor = Array.from(detections[0].descriptor);
+        let isEmbeddingValid = true;
+        for (let i = 0; i < ARCFACE_EMBEDDING_SIZE; i++) {
+          if (isNaN(embedding[i]) || !isFinite(embedding[i])) {
+            isEmbeddingValid = false;
+            break;
+          }
+        }
+        if (!isEmbeddingValid) {
+          showMsg('regMsg', 'error', 'Biometric validation error: corrupted embedding values.');
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
+
         const currentAuthUid = auth.currentUser ? auth.currentUser.uid : null;
         if (!currentAuthUid) {
           showMsg('regMsg', 'error', 'User is not authenticated. Please sign in again.');
           if (captureBtn) captureBtn.disabled = false;
           return;
         }
-        await db.collection('students').doc(currentAuthUid).update({
-          faceDescriptor: descriptor,
+
+        // Diagnostic 2: Verify current auth UID
+        console.log('[Diagnostic: Section 2] auth.currentUser.uid:', auth.currentUser.uid);
+        console.log('[Diagnostic: Section 2] auth.currentUser.email:', auth.currentUser.email);
+        console.log('[Diagnostic: Section 2] currentAuthUid:', currentAuthUid);
+        console.log('[Diagnostic: Section 2] UID Match:', auth.currentUser.uid === currentAuthUid);
+
+        // Diagnostic 3: Verify student document before write (read only)
+        try {
+          const diagDoc = await db.collection('students').doc(currentAuthUid).get();
+          console.log('[Diagnostic: Section 3] doc.exists:', diagDoc.exists);
+          if (diagDoc.exists) {
+            const data = diagDoc.data() || {};
+            console.log('[Diagnostic: Section 3] document ID:', diagDoc.id);
+            console.log('[Diagnostic: Section 3] uid field:', data.uid);
+            console.log('[Diagnostic: Section 3] email field:', data.email);
+            console.log('[Diagnostic: Section 3] faceRegistered:', data.faceRegistered);
+            console.log('[Diagnostic: Section 3] whether faceEmbedding already exists:', Boolean(data.faceEmbedding));
+          } else {
+            console.warn('[Diagnostic: Section 3] Document does not exist at students/' + currentAuthUid);
+          }
+        } catch (diagErr) {
+          console.error('[Diagnostic: Section 3] Diagnostic read error:', diagErr.message);
+        }
+
+        // Diagnostic 4: Log only field names (do NOT log biometric vector)
+        const writePayload = {
+          faceEmbedding: Array.from(embedding),
+          faceEmbeddingModel: ARCFACE_MODEL_NAME,
+          faceEmbeddingVersion: ARCFACE_MODEL_VERSION,
+          faceEmbeddingUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           faceRegistered: true
-        });
+        };
+        console.log('[Diagnostic: Section 4] Fields being written:', Object.keys(writePayload));
+
+        // Diagnostic 11: Capture the exact Firebase error
+        try {
+          await db.collection('students').doc(currentAuthUid).update(writePayload);
+          console.log('[ArcFace] Firestore registration write SUCCESS');
+        } catch (error) {
+          console.error('[ArcFace] Firestore registration write FAILED');
+          console.error('code:', error.code);
+          console.error('message:', error.message);
+          console.error('uid:', currentAuthUid);
+          console.error('project:', firebase.app().options.projectId);
+          showMsg('regMsg', 'error', 'Registration error (' + (error.code || 'unknown') + '): ' + error.message);
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
         localStorage.setItem('faceRegistered', 'true');
-        showMsg('regMsg', 'success', '✓ Face Biometrics Registered Successfully!');
+        showMsg('regMsg', 'success', '✓ Face Biometrics Registered Successfully with ArcFace AI!');
         
         // Stop video stream to free camera resource
         stopVideoStream(video);
@@ -1972,12 +2314,17 @@
         const hasApprovedRecovery = !!approvedRecoveryDoc;
         const recoveryRequestId = approvedRecoveryDoc ? approvedRecoveryDoc.id : null;
 
-        if (!hasApprovedRecovery && !studentData.faceDescriptor) {
-          showMsg('reregMsg', 'error', 'No registered face found. If you have lost access to your biometrics, use the recovery request option below.');
+        const hasArcFace = Array.isArray(studentData.faceEmbedding) && studentData.faceEmbedding.length === ARCFACE_EMBEDDING_SIZE;
+        if (!hasApprovedRecovery && !hasArcFace) {
+          if (studentData.faceDescriptor) {
+            showMsg('reregMsg', 'info', 'Your registered biometric template uses the legacy format. Please complete Face Biometrics Enrollment above to register with ArcFace, or request recovery if needed.');
+          } else {
+            showMsg('reregMsg', 'error', 'No registered face found. If you have lost access to your biometrics, use the recovery request option below.');
+          }
           if (startBtn) startBtn.disabled = false;
           return;
         }
-        const storedDescriptor = studentData.faceDescriptor ? new Float32Array(studentData.faceDescriptor) : null;
+        const storedEmbedding = hasArcFace ? new Float32Array(studentData.faceEmbedding) : null;
 
         // 3. Open camera
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -1992,7 +2339,7 @@
 
         reregSession = {
           token: sessionToken,
-          storedDescriptor: storedDescriptor,
+          storedEmbedding: storedEmbedding,
           sequence: challengeSequence,
           state: hasApprovedRecovery
             ? FaceReregState.VERIFYING_CURRENT_LIVENESS
@@ -2019,7 +2366,7 @@
           completedChallenges: [],
           faceMatched: false,
           livenessPassed: false,
-          bestDistance: 1.0,
+          bestSimilarity: 0.0,
           noFaceFrames: 0,
           multipleFacesFrames: 0,
           stableFaceCount: 0,
@@ -2030,7 +2377,7 @@
           lastVideoTimestamp: 0,
           hasApprovedRecovery: hasApprovedRecovery,
           recoveryRequestId: recoveryRequestId,
-          newDescriptor: null
+          newEmbedding: null
         };
 
         showMsg('reregMsg', hasApprovedRecovery
@@ -2132,8 +2479,8 @@
       try {
         const video = document.getElementById('reregVideo');
         if (!video || video.readyState < 2 || video.videoWidth === 0) {
-          isProcessingLivenessFrame = false;
-          scheduleNextReregFrame(60);
+          isProcessingReregFrame = false;
+          scheduleNextReregFrame(30);
           return;
         }
 
@@ -2277,19 +2624,22 @@
             currentChallengeId, landmarks, blendshapesMap, matrix, session, frameTimestamp
           );
 
-          // Also compare face identity against stored descriptor
-          if (!session.faceMatched && session.stableFaceCount >= 3) {
+          // Also compare face identity against stored embedding
+          if (!session.faceMatched && session.stableFaceCount >= 3 && session.storedEmbedding) {
             try {
-              const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.35 });
-              const detections = await faceapi.detectAllFaces(canvas, detectorOptions).withFaceLandmarks().withFaceDescriptors();
-              if (detections && detections.length === 1) {
-                const distance = faceapi.euclideanDistance(detections[0].descriptor, session.storedDescriptor);
-                if (distance < session.bestDistance) {
-                  session.bestDistance = distance;
-                }
-                if (distance <= faceDistanceThreshold) {
-                  session.faceMatched = true;
-                  updateReregFaceDot('active', 'Face: Matched');
+              const quality = checkFaceCaptureQuality(canvas, landmarks);
+              if (quality.valid) {
+                const alignedCanvas = alignFaceCanvas(canvas, landmarks);
+                const liveEmbedding = await generateArcFaceEmbedding(alignedCanvas);
+                if (liveEmbedding && liveEmbedding.length === ARCFACE_EMBEDDING_SIZE) {
+                  const similarity = computeArcFaceSimilarity(liveEmbedding, session.storedEmbedding);
+                  if (similarity > (session.bestSimilarity || 0)) {
+                    session.bestSimilarity = similarity;
+                  }
+                  if (similarity >= ARCFACE_SIMILARITY_THRESHOLD) {
+                    session.faceMatched = true;
+                    updateReregFaceDot('active', 'Face: Matched');
+                  }
                 }
               }
             } catch (recogErr) {
@@ -2313,8 +2663,8 @@
                 showMsg('reregMsg', 'success', '✓ Current face verified and liveness passed. Now look at the camera to capture your new face.');
                 enableCaptureNewBtn();
               } else {
-                // Liveness passed but face didn't match stored descriptor
-                const matchPct = Math.max(0, Math.round((1 - session.bestDistance) * 100));
+                // Liveness passed but face didn't match stored embedding
+                const matchPct = Math.min(100, Math.max(0, Math.round((session.bestSimilarity || 0) * 100)));
                 showMsg('reregMsg', 'error', `Current face does not match your registered face (${matchPct}% confidence match). If you cannot verify your current face, use the recovery request option.`);
                 stopReregVideoStream();
                 resetReregUI();
@@ -2454,31 +2804,103 @@
       if (!reregSession || !reregSession.active || !reregSession.livenessPassed) return;
 
       reregSession.state = FaceReregState.CAPTURING_NEW;
-      showMsg('reregMsg', 'info', 'Capturing new face descriptor...');
+      showMsg('reregMsg', 'info', 'Analyzing facial positioning and image quality...');
 
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       try {
-        const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.35 }))
-          .withFaceLandmarks()
-          .withFaceDescriptors();
+        if (!faceLandmarkerInstance) {
+          await initializeFaceLandmarker();
+        }
 
-        if (!detections || detections.length === 0) {
-          showMsg('reregMsg', 'error', 'Face not detected. Please position your face clearly in the camera frame.');
+        const REQUIRED_FRAMES = 5;
+        const collectedEmbeddings = [];
+        let attempts = 0;
+        const maxAttempts = 16;
+        let lastFailureReason = 'Face quality is insufficient. Move closer, face the camera, and try again.';
+
+        while (collectedEmbeddings.length < REQUIRED_FRAMES && attempts < maxAttempts) {
+          attempts++;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frameTimestamp = performance.now();
+          const mpResults = faceLandmarkerInstance.detectForVideo(video, frameTimestamp);
+          const numDetected = (mpResults.faceLandmarks || []).length;
+
+          if (numDetected === 0) {
+            lastFailureReason = 'Face not detected. Please position your face clearly in the camera frame.';
+            await new Promise(r => setTimeout(r, 100));
+            continue;
+          }
+
+          if (numDetected > 1) {
+            lastFailureReason = 'Multiple faces detected. Only one person should be in the camera frame.';
+            showMsg('reregMsg', 'error', lastFailureReason);
+            if (captureBtn) captureBtn.disabled = false;
+            return;
+          }
+
+          const landmarks = mpResults.faceLandmarks[0];
+          const quality = checkFaceCaptureQuality(canvas, landmarks);
+          if (!quality.valid) {
+            lastFailureReason = quality.reason || 'Face quality is insufficient. Move closer, face the camera, and try again.';
+            await new Promise(r => setTimeout(r, 100));
+            continue;
+          }
+
+          const alignedCanvas = alignFaceCanvas(canvas, landmarks);
+          const frameEmbedding = await generateArcFaceEmbedding(alignedCanvas);
+
+          if (!frameEmbedding || frameEmbedding.length !== ARCFACE_EMBEDDING_SIZE) {
+            continue;
+          }
+
+          let isValid = true;
+          for (let i = 0; i < ARCFACE_EMBEDDING_SIZE; i++) {
+            if (isNaN(frameEmbedding[i]) || !isFinite(frameEmbedding[i])) {
+              isValid = false;
+              break;
+            }
+          }
+          if (isValid) {
+            collectedEmbeddings.push(frameEmbedding);
+            showMsg('reregMsg', 'info', `Enrolling new facial template: frame ${collectedEmbeddings.length} of ${REQUIRED_FRAMES}... Hold steady.`);
+          }
+
+          if (collectedEmbeddings.length < REQUIRED_FRAMES) {
+            await new Promise(r => setTimeout(r, 120));
+          }
+        }
+
+        if (collectedEmbeddings.length < REQUIRED_FRAMES) {
+          showMsg('reregMsg', 'error', lastFailureReason || 'Face quality is insufficient. Move closer, face the camera, and try again.');
           if (captureBtn) captureBtn.disabled = false;
           return;
         }
 
-        if (detections.length > 1) {
-          showMsg('reregMsg', 'error', 'Multiple faces detected. Only one person should be in the camera frame.');
+        showMsg('reregMsg', 'info', 'Finalizing robust aggregated biometric template...');
+        const newEmbedding = aggregateEmbeddings(collectedEmbeddings);
+
+        if (!newEmbedding || newEmbedding.length !== ARCFACE_EMBEDDING_SIZE) {
+          showMsg('reregMsg', 'error', 'Failed to generate 512-dimensional biometric embedding. Please try again.');
           if (captureBtn) captureBtn.disabled = false;
           return;
         }
 
-        const newDescriptor = Array.from(detections[0].descriptor);
+        let isEmbeddingValid = true;
+        for (let i = 0; i < ARCFACE_EMBEDDING_SIZE; i++) {
+          if (isNaN(newEmbedding[i]) || !isFinite(newEmbedding[i])) {
+            isEmbeddingValid = false;
+            break;
+          }
+        }
+        if (!isEmbeddingValid) {
+          showMsg('reregMsg', 'error', 'Biometric validation error: corrupted embedding values.');
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
+
         const uid = auth.currentUser.uid;
 
         // 10. Rate limiting check — server-enforced cooldown
@@ -2496,19 +2918,22 @@
           }
         }
 
-        // 11. Save new descriptor and audit metadata
-        // OLD descriptor is preserved in memory until this write succeeds
+        // 11. Save new embedding and audit metadata
+        // OLD embedding is preserved in Firestore until this write succeeds
         const method = reregSession.hasApprovedRecovery ? 'approved_recovery' : 'normal_reregistration';
         const auditEntry = {
           timestamp: firebase.firestore.Timestamp.now(),
           method: method,
-          faceDistance: reregSession.bestDistance || 0,
+          faceSimilarity: reregSession.bestSimilarity || 0,
           challengesCompleted: [...reregSession.completedChallenges],
           recoveryRequestId: reregSession.hasApprovedRecovery ? (reregSession.recoveryRequestId || null) : null
         };
 
         await db.collection('students').doc(uid).update({
-          faceDescriptor: newDescriptor,
+          faceEmbedding: Array.from(newEmbedding),
+          faceEmbeddingModel: ARCFACE_MODEL_NAME,
+          faceEmbeddingVersion: ARCFACE_MODEL_VERSION,
+          faceEmbeddingUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           faceRegistered: true,
           lastReregistrationAt: firebase.firestore.FieldValue.serverTimestamp(),
           reregistrationAudit: firebase.firestore.FieldValue.arrayUnion(auditEntry)
@@ -3446,7 +3871,7 @@
         captureBtn.classList.add('btn-primary-pulse');
       }
 
-      const matchPercent = Math.max(0, Math.round((1 - (livenessSession.bestDistance || 0)) * 100));
+      const matchPercent = Math.min(100, Math.max(0, Math.round((livenessSession.bestSimilarity || 0) * 100)));
       showMsg('attMsg', 'success', `✓ Face Biometrics & Active Liveness Verified (${matchPercent}% match). Click "Verify & Mark Attendance" to complete GPS validation.`);
     }
 
@@ -3592,7 +4017,7 @@
       if (captureBtn) captureBtn.disabled = true;
 
       try {
-        // 2. Pre-load both Face-API and MediaPipe FaceLandmarker singleton
+        // 2. Pre-load both ArcFace and MediaPipe FaceLandmarker singleton
         const ok = await loadModels();
         if (!ok) {
           showMsg('attMsg', 'error', 'Face verification models could not be loaded. Please check your internet connection.');
@@ -3600,7 +4025,7 @@
           return;
         }
 
-        // 3. Stored biometric descriptor verification
+        // 3. Stored biometric embedding verification
         const currentAuthUid = auth.currentUser ? auth.currentUser.uid : null;
         if (!currentAuthUid) {
           showMsg('attMsg', 'error', 'User is not authenticated. Please sign in again.');
@@ -3608,12 +4033,23 @@
           return;
         }
         const studentDoc = await db.collection('students').doc(currentAuthUid).get();
-        if (!studentDoc.exists || !studentDoc.data().faceDescriptor) {
-          showMsg('attMsg', 'error', 'Please complete Face Biometrics Enrollment first.');
+        if (!studentDoc.exists) {
+          showMsg('attMsg', 'error', 'Student record not found.');
           if (startBtn) startBtn.disabled = false;
           return;
         }
-        const storedDescriptor = new Float32Array(studentDoc.data().faceDescriptor);
+        const sData = studentDoc.data() || {};
+        const hasArcFace = Array.isArray(sData.faceEmbedding) && sData.faceEmbedding.length === ARCFACE_EMBEDDING_SIZE;
+        if (!hasArcFace) {
+          if (sData.faceDescriptor) {
+            showMsg('attMsg', 'error', 'Your face biometrics must be upgraded to ArcFace. Please complete Face Biometrics Enrollment first.');
+          } else {
+            showMsg('attMsg', 'error', 'Please complete Face Biometrics Enrollment first.');
+          }
+          if (startBtn) startBtn.disabled = false;
+          return;
+        }
+        const storedEmbedding = new Float32Array(sData.faceEmbedding);
 
         const failWrap = document.getElementById('faceFailCorrectionWrap');
         if (failWrap) failWrap.style.display = 'none';
@@ -3637,7 +4073,7 @@
           token: sessionToken,
           sessionId: selectedSession.id,
           subjectId: selectedSubject,
-          storedDescriptor: storedDescriptor,
+          storedEmbedding: storedEmbedding,
           sequence: challengeSequence,
           currentIndex: 0,
           state: FaceLivenessState.FACE_NOT_READY,
@@ -3667,6 +4103,7 @@
           faceMatched: false,
           livenessPassed: false,
           faceVerified: false,
+          bestSimilarity: 0.0,
           bestDistance: 1.0,
           noFaceFrames: 0,
           multipleFacesFrames: 0,
@@ -3881,6 +4318,71 @@
         }
 
         // ---------------------------------------------------------------------
+        // STATE: FACE_MATCHING -> Verify identity on frontal, quality-checked frame
+        // ---------------------------------------------------------------------
+        if (session.state === FaceLivenessState.FACE_MATCHING) {
+          const bannerText = document.getElementById('hudLivenessText');
+
+          if (Date.now() > (session.matchingDeadline || 0)) {
+            const matchPct = Math.min(100, Math.max(0, Math.round((session.bestSimilarity || 0) * 100)));
+            handleLivenessFailure(`Identity verification failed (${matchPct}% confidence match). Please ensure proper lighting and face the camera directly.`);
+            return;
+          }
+
+          const quality = checkFaceCaptureQuality(canvas, landmarks);
+          if (!quality.valid) {
+            if (bannerText) bannerText.textContent = 'Please look directly at camera...';
+            isProcessingLivenessFrame = false;
+            scheduleNextLivenessFrame(60);
+            return;
+          }
+
+          if (bannerText) bannerText.textContent = 'Verifying identity...';
+
+          try {
+            const alignedCanvas = alignFaceCanvas(canvas, landmarks);
+            const liveEmbedding = await generateArcFaceEmbedding(alignedCanvas);
+
+            if (!session.active || session.token !== currentLivenessSessionToken) {
+              isProcessingLivenessFrame = false;
+              return;
+            }
+
+            if (!liveEmbedding || liveEmbedding.length !== ARCFACE_EMBEDDING_SIZE) {
+              isProcessingLivenessFrame = false;
+              scheduleNextLivenessFrame(60);
+              return;
+            }
+
+            const similarity = computeArcFaceSimilarity(liveEmbedding, session.storedEmbedding);
+            if (similarity > (session.bestSimilarity || 0)) {
+              session.bestSimilarity = similarity;
+            }
+
+            if (similarity >= ARCFACE_SIMILARITY_THRESHOLD) {
+              session.faceMatched = true;
+              session.faceVerified = true;
+              session.state = FaceLivenessState.VERIFICATION_SUCCESS;
+              handleBiometricSuccess();
+              return;
+            } else {
+              session.matchingAttempts = (session.matchingAttempts || 0) + 1;
+              if (session.matchingAttempts >= 6) {
+                const matchPct = Math.min(100, Math.max(0, Math.round((session.bestSimilarity || similarity) * 100)));
+                handleLivenessFailure(`Face does not match the registered student (${matchPct}% confidence match). Liveness passed, but identity failed.`);
+                return;
+              }
+            }
+          } catch (recogErr) {
+            console.error('[Face Identity Verification Error]', recogErr);
+          }
+
+          isProcessingLivenessFrame = false;
+          scheduleNextLivenessFrame(60);
+          return;
+        }
+
+        // ---------------------------------------------------------------------
         // STATE: FACE_SEARCHING -> Check for 3 consecutive stable frames
         // ---------------------------------------------------------------------
         if (session.state === FaceLivenessState.FACE_SEARCHING) {
@@ -3999,45 +4501,18 @@
               const bannerText = document.getElementById('hudLivenessText');
               if (banner) banner.className = 'hud-liveness-banner success';
               if (bannerIcon) bannerIcon.textContent = '✓';
-              if (bannerText) bannerText.textContent = 'Liveness Passed — Verifying Identity...';
+              if (bannerText) bannerText.textContent = 'Liveness Passed — Face camera for identity check';
 
-              // Transition to existing Face Identity Matching via Face-API
+              // Transition to ArcFace Identity Matching
               session.state = FaceLivenessState.FACE_MATCHING;
+              session.matchingAttempts = 0;
+              session.matchingStart = Date.now();
+              session.matchingDeadline = Date.now() + 5000;
+              showMsg('attMsg', 'info', 'Liveness passed! Please face the camera directly for identity verification...');
 
-              try {
-                const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.35 });
-                const detections = await faceapi.detectAllFaces(canvas, detectorOptions).withFaceLandmarks().withFaceDescriptors();
-
-                if (!session.active || session.token !== currentLivenessSessionToken) {
-                  isProcessingLivenessFrame = false;
-                  return;
-                }
-
-                if (detections && detections.length === 1) {
-                  const descriptor = detections[0].descriptor;
-                  const distance = faceapi.euclideanDistance(descriptor, session.storedDescriptor);
-                  session.bestDistance = distance;
-
-                  if (distance <= faceDistanceThreshold) {
-                    session.faceMatched = true;
-                    session.faceVerified = true;
-                    session.state = FaceLivenessState.VERIFICATION_SUCCESS;
-                    handleBiometricSuccess();
-                    return;
-                  } else {
-                    const matchPct = Math.max(0, Math.round((1 - distance) * 100));
-                    handleLivenessFailure(`Face does not match the registered student (${matchPct}% confidence match). Liveness passed, but identity failed.`);
-                    return;
-                  }
-                } else {
-                  handleLivenessFailure('Identity verification could not detect a single clear face. Please look directly at the camera.');
-                  return;
-                }
-              } catch (recogErr) {
-                console.error('[Face Identity Verification Error]', recogErr);
-                handleLivenessFailure('Identity verification error: ' + recogErr.message);
-                return;
-              }
+              isProcessingLivenessFrame = false;
+              scheduleNextLivenessFrame(60);
+              return;
             } else {
               // ADVANCE TO NEXT CHALLENGE -> FRESH 12-SECOND TIMER!
               const nextChallengeId = session.sequence[session.currentIndex];
@@ -4060,7 +4535,7 @@
       }
 
       const isBlinkActive = (session?.active && session?.sequence && session?.sequence[session?.currentIndex] === 'BLINK_TWICE');
-      const delay = isBlinkActive ? 40 : 60;
+      const delay = isBlinkActive ? 20 : 35;
       scheduleNextLivenessFrame(delay);
     }
 
@@ -4093,7 +4568,7 @@
       console.log('livenessPassed:', debug.face.livenessPassed);
       console.log('challengesCompleted:', debug.face.challengesCompleted);
       console.log('faceVerified:', debug.face.result === 'PASSED');
-      console.log('faceDistance:', debug.face.distance);
+      console.log('faceSimilarity:', debug.face.similarity);
       console.log('faceThreshold:', debug.face.threshold);
       console.log('faceResult:', debug.face.result);
       console.log('studentLatitude:', debug.gps.studentLatitude);
@@ -4179,8 +4654,8 @@
         },
         face: {
           detectedCount: 1,
-          distance: livenessSession.bestDistance,
-          threshold: faceDistanceThreshold,
+          similarity: livenessSession.bestSimilarity,
+          threshold: ARCFACE_SIMILARITY_THRESHOLD,
           livenessPassed: true,
           challengesCompleted: [...livenessSession.completedChallenges],
           identityMatched: true,
@@ -5199,8 +5674,12 @@
           );
         }
 
+        const deptPromise = Object.keys(deptMap).length > 0
+          ? Promise.resolve(null)
+          : db.collection('departments').get().catch(() => null);
+
         const [deptSnap, ...attSnapshots] = await Promise.all([
-          db.collection('departments').get().catch(() => null),
+          deptPromise,
           ...queries
         ]);
         if (deptSnap) {
