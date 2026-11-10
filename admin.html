@@ -187,6 +187,7 @@
                 <option value="B">Section B</option>
                 <option value="C">Section C</option>
                 <option value="D">Section D</option>
+                <option value="ALL">All Sections</option>
               </select>
             </div>
             <select id="subjectFaculty" required>
@@ -203,7 +204,7 @@
               </div>
             </div>
             <p style="font-size:0.8rem; color:var(--text-muted); margin:0;">
-              💡 <em>All approved students matching this Department + Semester + Section are automatically enrolled upon creation.</em>
+              💡 <em>All approved students matching this Department + Semester + Section are automatically enrolled upon creation. Choose All Sections to create one offering per section.</em>
             </p>
             <button type="submit" class="btn submit-btn full" style="margin-top: 4px;">Create Course Offering</button>
           </form>
@@ -2746,7 +2747,8 @@
       const normalizedSubjectCode = subjectCode.toLowerCase();
       const departmentId = document.getElementById('subjectDept').value;
       const semester = parseInt(document.getElementById('subjectSem').value, 10) || 1;
-      const section = (document.getElementById('subjectSec').value || 'A').trim().toUpperCase();
+      const sectionSelection = (document.getElementById('subjectSec').value || 'A').trim().toUpperCase();
+      const sections = sectionSelection === 'ALL' ? ['A', 'B', 'C', 'D'] : [sectionSelection];
       const facultyId = document.getElementById('subjectFaculty').value;
       
       const plannedInput = document.getElementById('subjectPlannedClasses')?.value;
@@ -2788,19 +2790,17 @@
           return;
         }
 
-        const offeringKey = `${departmentId.toLowerCase()}_sem${semester}_sec${section.toLowerCase()}_${normalizedSubjectCode}`;
-        const offeringDoc = await db.collection('uniqueOfferings').doc(offeringKey).get();
-        if (offeringDoc.exists) {
-          msg.textContent = 'Subject code already exists.';
-          msg.className = 'msg error';
-          msg.style.display = 'block';
-          return;
-        }
-
-        // Secondary check by querying subjects collection
+        // A subject code may be offered once per section for the same
+        // department and semester, but remains unique across other courses.
         const existingCodeSnap = await db.collection('subjects').where('subjectCode', '==', subjectCode).get();
-        if (!existingCodeSnap.empty) {
-          msg.textContent = 'Subject code already exists.';
+        const conflictingCodeDoc = existingCodeSnap.docs.find((doc) => {
+          const existing = doc.data();
+          const sameDepartment = isDepartmentMatching(existing.departmentId || existing.department, departmentId, deptMap);
+          const sameSemester = isSemesterMatching(existing.semester, semester);
+          return !sameDepartment || !sameSemester;
+        });
+        if (conflictingCodeDoc) {
+          msg.textContent = 'Subject code already exists for another department or semester.';
           msg.className = 'msg error';
           msg.style.display = 'block';
           return;
@@ -2817,82 +2817,145 @@
           }
         }
 
-        // Direction B: Automatically find all existing approved students matching Dept + Semester + Section
+        // Direction B: Automatically find all existing approved students matching
+        // Dept + Semester + each requested Section.
         const stuSnap = await db.collection('students').get();
-        const matchingStudentIds = [];
-        const matchingRoster = [];
-
-        stuSnap.forEach(sDoc => {
-          const s = sDoc.data();
-          const studentObj = {
-            dept: s.dept || s.department || '',
-            semester: s.semester || 1,
-            section: s.section || 'A'
+        const offeringRefs = sections.map((targetSection) => {
+          const offeringKey = `${departmentId.toLowerCase()}_sem${semester}_sec${targetSection.toLowerCase()}_${normalizedSubjectCode}`;
+          return {
+            section: targetSection,
+            offeringKey,
+            offeringRef: db.collection('uniqueOfferings').doc(offeringKey),
+            subjectRef: db.collection('subjects').doc()
           };
-          const subjectObj = {
-            departmentId: departmentId,
-            semester: semester,
-            section: section
-          };
+        });
+        const codeRef = db.collection('uniqueSubjectCodes').doc(normalizedSubjectCode);
+        const existingOfferingDocs = await Promise.all(
+          offeringRefs.map(item => item.offeringRef.get())
+        );
+        const existingSubjectSections = new Set(
+          existingCodeSnap.docs
+            .map(doc => doc.data())
+            .filter(existing => (
+              isDepartmentMatching(existing.departmentId || existing.department, departmentId, deptMap) &&
+              isSemesterMatching(existing.semester, semester)
+            ))
+            .map(existing => String(existing.section || 'A').trim().toUpperCase())
+        );
+        const existingSections = offeringRefs
+          .filter((item, index) => existingOfferingDocs[index].exists || existingSubjectSections.has(item.section))
+          .map(item => item.section);
+        const pendingOfferings = offeringRefs.filter((item, index) => (
+          !existingOfferingDocs[index].exists && !existingSubjectSections.has(item.section)
+        ));
 
-          if (isAcademicMatch(studentObj, subjectObj, deptMap)) {
-            const sid = s.uid || sDoc.id;
-            if (!matchingStudentIds.includes(sid)) {
-              matchingStudentIds.push(sid);
-              matchingRoster.push({
-                id: sid,
-                name: s.name || 'Student',
-                usn: s.usn || ''
+        if (pendingOfferings.length === 0) {
+          msg.textContent = `Course offering already exists for Section${existingSections.length === 1 ? '' : 's'} ${existingSections.join(', ')}.`;
+          msg.className = 'msg error';
+          msg.style.display = 'block';
+          return;
+        }
+
+        const offerings = pendingOfferings.map(({ section: targetSection, offeringKey, offeringRef, subjectRef }) => {
+          const matchingStudentIds = [];
+          const matchingRoster = [];
+          stuSnap.forEach(sDoc => {
+            const s = sDoc.data();
+            const studentObj = {
+              dept: s.dept || s.department || '',
+              semester: s.semester || 1,
+              section: s.section || 'A'
+            };
+            const subjectObj = {
+              departmentId,
+              semester,
+              section: targetSection
+            };
+            if (isAcademicMatch(studentObj, subjectObj, deptMap)) {
+              const sid = s.uid || sDoc.id;
+              if (!matchingStudentIds.includes(sid)) {
+                matchingStudentIds.push(sid);
+                matchingRoster.push({
+                  id: sid,
+                  name: s.name || 'Student',
+                  usn: s.usn || ''
+                });
+              }
+            }
+          });
+          return {
+            section: targetSection,
+            offeringKey,
+            offeringRef,
+            subjectRef,
+            matchingStudentIds,
+            matchingRoster
+          };
+        });
+
+        // The transaction prevents races between duplicate checks and writes.
+        // Each section is represented by the same normal subject schema.
+        await db.runTransaction(async (transaction) => {
+          const codeDoc = await transaction.get(codeRef);
+          const offeringDocs = [];
+          for (const item of offerings) {
+            offeringDocs.push(await transaction.get(item.offeringRef));
+          }
+          if (offeringDocs.some(doc => doc.exists)) {
+            throw new Error('One or more selected section offerings were created by another administrator. Refresh and try again.');
+          }
+
+          offerings.forEach((item, index) => {
+            const subject = {
+              subjectName,
+              subjectCode,
+              normalizedCode: normalizedSubjectCode,
+              offeringKey: item.offeringKey,
+              departmentId,
+              department: departmentId,
+              departmentName: deptName,
+              semester,
+              section: item.section,
+              facultyId,
+              facultyUid: facultyId,
+              facultyName,
+              plannedClasses,
+              totalPlannedClasses: plannedClasses,
+              totalHours: plannedClasses,
+              minAttendancePercentage: minAttendance,
+              attendanceRequiredPercentage: minAttendance,
+              studentIds: item.matchingStudentIds,
+              enrolledRoster: item.matchingRoster,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            transaction.set(item.offeringRef, {
+              offeringKey: item.offeringKey,
+              code: subjectCode,
+              subjectId: item.subjectRef.id,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            transaction.set(item.subjectRef, subject);
+            if (!codeDoc.exists && index === 0) {
+              transaction.set(codeRef, {
+                code: subjectCode,
+                normalizedCode: normalizedSubjectCode,
+                subjectId: item.subjectRef.id,
+                offeringKey: item.offeringKey,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
               });
             }
-          }
+          });
         });
 
-        const newSubjectRef = db.collection('subjects').doc();
-        const subject = {
-          subjectName,
-          subjectCode,
-          normalizedCode: normalizedSubjectCode,
-          offeringKey,
-          departmentId,
-          department: departmentId,
-          departmentName: deptName,
-          semester,
-          section,
-          facultyId,
-          facultyUid: facultyId,
-          facultyName,
-          plannedClasses: plannedClasses,
-          totalPlannedClasses: plannedClasses,
-          totalHours: plannedClasses,
-          minAttendancePercentage: minAttendance,
-          attendanceRequiredPercentage: minAttendance,
-          studentIds: matchingStudentIds,
-          enrolledRoster: matchingRoster,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-
-        const batch = db.batch();
-        batch.set(db.collection('uniqueSubjectCodes').doc(normalizedSubjectCode), {
-          code: subjectCode,
-          normalizedCode: normalizedSubjectCode,
-          subjectId: newSubjectRef.id,
-          offeringKey: offeringKey,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        batch.set(db.collection('uniqueOfferings').doc(offeringKey), {
-          offeringKey: offeringKey,
-          code: subjectCode,
-          subjectId: newSubjectRef.id,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        batch.set(newSubjectRef, subject);
-        await batch.commit();
+        const totalEnrollments = offerings.reduce((total, item) => total + item.matchingStudentIds.length, 0);
+        const uniqueStudentIds = new Set(offerings.flatMap(item => item.matchingStudentIds));
+        const createdSections = offerings.map(item => item.section);
 
         msg.innerHTML = `
           <div style="font-weight:700; font-size:0.95rem; margin-bottom:4px;">✓ Course created successfully.</div>
-          <div style="font-size:0.88rem; color:var(--text-muted);">${deptName} • Semester ${semester} • Section ${section} • Planned Classes: ${plannedClasses} (${minAttendance}% Min Req)</div>
-          <div style="font-size:0.88rem; font-weight:600; margin-top:2px;">Automatically enrolled: <strong>${matchingStudentIds.length} student${matchingStudentIds.length === 1 ? '' : 's'}</strong></div>
+          <div style="font-size:0.88rem; color:var(--text-muted);">${deptName} • Semester ${semester} • Section${createdSections.length === 1 ? '' : 's'} ${createdSections.join(', ')} • Planned Classes: ${plannedClasses} (${minAttendance}% Min Req)</div>
+          <div style="font-size:0.88rem; font-weight:600; margin-top:2px;">Created <strong>${createdSections.length}</strong> section offering${createdSections.length === 1 ? '' : 's'}; enrolled <strong>${totalEnrollments}</strong> total section enrollment${totalEnrollments === 1 ? '' : 's'} (${uniqueStudentIds.size} unique student${uniqueStudentIds.size === 1 ? '' : 's'}).</div>
+          ${existingSections.length ? `<div style="font-size:0.82rem; margin-top:2px;">Existing offerings skipped: Section${existingSections.length === 1 ? '' : 's'} ${existingSections.join(', ')}.</div>` : ''}
         `;
         msg.className = 'msg success';
         msg.style.display = 'block';

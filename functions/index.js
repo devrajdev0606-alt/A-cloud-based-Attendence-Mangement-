@@ -11,6 +11,7 @@ setGlobalOptions({ region: 'us-central1', maxInstances: 10 });
 const db = admin.firestore();
 const FieldValue = (db && db.constructor && db.constructor.FieldValue) ? db.constructor.FieldValue : admin.firestore.FieldValue;
 const DELETE_BATCH_SIZE = 400;
+const MAX_IMPORTED_STUDENTS = 500;
 
 async function isAdmin(auth) {
   if (!auth) return false;
@@ -277,9 +278,12 @@ exports.deleteAdminEntity = onCall(async request => {
   return deleteEntity(type, id);
 });
 
-const WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || 'AIzaSyC1x0R-CKUh7sGonAYiqXMNemeLW-6bdvU';
+const WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY;
 
 function triggerPasswordResetEmail(email) {
+  if (!WEB_API_KEY) {
+    return Promise.resolve({ ok: false, error: 'FIREBASE_WEB_API_KEY is not configured.' });
+  }
   return new Promise(resolve => {
     const postData = JSON.stringify({
       requestType: 'PASSWORD_RESET',
@@ -561,6 +565,12 @@ exports.importStudents = onCall(async request => {
   if (!students.length) {
     throw new HttpsError('invalid-argument', 'No student records provided for import.');
   }
+  if (students.length > MAX_IMPORTED_STUDENTS) {
+    throw new HttpsError('invalid-argument', `Import is limited to ${MAX_IMPORTED_STUDENTS} students per request.`);
+  }
+  if (students.some(student => !student || typeof student !== 'object' || Array.isArray(student))) {
+    throw new HttpsError('invalid-argument', 'Each student record must be an object.');
+  }
 
   const departmentsMap = await loadDepartmentsMap();
   const subjectsSnap = await db.collection('subjects').get();
@@ -677,6 +687,7 @@ exports.approveFaceReRegistration = onCall(async request => {
   const auditSnap = await db.collection('faceReRegistrationRequests')
     .where('studentUid', '==', targetStudentUid)
     .where('status', '==', 'approved')
+    .limit(FACE_REREG_MAX_APPROVALS + 1)
     .get();
 
   if (auditSnap.size >= FACE_REREG_MAX_APPROVALS) {
@@ -713,4 +724,3 @@ exports.approveFaceReRegistration = onCall(async request => {
     method: 'approved_recovery'
   };
 });
-

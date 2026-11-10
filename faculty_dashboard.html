@@ -533,6 +533,7 @@
     let allFacultyIds = [facultyUid, facultyId].filter(Boolean);
     let facultyName = localStorage.getItem('facultyName') || 'Faculty';
     let facultyDept = localStorage.getItem('facultyDept') || '';
+    let facultyProfileLoaded = false;
     let gpsAccuracyThreshold = 50;
     let attendanceSettings = null;
     let isDashboardInitialized = false;
@@ -584,6 +585,7 @@
     // =========================================================================
     auth.onAuthStateChanged(async (user) => {
       if (!user) {
+        facultyProfileLoaded = false;
         localStorage.clear();
         window.location.replace('faculty.html');
         return;
@@ -648,6 +650,7 @@
       localStorage.setItem('facultyUid', facultyUid);
       localStorage.setItem('facultyName', facultyName);
       localStorage.setItem('facultyDept', facultyDept);
+      facultyProfileLoaded = true;
 
       document.getElementById('welcome').textContent = facultyName;
       const greetText = `Good ${getGreetingTime()}, ${facultyName.split(' ')[0] || facultyName} 👋`;
@@ -708,6 +711,44 @@
       }
     }
 
+    function getSubjectAssignmentKey(doc) {
+      if (!doc) return '';
+      const s = typeof doc.data === 'function' ? doc.data() : doc;
+      const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+
+      // 1. Normalized Faculty Identifier (scoped to assigned faculty member)
+      const facId = (s.facultyUid || s.facultyId || currentAuthUid || '').toString().trim().toLowerCase();
+
+      // 2. Normalized Subject Code (primary unique course identifier)
+      // If code is missing, fallback to offeringKey, normalized subjectName, or doc.id
+      const rawCode = s.subjectCode || s.code || s.normalizedCode || '';
+      const code = rawCode.toString().trim().toUpperCase();
+      const rawName = (s.subjectName || s.name || '').toString().trim().toLowerCase();
+      const subjectKey = code || (s.offeringKey ? String(s.offeringKey).trim().toLowerCase() : (rawName || doc.id));
+
+      // 3. Semester (differentiates Sem 5 vs Sem 7 assignments)
+      const sem = (s.semester !== undefined && s.semester !== null && String(s.semester).trim() !== '')
+        ? String(s.semester).trim()
+        : 'ALL';
+
+      // 4. Section (differentiates Sec A vs Sec B assignments)
+      const sec = (s.section !== undefined && s.section !== null && String(s.section).trim() !== '')
+        ? String(s.section).trim().toUpperCase()
+        : 'ALL';
+
+      // 5. Academic Year / Batch (differentiates academic years)
+      const year = (s.academicYear || s.year || s.batch || '').toString().trim().toUpperCase() || 'CURRENT';
+
+      return `${facId}__${subjectKey}__SEM_${sem}__SEC_${sec}__YR_${year}`;
+    }
+
+    function findAssignedSubject(subjectId) {
+      if (!subjectId) return null;
+      return (assignedSubjectDocs || []).find(d =>
+        d.id === subjectId || (Array.isArray(d._aliasIds) && d._aliasIds.includes(subjectId))
+      ) || null;
+    }
+
     async function loadSubjects() {
       const tbody = document.getElementById('subjectsTable');
       if (tbody && tbody.children.length === 0) {
@@ -735,19 +776,77 @@
         });
 
         const snapshots = await Promise.all(queryPromises);
-        const seenSubjectIds = new Set();
-        assignedSubjectDocs = [];
+        const assignmentMap = new Map();
+        const seenDocIds = new Set();
 
         snapshots.forEach(snap => {
           if (snap && !snap.empty) {
             snap.forEach(doc => {
-              if (!seenSubjectIds.has(doc.id)) {
-                seenSubjectIds.add(doc.id);
-                assignedSubjectDocs.push(doc);
+              if (seenDocIds.has(doc.id)) return;
+              seenDocIds.add(doc.id);
+
+              const key = getSubjectAssignmentKey(doc);
+              if (!assignmentMap.has(key)) {
+                doc._aliasIds = [doc.id];
+                assignmentMap.set(key, doc);
+              } else {
+                const primaryDoc = assignmentMap.get(key);
+                if (!primaryDoc._aliasIds) primaryDoc._aliasIds = [primaryDoc.id];
+                if (!primaryDoc._aliasIds.includes(doc.id)) {
+                  primaryDoc._aliasIds.push(doc.id);
+                }
+
+                // If candidate doc has an active session while primary does not, promote candidate doc
+                const primaryHasActive = Boolean(liveSessionsMap[primaryDoc.id]);
+                const docHasActive = Boolean(liveSessionsMap[doc.id]);
+                const chosenDoc = (docHasActive && !primaryHasActive) ? doc : primaryDoc;
+                const otherDoc = chosenDoc === doc ? primaryDoc : doc;
+
+                chosenDoc._aliasIds = primaryDoc._aliasIds;
+
+                // Merge student enrollments and metadata so no valid enrollments are lost
+                const pData = typeof chosenDoc.data === 'function' ? chosenDoc.data() : chosenDoc;
+                const oData = typeof otherDoc.data === 'function' ? otherDoc.data() : otherDoc;
+
+                const combinedIds = Array.from(new Set([
+                  ...(Array.isArray(pData.studentIds) ? pData.studentIds : []),
+                  ...(Array.isArray(oData.studentIds) ? oData.studentIds : [])
+                ]));
+
+                const rosterMap = new Map();
+                (Array.isArray(pData.enrolledRoster) ? pData.enrolledRoster : []).forEach(item => {
+                  const id = item?.id || item?.uid || item?.usn;
+                  if (id) rosterMap.set(String(id), item);
+                });
+                (Array.isArray(oData.enrolledRoster) ? oData.enrolledRoster : []).forEach(item => {
+                  const id = item?.id || item?.uid || item?.usn;
+                  if (id && !rosterMap.has(String(id))) {
+                    rosterMap.set(String(id), item);
+                  }
+                });
+                const combinedRoster = Array.from(rosterMap.values());
+
+                const mergedData = {
+                  ...oData,
+                  ...pData,
+                  studentIds: combinedIds,
+                  enrolledRoster: combinedRoster
+                };
+                if (!pData.plannedClasses && oData.plannedClasses) mergedData.plannedClasses = oData.plannedClasses;
+                if (!pData.totalPlannedClasses && oData.totalPlannedClasses) mergedData.totalPlannedClasses = oData.totalPlannedClasses;
+                if (!pData.semester && oData.semester) mergedData.semester = oData.semester;
+                if (!pData.section && oData.section) mergedData.section = oData.section;
+                if (!pData.department && oData.department) mergedData.department = oData.department;
+                if (!pData.departmentName && oData.departmentName) mergedData.departmentName = oData.departmentName;
+
+                chosenDoc.data = () => mergedData;
+                assignmentMap.set(key, chosenDoc);
               }
             });
           }
         });
+
+        assignedSubjectDocs = Array.from(assignmentMap.values());
 
         const countBadge = document.getElementById('assignedSubjectsCountBadge');
         if (countBadge) countBadge.textContent = `${assignedSubjectDocs.length} Course${assignedSubjectDocs.length === 1 ? '' : 's'}`;
@@ -766,8 +865,9 @@
             const hrsText = plannedNum ? ` [${plannedNum} classes]` : '';
             analyticsSelect.innerHTML += `<option value="${doc.id}">${s.subjectName || 'Subject'} (${s.subjectCode || ''}${semText}${hrsText})</option>`;
           }
-          if (currentVal && seenSubjectIds.has(currentVal)) {
-            analyticsSelect.value = currentVal;
+          const matchedDoc = findAssignedSubject(currentVal);
+          if (matchedDoc) {
+            analyticsSelect.value = matchedDoc.id;
           } else if (assignedSubjectDocs.length > 0 && !analyticsSelect.value) {
             analyticsSelect.value = assignedSubjectDocs[0].id;
             loadAnalytics();
@@ -796,7 +896,8 @@
 
       tbody.innerHTML = assignedSubjectDocs.map(doc => {
         const s = doc.data();
-        const activeSession = liveSessionsMap[doc.id] || null;
+        const activeSession = liveSessionsMap[doc.id] ||
+          (doc._aliasIds ? doc._aliasIds.map(id => liveSessionsMap[id]).find(Boolean) : null);
         const hasActive = Boolean(activeSession);
         const semSecBadge = s.semester ? `<span class="badge blue">Sem ${s.semester} • Sec ${s.section || 'A'}</span>` : '<span class="badge">-</span>';
         const safeName = (s.subjectName || 'Subject').replace(/'/g, "\\'");
@@ -880,6 +981,12 @@
               if (!expiresAt || (expiresAt.toDate && expiresAt.toDate() > new Date())) {
                 activeDocs.push(sessionDoc);
                 liveSessionsMap[d.subjectId] = { id: sessionDoc.id, ...d };
+                const subEntry = findAssignedSubject(d.subjectId);
+                if (subEntry?._aliasIds) {
+                  subEntry._aliasIds.forEach(aliasId => {
+                    liveSessionsMap[aliasId] = { id: sessionDoc.id, ...d };
+                  });
+                }
               } else {
                 db.collection('attendanceSessions').doc(sessionDoc.id).update({ active: false }).catch(() => {});
               }
@@ -907,7 +1014,7 @@
         const sessionCardPromises = activeDocs.map(async (doc) => {
           const s = doc.data();
           let subject = null;
-          const cachedSub = assignedSubjectDocs.find(d => d.id === s.subjectId);
+          const cachedSub = findAssignedSubject(s.subjectId);
           if (cachedSub) {
             subject = cachedSub.data();
           } else {
@@ -1150,14 +1257,15 @@
           (item.facultyId && (item.facultyId === currentAuthUid || (allFacultyIds || []).includes(item.facultyId)))
         );
 
-        // Check for active session right now
-        const activeSession = liveSessionsMap[item.subjectId];
-        // Check for completed session today
-        const completedSession = todayConductedSessions.find(s => s.subjectId === item.subjectId && !s.active);
-
         // Find enrolled count from matching subject doc
-        const subjectDoc = assignedSubjectDocs.find(d => d.id === item.subjectId);
+        const subjectDoc = findAssignedSubject(item.subjectId);
         const enrolledCount = subjectDoc?.data()?.enrolledRoster?.length || subjectDoc?.data()?.studentIds?.length || 0;
+        const subjectAliases = subjectDoc?._aliasIds || [item.subjectId];
+
+        // Check for active session right now (including aliases)
+        const activeSession = liveSessionsMap[item.subjectId] || subjectAliases.map(id => liveSessionsMap[id]).find(Boolean);
+        // Check for completed session today (including aliases)
+        const completedSession = todayConductedSessions.find(s => (s.subjectId === item.subjectId || subjectAliases.includes(s.subjectId)) && !s.active);
 
         if (activeSession) {
           statusBadge = '<span class="badge green">🟢 Attendance Open</span>';
@@ -1269,7 +1377,7 @@
       todayConductedSessions.forEach(s => {
         const pres = sessionAttendanceCounts[s.id] || 0;
         totalPresent += pres;
-        const subj = assignedSubjectDocs.find(d => d.id === s.subjectId);
+        const subj = findAssignedSubject(s.subjectId);
         const enr = subj?.data()?.enrolledRoster?.length || subj?.data()?.studentIds?.length || 0;
         totalEnrolled += enr;
       });
@@ -1299,31 +1407,36 @@
 
     async function getNextClassNumber(subjectId) {
       const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
-      const queries = [
-        db.collection('attendanceSessions')
-          .where('facultyUid', '==', currentAuthUid)
-          .where('subjectId', '==', subjectId)
-          .get()
-          .catch(() => null),
-        db.collection('attendanceSessions')
-          .where('facultyId', '==', currentAuthUid)
-          .where('subjectId', '==', subjectId)
-          .get()
-          .catch(() => null)
-      ];
-      (allFacultyIds || []).forEach(fId => {
-        if (fId && fId !== currentAuthUid) {
-          queries.push(
-            db.collection('attendanceSessions')
-              .where('facultyId', '==', fId)
-              .where('subjectId', '==', subjectId)
-              .get()
-              .catch(() => null)
-          );
+      const subj = findAssignedSubject(subjectId);
+      const targetIds = (subj?._aliasIds && subj._aliasIds.length > 0) ? subj._aliasIds : [subjectId];
+      const queries = [];
+      targetIds.forEach(tId => {
+        queries.push(
+          db.collection('attendanceSessions')
+            .where('facultyUid', '==', currentAuthUid)
+            .where('subjectId', '==', tId)
+            .get()
+            .catch(() => null),
+          db.collection('attendanceSessions')
+            .where('facultyId', '==', currentAuthUid)
+            .where('subjectId', '==', tId)
+            .get()
+            .catch(() => null)
+        );
+        (allFacultyIds || []).forEach(fId => {
+          if (fId && fId !== currentAuthUid) {
+            queries.push(
+              db.collection('attendanceSessions')
+                .where('facultyId', '==', fId)
+                .where('subjectId', '==', tId)
+                .get()
+                .catch(() => null)
+            );
           }
         });
+      });
 
-        const snapshots = await Promise.all(queries);
+      const snapshots = await Promise.all(queries);
       const numbers = [];
       snapshots.forEach(snap => {
         if (snap && !snap.empty) {
@@ -1386,17 +1499,25 @@
       try {
         const hasInstitutionLocation = Number.isFinite(attendanceSettings?.latitude) && Number.isFinite(attendanceSettings?.longitude);
 
-        // Pre-flight 1: Check active session for subject
-        const activeCheckPromise = db.collection('attendanceSessions')
-          .where('subjectId', '==', subjectId)
-          .where('active', '==', true)
-          .get();
+        const assignedSubj = findAssignedSubject(subjectId);
+        const targetSubjectIds = (assignedSubj?._aliasIds && assignedSubj._aliasIds.length > 0) ? assignedSubj._aliasIds : [subjectId];
+
+        // Pre-flight 1: Check active session for subject across all aliases
+        const activeCheckPromise = Promise.all(
+          targetSubjectIds.map(tId =>
+            db.collection('attendanceSessions')
+              .where('subjectId', '==', tId)
+              .where('active', '==', true)
+              .get()
+              .catch(() => null)
+          )
+        ).then(snaps => snaps.some(snap => snap && !snap.empty));
 
         // Pre-flight 2: Calculate class number concurrently
         const classNumPromise = getNextClassNumber(subjectId);
 
         // Pre-flight 3: Subject metadata lookup concurrently
-        const cachedSub = assignedSubjectDocs.find(d => d.id === subjectId);
+        const cachedSub = assignedSubj;
         const subjectPromise = cachedSub
           ? Promise.resolve(cachedSub.data())
           : db.collection('subjects').doc(subjectId).get().then(s => s.exists ? s.data() : null).catch(() => null);
@@ -1462,14 +1583,14 @@
         })();
 
         // Execute all independent checks concurrently
-        const [activeSnap, classNumber, subjectData, locResult] = await Promise.all([
+        const [hasActiveSession, classNumber, subjectData, locResult] = await Promise.all([
           activeCheckPromise,
           classNumPromise,
           subjectPromise,
           locationPromise
         ]);
 
-        if (!activeSnap.empty) {
+        if (hasActiveSession) {
           statusMsg.className = 'msg error';
           statusMsg.textContent = 'Attendance session is already active.';
           return;
@@ -1529,7 +1650,10 @@
         statusMsg.textContent = `Attendance started! Class ${classNumber} (GPS: ${selectedAccuracyMeters !== null ? `${selectedAccuracyMeters.toFixed(1)}m` : 'OK'})`;
 
         // Immediately update local state and re-render without delay
-        liveSessionsMap[subjectId] = { id: sessionRef.id, ...sessionPayload };
+        const liveSessionData = { id: sessionRef.id, ...sessionPayload };
+        targetSubjectIds.forEach(tId => {
+          liveSessionsMap[tId] = liveSessionData;
+        });
         renderSubjectsTable();
         renderTodayClasses();
         loadActiveSessions();
@@ -1571,31 +1695,36 @@
 
       try {
         const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
-        const queries = [
-          db.collection('attendanceSessions')
-            .where('facultyUid', '==', currentAuthUid)
-            .where('subjectId', '==', subjectId)
-            .where('active', '==', true)
-            .get()
-            .catch(() => null),
-          db.collection('attendanceSessions')
-            .where('facultyId', '==', currentAuthUid)
-            .where('subjectId', '==', subjectId)
-            .where('active', '==', true)
-            .get()
-            .catch(() => null)
-        ];
-        (allFacultyIds || []).forEach(fId => {
-          if (fId && fId !== currentAuthUid) {
-            queries.push(
-              db.collection('attendanceSessions')
-                .where('facultyId', '==', fId)
-                .where('subjectId', '==', subjectId)
-                .where('active', '==', true)
-                .get()
-                .catch(() => null)
-            );
-          }
+        const subj = findAssignedSubject(subjectId);
+        const targetSubjectIds = (subj?._aliasIds && subj._aliasIds.length > 0) ? subj._aliasIds : [subjectId];
+        const queries = [];
+        targetSubjectIds.forEach(tId => {
+          queries.push(
+            db.collection('attendanceSessions')
+              .where('facultyUid', '==', currentAuthUid)
+              .where('subjectId', '==', tId)
+              .where('active', '==', true)
+              .get()
+              .catch(() => null),
+            db.collection('attendanceSessions')
+              .where('facultyId', '==', currentAuthUid)
+              .where('subjectId', '==', tId)
+              .where('active', '==', true)
+              .get()
+              .catch(() => null)
+          );
+          (allFacultyIds || []).forEach(fId => {
+            if (fId && fId !== currentAuthUid) {
+              queries.push(
+                db.collection('attendanceSessions')
+                  .where('facultyId', '==', fId)
+                  .where('subjectId', '==', tId)
+                  .where('active', '==', true)
+                  .get()
+                  .catch(() => null)
+              );
+            }
+          });
         });
 
         const snapshots = await Promise.all(queries);
@@ -1608,6 +1737,9 @@
             }
           }
         }
+        targetSubjectIds.forEach(tId => {
+          delete liveSessionsMap[tId];
+        });
         statusMsg.className = 'msg success';
         statusMsg.textContent = 'Session stopped successfully!';
         setTimeout(() => {
@@ -1726,6 +1858,10 @@
       });
       allFacultySmsLogs.forEach(log => {
         if (log.subjectId && log.subjectName) {
+          const matchingAssigned = findAssignedSubject(log.subjectId);
+          if (matchingAssigned) {
+            return;
+          }
           subjectsMap.set(log.subjectId, log.subjectName);
         }
       });
@@ -1742,14 +1878,25 @@
 
     async function loadParentSmsLogs(targetSessionId = null) {
       const currentAuthUid = auth.currentUser ? auth.currentUser.uid : (facultyUid || facultyId);
-      if (!currentAuthUid) return;
+      const tbody = document.getElementById('parentSmsLogsTbody');
+      const mobileContainer = document.getElementById('parentSmsLogsMobileContainer');
+      if (!currentAuthUid) {
+        const message = 'Please sign in as faculty to load SMS logs.';
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="empty">${message}</td></tr>`;
+        if (mobileContainer) mobileContainer.innerHTML = `<p class="empty">${message}</p>`;
+        return;
+      }
+      if (!facultyProfileLoaded) {
+        const message = 'Faculty profile is still loading. Please try again in a moment.';
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="empty">${message}</td></tr>`;
+        if (mobileContainer) mobileContainer.innerHTML = `<p class="empty">${message}</p>`;
+        return;
+      }
 
       if (targetSessionId) {
         activeSmsSessionFilter = targetSessionId;
       }
 
-      const tbody = document.getElementById('parentSmsLogsTbody');
-      const mobileContainer = document.getElementById('parentSmsLogsMobileContainer');
       const badge = document.getElementById('parentSmsTotalBadge');
 
       if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty">Loading Parent SMS Logs...</td></tr>';
@@ -1762,19 +1909,6 @@
         snapshot.forEach(doc => {
           logs.push({ id: doc.id, ...doc.data() });
         });
-
-        if (currentFacultyDocId && currentFacultyDocId !== currentAuthUid) {
-          try {
-            const snap2 = await db.collection('notificationLogs').where('facultyId', '==', currentFacultyDocId).get();
-            snap2.forEach(doc => {
-              if (!logs.some(l => l.id === doc.id)) {
-                logs.push({ id: doc.id, ...doc.data() });
-              }
-            });
-          } catch (e) {
-            // Ignored
-          }
-        }
 
         logs.sort((a, b) => {
           const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.timestamp?.toDate ? a.timestamp.toDate().getTime() : 0);
@@ -1844,7 +1978,11 @@
           return false;
         }
         if (subVal !== 'all' && log.subjectId !== subVal && log.subjectName !== subVal) {
-          return false;
+          const matchingAssigned = findAssignedSubject(subVal);
+          const aliasIds = matchingAssigned?._aliasIds || [subVal];
+          if (!aliasIds.includes(log.subjectId)) {
+            return false;
+          }
         }
         if (statVal !== 'all') {
           if (statVal === 'demo_sent' && log.status !== 'demo_sent' && log.status !== 'mock') return false;
@@ -2095,7 +2233,7 @@
 
       // 1. Fetch Subject doc
       let subjectData = null;
-      const cachedSub = (assignedSubjectDocs || []).find(d => d.id === subjectId);
+      const cachedSub = findAssignedSubject(subjectId);
       if (cachedSub) {
         subjectData = cachedSub.data();
       } else {
@@ -2275,7 +2413,7 @@
 
         // 1. Fetch Subject doc for enrolled roster
         let subjectData = null;
-        const cachedSub = assignedSubjectDocs.find(d => d.id === subjectId);
+        const cachedSub = findAssignedSubject(subjectId);
         if (cachedSub) {
           subjectData = cachedSub.data();
         } else {
@@ -2416,50 +2554,58 @@
         }
 
         // 1. Fetch Subject Document (authorized for assigned faculty)
-        const subjectDoc = await db.collection('subjects').doc(subjectId).get().catch(() => null);
-        if (!subjectDoc || !subjectDoc.exists) {
-          container.innerHTML = '<p class="empty">Subject record not found.</p>';
-          return;
+        const cachedSub = findAssignedSubject(subjectId);
+        let subject = cachedSub ? cachedSub.data() : null;
+        if (!subject) {
+          const subjectDoc = await db.collection('subjects').doc(subjectId).get().catch(() => null);
+          if (!subjectDoc || !subjectDoc.exists) {
+            container.innerHTML = '<p class="empty">Subject record not found.</p>';
+            return;
+          }
+          subject = subjectDoc.data();
         }
-        const subject = subjectDoc.data();
         const studentIds = subject?.studentIds || [];
         const enrolledRoster = subject?.enrolledRoster || [];
+        const targetSubjectIds = (cachedSub?._aliasIds && cachedSub._aliasIds.length > 0) ? cachedSub._aliasIds : [subjectId];
 
-        // 2. Fetch Sessions for this subject using authorized queries
-        const sessionQueries = [
-          db.collection('attendanceSessions').where('facultyUid', '==', currentAuthUid).where('subjectId', '==', subjectId).get().catch(() => null),
-          db.collection('attendanceSessions').where('facultyId', '==', currentAuthUid).where('subjectId', '==', subjectId).get().catch(() => null)
-        ];
-        (allFacultyIds || []).forEach(fId => {
-          if (fId && fId !== currentAuthUid) {
-            sessionQueries.push(
-              db.collection('attendanceSessions').where('facultyId', '==', fId).where('subjectId', '==', subjectId).get().catch(() => null)
-            );
-          }
-        });
-        if (subject.facultyId) {
+        // 2. Fetch Sessions and Attendance for this subject across all targetSubjectIds
+        const sessionQueries = [];
+        const attendanceQueries = [];
+        targetSubjectIds.forEach(tId => {
           sessionQueries.push(
-            db.collection('attendanceSessions').where('facultyId', '==', subject.facultyId).where('subjectId', '==', subjectId).get().catch(() => null)
+            db.collection('attendanceSessions').where('facultyUid', '==', currentAuthUid).where('subjectId', '==', tId).get().catch(() => null),
+            db.collection('attendanceSessions').where('facultyId', '==', currentAuthUid).where('subjectId', '==', tId).get().catch(() => null)
           );
-        }
+          (allFacultyIds || []).forEach(fId => {
+            if (fId && fId !== currentAuthUid) {
+              sessionQueries.push(
+                db.collection('attendanceSessions').where('facultyId', '==', fId).where('subjectId', '==', tId).get().catch(() => null)
+              );
+            }
+          });
+          if (subject.facultyId) {
+            sessionQueries.push(
+              db.collection('attendanceSessions').where('facultyId', '==', subject.facultyId).where('subjectId', '==', tId).get().catch(() => null)
+            );
+          }
 
-        // 3. Fetch Attendance records for this subject using authorized queries
-        const attendanceQueries = [
-          db.collection('attendance').where('facultyUid', '==', currentAuthUid).where('subjectId', '==', subjectId).get().catch(() => null),
-          db.collection('attendance').where('facultyId', '==', currentAuthUid).where('subjectId', '==', subjectId).get().catch(() => null)
-        ];
-        (allFacultyIds || []).forEach(fId => {
-          if (fId && fId !== currentAuthUid) {
+          attendanceQueries.push(
+            db.collection('attendance').where('facultyUid', '==', currentAuthUid).where('subjectId', '==', tId).get().catch(() => null),
+            db.collection('attendance').where('facultyId', '==', currentAuthUid).where('subjectId', '==', tId).get().catch(() => null)
+          );
+          (allFacultyIds || []).forEach(fId => {
+            if (fId && fId !== currentAuthUid) {
+              attendanceQueries.push(
+                db.collection('attendance').where('facultyId', '==', fId).where('subjectId', '==', tId).get().catch(() => null)
+              );
+            }
+          });
+          if (subject.facultyId) {
             attendanceQueries.push(
-              db.collection('attendance').where('facultyId', '==', fId).where('subjectId', '==', subjectId).get().catch(() => null)
+              db.collection('attendance').where('facultyId', '==', subject.facultyId).where('subjectId', '==', tId).get().catch(() => null)
             );
           }
         });
-        if (subject.facultyId) {
-          attendanceQueries.push(
-            db.collection('attendance').where('facultyId', '==', subject.facultyId).where('subjectId', '==', subjectId).get().catch(() => null)
-          );
-        }
 
         const [sessionSnapshots, attendanceSnapshots] = await Promise.all([
           Promise.all(sessionQueries),
@@ -3398,6 +3544,10 @@
         clearInterval(refreshIntervalId);
         refreshIntervalId = null;
       }
+      if (window._facultySecondaryInterval) {
+        clearInterval(window._facultySecondaryInterval);
+        window._facultySecondaryInterval = null;
+      }
       try {
         await auth.signOut();
       } catch (e) {
@@ -3411,6 +3561,10 @@
       if (refreshIntervalId) {
         clearInterval(refreshIntervalId);
         refreshIntervalId = null;
+      }
+      if (window._facultySecondaryInterval) {
+        clearInterval(window._facultySecondaryInterval);
+        window._facultySecondaryInterval = null;
       }
     }
 

@@ -55,15 +55,17 @@ try {
         authClient.setCredentials({ access_token: token });
       }
 
-      admin.initializeApp({
-        projectId: PROJECT_ID,
-        credential: {
-          getAccessToken: async () => {
-            const tokenRes = await authClient.getAccessToken();
-            return { access_token: tokenRes.token || token, expires_in: 3600 };
+      if (!admin.apps?.length) {
+        admin.initializeApp({
+          projectId: PROJECT_ID,
+          credential: {
+            getAccessToken: async () => {
+              const tokenRes = await authClient.getAccessToken();
+              return { access_token: tokenRes.token || token, expires_in: 3600 };
+            }
           }
-        }
-      });
+        });
+      }
       db = new Firestore({
         projectId: PROJECT_ID,
         authClient: authClient
@@ -117,6 +119,9 @@ async function isAuthorizedToFinalize(decodedToken, sessionId) {
 }
 
 function triggerPasswordResetEmail(email) {
+  if (!WEB_API_KEY) {
+    return Promise.resolve({ ok: false, error: 'FIREBASE_WEB_API_KEY is not configured.' });
+  }
   return new Promise(resolve => {
     const postData = JSON.stringify({
       requestType: 'PASSWORD_RESET',
@@ -213,7 +218,7 @@ function maskPhoneNumber(phone) {
 }
 
 const SMS_CONFIG = {
-  providerMode: process.env.SMS_PROVIDER_MODE || 'mock',
+  providerMode: (process.env.SMS_PROVIDER || process.env.SMS_PROVIDER_MODE || 'mock').trim().toLowerCase(),
   apiKey: process.env.SMS_API_KEY || ''
 };
 
