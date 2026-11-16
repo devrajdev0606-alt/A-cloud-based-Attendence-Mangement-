@@ -165,7 +165,7 @@ Deploy the checked-in rules with:
 ```bash
 firebase deploy --only firestore:rules
 ```
-The current rules support the legacy demo login flow and are permissive. Add Firebase Authentication and role-based rules before using real personal or biometric data.
+The checked-in rules require Firebase Authentication and role-based authorization. Deploy and verify the rules before using real personal or biometric data; never use the production project for destructive integration tests.
 
 ### Step 5: Run the Application
 ```bash
@@ -188,8 +188,8 @@ Open `http://localhost:8080` in your browser.
 ### Admin Workflow
 
 1. **Login as Admin**
-   - Open `index.html` → Click **"👨‍💼 Admin"**
-   - No authentication required for demo (would need proper auth in production)
+   - Open `index.html` → Use an authorized Firebase Authentication administrator account.
+   - Admin operations are enforced by the `admins/{uid}` record or an `admin` token claim.
 
 2. **Create Department**
    - Enter department name (e.g., "Computer Science")

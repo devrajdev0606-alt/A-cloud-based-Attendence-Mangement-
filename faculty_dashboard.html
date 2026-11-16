@@ -2604,13 +2604,13 @@
 
         let timeDisplay = '';
         if (sessionData?.startTime && sessionData?.endTime) {
-          timeDisplay = ` • 🕒 <strong>${sessionData.startTime} – ${sessionData.endTime}</strong>`;
+          timeDisplay = ` • 🕒 <strong>${escapeHtml(sessionData.startTime)} – ${escapeHtml(sessionData.endTime)}</strong>`;
         } else if (sessionData?.startTime) {
-          timeDisplay = ` • 🕒 <strong>Started ${sessionData.startTime}</strong>`;
+          timeDisplay = ` • 🕒 <strong>Started ${escapeHtml(sessionData.startTime)}</strong>`;
         }
 
         if (meta) {
-          meta.innerHTML = `📅 Date: <strong>${dateStr}</strong>${timeDisplay} • Class <strong>#${classNum}</strong> • Present: <strong style="color:var(--emerald-dark);">${presentCount} / ${totalCount}</strong> (${pct}%)`;
+          meta.innerHTML = `📅 Date: <strong>${escapeHtml(dateStr)}</strong>${timeDisplay} • Class <strong>#${escapeHtml(classNum)}</strong> • Present: <strong style="color:var(--emerald-dark);">${presentCount} / ${totalCount}</strong> (${pct}%)`;
         }
 
         if (!tbody) return;
@@ -2629,8 +2629,8 @@
           return `
             <tr>
               <td>${index + 1}</td>
-              <td><strong>${stu.name || 'Student'}</strong></td>
-              <td><span class="badge" style="font-weight:600;">${stu.usn || '-'}</span></td>
+              <td><strong>${escapeHtml(stu.name || 'Student')}</strong></td>
+              <td><span class="badge" style="font-weight:600;">${escapeHtml(stu.usn || '-')}</span></td>
               <td>${statusBadge}</td>
             </tr>
           `;

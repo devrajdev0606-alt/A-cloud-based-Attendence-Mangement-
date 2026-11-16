@@ -1,15 +1,16 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
-const admin = require('firebase-admin');
+const { getApps, initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const https = require('https');
+const crypto = require('crypto');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
+const app = getApps().length ? getApps()[0] : initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 10 });
 
-const db = admin.firestore();
-const FieldValue = (db && db.constructor && db.constructor.FieldValue) ? db.constructor.FieldValue : admin.firestore.FieldValue;
+const auth = getAuth(app);
+const db = getFirestore(app);
 const DELETE_BATCH_SIZE = 400;
 const MAX_IMPORTED_STUDENTS = 500;
 
@@ -31,6 +32,17 @@ function asString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function distanceMeters(latitude1, longitude1, latitude2, longitude2) {
+  const toRadians = value => value * Math.PI / 180;
+  const earthRadius = 6371000;
+  const deltaLatitude = toRadians(latitude2 - latitude1);
+  const deltaLongitude = toRadians(longitude2 - longitude1);
+  const a = Math.sin(deltaLatitude / 2) ** 2
+    + Math.cos(toRadians(latitude1)) * Math.cos(toRadians(latitude2))
+    * Math.sin(deltaLongitude / 2) ** 2;
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function hasReference(data, field, value) {
   return data && data[field] === value;
 }
@@ -41,6 +53,46 @@ async function queryByFields(collectionName, queries) {
   const documents = new Map();
   snapshots.forEach(snapshot => snapshot.forEach(doc => documents.set(doc.id, doc)));
   return Array.from(documents.values());
+}
+
+async function reserveStudentKeys(usn, email) {
+  const reservationId = crypto.randomUUID();
+  const usnRef = db.collection('uniqueUSNs').doc(usn);
+  const emailRef = db.collection('uniqueEmails').doc(email);
+  const result = await db.runTransaction(async transaction => {
+    const [usnSnap, emailSnap] = await transaction.getAll(usnRef, emailRef);
+    if (usnSnap.exists) return { reserved: false, reason: `Student with USN ${usn} already exists` };
+    if (emailSnap.exists) return { reserved: false, reason: `Account with email ${email} already exists` };
+    transaction.create(usnRef, {
+      usn,
+      role: 'student',
+      reservationId,
+      status: 'reserving',
+      createdAt: FieldValue.serverTimestamp()
+    });
+    transaction.create(emailRef, {
+      email,
+      role: 'student',
+      reservationId,
+      status: 'reserving',
+      createdAt: FieldValue.serverTimestamp()
+    });
+    return { reserved: true, reservationId, usnRef, emailRef };
+  });
+  return result;
+}
+
+async function releaseStudentKeyReservation(reservation) {
+  if (!reservation?.reserved) return;
+  await db.runTransaction(async transaction => {
+    const [usnSnap, emailSnap] = await transaction.getAll(reservation.usnRef, reservation.emailRef);
+    if (usnSnap.exists && usnSnap.data().reservationId === reservation.reservationId) {
+      transaction.delete(reservation.usnRef);
+    }
+    if (emailSnap.exists && emailSnap.data().reservationId === reservation.reservationId) {
+      transaction.delete(reservation.emailRef);
+    }
+  });
 }
 
 async function commitOperations(operations) {
@@ -62,12 +114,60 @@ function removeFacultyFields() {
   };
 }
 
-async function deleteStudent(uid) {
-  const profileRef = db.collection('students').doc(uid);
-  const profile = await profileRef.get();
-  if (!profile.exists) return deleteAuthOnly(uid, 'student');
+async function resolveStudentDeletionTarget(identifier, suppliedUid = '') {
+  const identifierValue = asString(identifier);
+  const suppliedUidValue = asString(suppliedUid);
+  if (!identifierValue && !suppliedUidValue) {
+    throw new HttpsError('invalid-argument', 'A student record and Authentication UID are required.');
+  }
 
-  const student = profile.data();
+  const candidateUid = suppliedUidValue || identifierValue;
+  const candidateRef = db.collection('students').doc(identifierValue || candidateUid);
+  const candidateSnap = await candidateRef.get();
+  if (candidateSnap.exists) {
+    const data = candidateSnap.data();
+    const profileUid = asString(data.uid) || candidateUid;
+    return { uid: profileUid, profileRef: candidateRef, profile: data };
+  }
+
+  if (suppliedUidValue && suppliedUidValue !== identifierValue) {
+    const uidRef = db.collection('students').doc(suppliedUidValue);
+    const uidSnap = await uidRef.get();
+    if (uidSnap.exists) {
+      return { uid: suppliedUidValue, profileRef: uidRef, profile: uidSnap.data() };
+    }
+  }
+
+  return { uid: candidateUid, profileRef: candidateRef, profile: null };
+}
+
+async function deleteStudent(identifier, suppliedUid = '') {
+  const target = await resolveStudentDeletionTarget(identifier, suppliedUid);
+  const { uid, profileRef, profile } = target;
+  let authDeleted = false;
+
+  try {
+    await auth.getUser(uid);
+    await auth.deleteUser(uid);
+    authDeleted = true;
+  } catch (error) {
+    if (error.code === 'auth/user-not-found') {
+      // Idempotent retry: Auth is already gone, so finish any remaining cleanup.
+      authDeleted = true;
+    } else {
+      console.error('[Functions] Student Auth deletion preflight failed:', {
+        code: error.code || 'unknown',
+        operation: 'deleteStudent'
+      });
+      throw new HttpsError('failed-precondition', 'The Firebase Authentication account could not be deleted. No Firestore data was changed.');
+    }
+  }
+
+  if (!profile) {
+    return { deletedType: 'student', deletedId: identifier || uid, authDeleted };
+  }
+
+  const student = profile;
   const operations = [{ type: 'delete', ref: profileRef }];
   const [subjects, attendance, corrections, requests, emails] = await Promise.all([
     queryByFields('subjects', [{ field: 'studentIds', operator: 'array-contains', value: uid }]),
@@ -117,16 +217,16 @@ async function deleteStudent(uid) {
   });
   if (student.usn) operations.push({ type: 'delete', ref: db.collection('uniqueUSNs').doc(student.usn) });
 
-  await commitOperations(operations);
   try {
-    await admin.auth().deleteUser(uid);
+    await commitOperations(operations);
   } catch (error) {
-    throw new HttpsError('failed-precondition', 'Firestore data was deleted, but the Firebase Authentication account could not be deleted.', {
-      uid,
-      authError: error.code || 'unknown'
+    console.error('[Functions] Student Firestore cleanup failed after Auth deletion:', {
+      code: error.code || 'unknown',
+      operation: 'deleteStudent'
     });
+    throw new HttpsError('failed-precondition', 'Authentication was deleted, but some Firestore cleanup could not be completed. Retry the same deletion.');
   }
-  return { deletedType: 'student', deletedId: uid, authDeleted: true };
+  return { deletedType: 'student', deletedId: identifier || uid, authDeleted };
 }
 
 async function deleteFaculty(uid) {
@@ -184,21 +284,33 @@ async function deleteFaculty(uid) {
     if (data.uid === uid || data.approvedAccountId === uid) operations.push({ type: 'delete', ref: doc.ref });
   });
 
-  await commitOperations(operations);
   try {
-    await admin.auth().deleteUser(uid);
+    await auth.getUser(uid);
+    await auth.deleteUser(uid);
   } catch (error) {
-    throw new HttpsError('failed-precondition', 'Firestore data was deleted, but the Firebase Authentication account could not be deleted.', {
-      uid,
-      authError: error.code || 'unknown'
+    if (error.code !== 'auth/user-not-found') {
+      console.error('[Functions] Faculty Auth deletion failed before Firestore cleanup:', {
+        code: error.code || 'unknown',
+        operation: 'deleteFaculty'
+      });
+      throw new HttpsError('failed-precondition', 'The Firebase Authentication account could not be deleted. No Firestore data was changed.');
+    }
+  }
+  try {
+    await commitOperations(operations);
+  } catch (error) {
+    console.error('[Functions] Faculty Firestore cleanup failed after Auth deletion:', {
+      code: error.code || 'unknown',
+      operation: 'deleteFaculty'
     });
+    throw new HttpsError('failed-precondition', 'Authentication was deleted, but some Firestore cleanup could not be completed. Retry the same deletion.');
   }
   return { deletedType: 'faculty', deletedId: uid, authDeleted: true };
 }
 
 async function deleteAuthOnly(uid, type) {
   try {
-    await admin.auth().deleteUser(uid);
+    await auth.deleteUser(uid);
   } catch (error) {
     if (error.code === 'auth/user-not-found') {
       return { deletedType: type, deletedId: uid, authDeleted: true };
@@ -253,9 +365,9 @@ async function deleteDepartment(departmentId) {
   return { deletedType: 'department', deletedId: departmentId, authDeleted: false };
 }
 
-async function deleteEntity(type, id) {
+async function deleteEntity(type, id, authUid = '') {
   if (!asString(id)) throw new HttpsError('invalid-argument', 'A target document ID is required.');
-  if (type === 'student') return deleteStudent(id);
+  if (type === 'student') return deleteStudent(id, authUid);
   if (type === 'faculty') return deleteFaculty(id);
   if (type === 'subject') return deleteSubject(id);
   if (type === 'department') return deleteDepartment(id);
@@ -275,7 +387,8 @@ exports.deleteAdminEntity = onCall(async request => {
   }
   const type = asString(request.data?.type);
   const id = asString(request.data?.id);
-  return deleteEntity(type, id);
+  const authUid = asString(request.data?.authUid);
+  return deleteEntity(type, id, authUid);
 });
 
 const WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY;
@@ -372,28 +485,21 @@ async function importSingleStudent(student, departmentsMap, cachedSubjects = nul
   const deptId = matchedDept.id;
   const deptName = matchedDept.name;
 
-  // 2. Duplicate checks (Firestore indexes & Auth)
+  // 2. Duplicate checks and atomic uniqueness reservation
+  let keyReservation = null;
   try {
-    const usnDoc = await db.collection('uniqueUSNs').doc(usn).get();
-    if (usnDoc.exists) {
-      return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Student with USN ${usn} already exists` };
-    }
     const usnSnap = await db.collection('students').where('usn', '==', usn).limit(1).get();
     if (!usnSnap.empty) {
       return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Student with USN ${usn} already exists` };
     }
 
-    const emailDoc = await db.collection('uniqueEmails').doc(email).get();
-    if (emailDoc.exists) {
-      return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Account with email ${email} already exists` };
-    }
     const emailSnap = await db.collection('students').where('email', '==', email).limit(1).get();
     if (!emailSnap.empty) {
       return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Student with email ${email} already exists` };
     }
 
     try {
-      const existingUser = await admin.auth().getUserByEmail(email);
+      const existingUser = await auth.getUserByEmail(email);
       if (existingUser) {
         return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Firebase Authentication account already exists for ${email}` };
       }
@@ -402,6 +508,10 @@ async function importSingleStudent(student, departmentsMap, cachedSubjects = nul
         throw authLookupErr;
       }
     }
+    keyReservation = await reserveStudentKeys(usn, email);
+    if (!keyReservation.reserved) {
+      return { name, usn, email, status: 'skipped', result: 'Already exists', reason: keyReservation.reason };
+    }
   } catch (checkErr) {
     return { name, usn, email, status: 'failed', result: 'Validation error', reason: checkErr.message || 'Error checking existing records' };
   }
@@ -409,14 +519,16 @@ async function importSingleStudent(student, departmentsMap, cachedSubjects = nul
   // 3. Create Firebase Authentication Account
   let authUser = null;
   try {
-    authUser = await admin.auth().createUser({
+    authUser = await auth.createUser({
       email: email,
       displayName: name
     });
   } catch (authCreateErr) {
     if (authCreateErr.code === 'auth/email-already-in-use') {
+      await releaseStudentKeyReservation(keyReservation);
       return { name, usn, email, status: 'skipped', result: 'Already exists', reason: 'Firebase Authentication account already exists' };
     }
+    await releaseStudentKeyReservation(keyReservation);
     return { name, usn, email, status: 'failed', result: 'Authentication account creation failed', reason: authCreateErr.message };
   }
 
@@ -452,27 +564,28 @@ async function importSingleStudent(student, departmentsMap, cachedSubjects = nul
 
   try {
     const batch = db.batch();
-    batch.set(db.collection('uniqueEmails').doc(email), {
+    batch.update(keyReservation.emailRef, {
       email: email,
       uid: uid,
       role: 'student',
-      createdAt: FieldValue.serverTimestamp()
+      status: 'active'
     });
-    batch.set(db.collection('uniqueUSNs').doc(usn), {
+    batch.update(keyReservation.usnRef, {
       usn: usn,
       uid: uid,
       role: 'student',
-      createdAt: FieldValue.serverTimestamp()
+      status: 'active'
     });
     batch.set(db.collection('students').doc(uid), studentDoc);
     await batch.commit();
   } catch (firestoreErr) {
     try {
-      await admin.auth().deleteUser(uid);
+      await auth.deleteUser(uid);
       console.warn(`[Rollback] Deleted orphaned Auth user ${uid} after Firestore commit failure.`);
     } catch (rollbackErr) {
       console.error(`[Rollback Error] Failed to delete Auth user ${uid}:`, rollbackErr);
     }
+    await releaseStudentKeyReservation(keyReservation);
     return { name, usn, email, status: 'failed', result: 'Student profile creation failed', reason: firestoreErr.message };
   }
 
@@ -615,18 +728,20 @@ exports.submitAttendance = onCall(async request => {
   if (!sessionId || !subjectId) {
     throw new HttpsError('invalid-argument', 'sessionId and subjectId are required.');
   }
+  const studentUid = request.auth.uid;
 
-  const [sessionSnap, subjectSnap] = await Promise.all([
+  const [sessionSnap, subjectSnap, studentSnap] = await Promise.all([
     db.collection('attendanceSessions').doc(sessionId).get(),
-    db.collection('subjects').doc(subjectId).get()
+    db.collection('subjects').doc(subjectId).get(),
+    db.collection('students').doc(studentUid).get()
   ]);
-  if (!sessionSnap.exists || !subjectSnap.exists) {
+  if (!sessionSnap.exists || !subjectSnap.exists || !studentSnap.exists) {
     throw new HttpsError('failed-precondition', 'The attendance session or subject no longer exists.');
   }
 
   const session = sessionSnap.data();
   const subject = subjectSnap.data();
-  const studentUid = request.auth.uid;
+  const student = studentSnap.data();
   const enrolled = Array.isArray(subject.studentIds) && subject.studentIds.includes(studentUid);
   if (session.active !== true || session.subjectId !== subjectId || !enrolled) {
     throw new HttpsError('permission-denied', 'You are not allowed to mark attendance for this session.');
@@ -641,15 +756,32 @@ exports.submitAttendance = onCall(async request => {
     throw new HttpsError('already-exists', 'Attendance has already been marked for this session.');
   }
 
+  const latitude = data.latitude;
+  const longitude = data.longitude;
+  const hasStudentLocation = typeof latitude === 'number' && Number.isFinite(latitude)
+    && typeof longitude === 'number' && Number.isFinite(longitude)
+    && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+  const hasSessionLocation = typeof session.latitude === 'number' && Number.isFinite(session.latitude)
+    && typeof session.longitude === 'number' && Number.isFinite(session.longitude)
+    && session.latitude >= -90 && session.latitude <= 90 && session.longitude >= -180 && session.longitude <= 180;
+  if (!hasStudentLocation || !hasSessionLocation) {
+    throw new HttpsError('failed-precondition', 'A verified student and session location are required.');
+  }
+  const measuredDistance = distanceMeters(latitude, longitude, session.latitude, session.longitude);
+  const geofenceRadius = Number.isFinite(session.geofenceRadius) ? session.geofenceRadius : 50;
+  if (measuredDistance > geofenceRadius) {
+    throw new HttpsError('permission-denied', 'You are outside the attendance geofence.');
+  }
+
   await attendanceRef.create({
     studentId: studentUid,
     studentUid,
-    studentName: asString(data.studentName) || 'Student',
-    studentUsn: asString(data.studentUsn).toUpperCase(),
-    usn: asString(data.studentUsn).toUpperCase(),
-    studentDept: asString(data.studentDept),
-    studentSemester: Number.isInteger(data.studentSemester) ? data.studentSemester : 1,
-    studentSection: asString(data.studentSection) || 'A',
+    studentName: asString(student.name) || 'Student',
+    studentUsn: asString(student.usn).toUpperCase(),
+    usn: asString(student.usn).toUpperCase(),
+    studentDept: asString(student.dept || student.department),
+    studentSemester: Number.isInteger(student.semester) ? student.semester : 1,
+    studentSection: asString(student.section) || 'A',
     subjectId,
     subjectName: asString(session.subjectName) || asString(subject.subjectName) || 'Subject',
     subjectCode: asString(session.subjectCode) || asString(subject.subjectCode),
@@ -660,12 +792,12 @@ exports.submitAttendance = onCall(async request => {
     facultyName: asString(session.facultyName) || 'Faculty',
     date: asString(session.date),
     time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-    latitude: typeof data.latitude === 'number' ? data.latitude : null,
-    longitude: typeof data.longitude === 'number' ? data.longitude : null,
-    distance: typeof data.distance === 'number' ? data.distance : null,
+    latitude,
+    longitude,
+    distance: measuredDistance,
     status: 'present',
     attendanceMethod: 'biometric_gps',
-    timestamp: admin.firestore.FieldValue.serverTimestamp()
+    timestamp: FieldValue.serverTimestamp()
   });
 
   return { success: true, attendanceId: attendanceRef.id };

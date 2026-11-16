@@ -3,7 +3,10 @@ const https = require('https');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const admin = require('./functions/node_modules/firebase-admin');
+const crypto = require('crypto');
+const { getApps, initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore, FieldValue: AdminFieldValue } = require('firebase-admin/firestore');
 const { Firestore } = require('@google-cloud/firestore');
 const { OAuth2Client } = require('google-auth-library');
 
@@ -36,6 +39,8 @@ const WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || '';
 // 1. Initialize Firebase Admin SDK
 let db = null;
 let FieldValue = null;
+let adminAuth = null;
+let firebaseApp = null;
 const FIREBASE_CLI_CLIENT_ID = process.env.FIREBASE_CLI_CLIENT_ID || '';
 const FIREBASE_CLI_CLIENT_SECRET = process.env.FIREBASE_CLI_CLIENT_SECRET || '';
 
@@ -55,8 +60,8 @@ try {
         authClient.setCredentials({ access_token: token });
       }
 
-      if (!admin.apps?.length) {
-        admin.initializeApp({
+      if (!getApps().length) {
+        firebaseApp = initializeApp({
           projectId: PROJECT_ID,
           credential: {
             getAccessToken: async () => {
@@ -65,6 +70,8 @@ try {
             }
           }
         });
+      } else {
+        firebaseApp = getApps()[0];
       }
       db = new Firestore({
         projectId: PROJECT_ID,
@@ -78,16 +85,20 @@ try {
   console.warn('[Backend] CLI token init failed, attempting standard initializeApp:', initErr.message);
 }
 
-const existingApps = typeof admin.getApps === 'function' ? admin.getApps() : (admin.apps || []);
+const existingApps = getApps();
 if (!existingApps.length) {
-  admin.initializeApp({ projectId: PROJECT_ID });
-  db = admin.firestore();
-  FieldValue = db.constructor.FieldValue || admin.firestore.FieldValue;
+  firebaseApp = initializeApp({ projectId: PROJECT_ID });
+  db = getFirestore(firebaseApp);
+  FieldValue = AdminFieldValue;
   console.log('[Backend] Initialized standard Firebase Admin');
+} else if (!firebaseApp) {
+  firebaseApp = existingApps[0];
 }
 
+adminAuth = getAuth(firebaseApp);
+
 if (!FieldValue && db) {
-  FieldValue = (db.constructor && db.constructor.FieldValue) || (admin.firestore ? admin.firestore.FieldValue : require('@google-cloud/firestore').FieldValue);
+  FieldValue = (db.constructor && db.constructor.FieldValue) || AdminFieldValue;
 }
 
 async function isAdminAuth(decodedToken) {
@@ -171,6 +182,30 @@ async function loadDepartmentsMap() {
     map.set(name.toLowerCase(), item);
   });
   return map;
+}
+
+async function reserveStudentKeys(usn, email) {
+  const reservationId = crypto.randomUUID();
+  const usnRef = db.collection('uniqueUSNs').doc(usn);
+  const emailRef = db.collection('uniqueEmails').doc(email);
+  const result = await db.runTransaction(async transaction => {
+    const [usnSnap, emailSnap] = await transaction.getAll(usnRef, emailRef);
+    if (usnSnap.exists) return { reserved: false, reason: `Student with USN ${usn} already exists` };
+    if (emailSnap.exists) return { reserved: false, reason: `Account with email ${email} already exists` };
+    transaction.create(usnRef, { usn, role: 'student', reservationId, status: 'reserving', createdAt: FieldValue.serverTimestamp() });
+    transaction.create(emailRef, { email, role: 'student', reservationId, status: 'reserving', createdAt: FieldValue.serverTimestamp() });
+    return { reserved: true, reservationId, usnRef, emailRef };
+  });
+  return result;
+}
+
+async function releaseStudentKeyReservation(reservation) {
+  if (!reservation?.reserved) return;
+  await db.runTransaction(async transaction => {
+    const [usnSnap, emailSnap] = await transaction.getAll(reservation.usnRef, reservation.emailRef);
+    if (usnSnap.exists && usnSnap.data().reservationId === reservation.reservationId) transaction.delete(reservation.usnRef);
+    if (emailSnap.exists && emailSnap.data().reservationId === reservation.reservationId) transaction.delete(reservation.emailRef);
+  });
 }
 
 // =========================================================================
@@ -698,23 +733,14 @@ async function importSingleStudent(student, departmentsMap, cachedSubjects = nul
   const deptId = matchedDept.id;
   const deptName = matchedDept.name;
 
-  // 2. Duplicate Checks
+  // 2. Duplicate checks and atomic uniqueness reservation
+  let keyReservation = null;
   try {
-    // USN duplicate check
-    const usnDoc = await db.collection('uniqueUSNs').doc(usn).get();
-    if (usnDoc.exists) {
-      return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Student with USN ${usn} already exists` };
-    }
     const usnSnap = await db.collection('students').where('usn', '==', usn).limit(1).get();
     if (!usnSnap.empty) {
       return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Student with USN ${usn} already exists` };
     }
 
-    // Email duplicate check
-    const emailDoc = await db.collection('uniqueEmails').doc(email).get();
-    if (emailDoc.exists) {
-      return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Account with email ${email} already exists` };
-    }
     const emailSnap = await db.collection('students').where('email', '==', email).limit(1).get();
     if (!emailSnap.empty) {
       return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Student with email ${email} already exists` };
@@ -722,7 +748,7 @@ async function importSingleStudent(student, departmentsMap, cachedSubjects = nul
 
     // Auth user check
     try {
-      const existingUser = await admin.auth().getUserByEmail(email);
+      const existingUser = await adminAuth.getUserByEmail(email);
       if (existingUser) {
         return { name, usn, email, status: 'skipped', result: 'Already exists', reason: `Firebase Authentication account already exists for ${email}` };
       }
@@ -731,6 +757,10 @@ async function importSingleStudent(student, departmentsMap, cachedSubjects = nul
         throw authLookupErr;
       }
     }
+    keyReservation = await reserveStudentKeys(usn, email);
+    if (!keyReservation.reserved) {
+      return { name, usn, email, status: 'skipped', result: 'Already exists', reason: keyReservation.reason };
+    }
   } catch (checkErr) {
     return { name, usn, email, status: 'failed', result: 'Validation error', reason: checkErr.message || 'Error checking existing records' };
   }
@@ -738,14 +768,16 @@ async function importSingleStudent(student, departmentsMap, cachedSubjects = nul
   // 3. Create Firebase Authentication Account
   let authUser = null;
   try {
-    authUser = await admin.auth().createUser({
+    authUser = await adminAuth.createUser({
       email: email,
       displayName: name
     });
   } catch (authCreateErr) {
     if (authCreateErr.code === 'auth/email-already-in-use') {
+      await releaseStudentKeyReservation(keyReservation);
       return { name, usn, email, status: 'skipped', result: 'Already exists', reason: 'Firebase Authentication account already exists' };
     }
+    await releaseStudentKeyReservation(keyReservation);
     return { name, usn, email, status: 'failed', result: 'Authentication account creation failed', reason: authCreateErr.message };
   }
 
@@ -778,28 +810,29 @@ async function importSingleStudent(student, departmentsMap, cachedSubjects = nul
 
   try {
     const batch = db.batch();
-    batch.set(db.collection('uniqueEmails').doc(email), {
+    batch.update(keyReservation.emailRef, {
       email: email,
       uid: uid,
       role: 'student',
-      createdAt: FieldValue.serverTimestamp()
+      status: 'active'
     });
-    batch.set(db.collection('uniqueUSNs').doc(usn), {
+    batch.update(keyReservation.usnRef, {
       usn: usn,
       uid: uid,
       role: 'student',
-      createdAt: FieldValue.serverTimestamp()
+      status: 'active'
     });
     batch.set(db.collection('students').doc(uid), studentDoc);
     await batch.commit();
   } catch (firestoreErr) {
     // Rollback created Firebase Auth account
     try {
-      await admin.auth().deleteUser(uid);
+      await adminAuth.deleteUser(uid);
       console.warn(`[Rollback] Deleted orphaned Auth user ${uid} after Firestore commit failure.`);
     } catch (rollbackErr) {
       console.error(`[Rollback Error] Failed to delete Auth user ${uid}:`, rollbackErr);
     }
+    await releaseStudentKeyReservation(keyReservation);
     return { name, usn, email, status: 'failed', result: 'Student profile creation failed', reason: firestoreErr.message };
   }
 
@@ -915,7 +948,7 @@ const server = http.createServer(async (req, res) => {
 
       let decodedToken = null;
       try {
-        decodedToken = await admin.auth().verifyIdToken(token);
+        decodedToken = await adminAuth.verifyIdToken(token);
       } catch (tokenErr) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid or expired administrator token: ' + tokenErr.message }));
@@ -1003,7 +1036,7 @@ const server = http.createServer(async (req, res) => {
       }
       let decodedToken;
       try {
-        decodedToken = await admin.auth().verifyIdToken(token);
+        decodedToken = await adminAuth.verifyIdToken(token);
       } catch (tokenErr) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid or expired authorization token.' }));
@@ -1066,7 +1099,7 @@ const server = http.createServer(async (req, res) => {
 
       let decodedToken;
       try {
-        decodedToken = await admin.auth().verifyIdToken(token);
+        decodedToken = await adminAuth.verifyIdToken(token);
       } catch (tokenErr) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid or expired authorization token: ' + tokenErr.message }));

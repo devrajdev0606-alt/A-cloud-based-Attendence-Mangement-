@@ -551,26 +551,27 @@ service cloud.firestore {
     // UNIQUENESS INDEX COLLECTIONS (Global uniqueness & atomic write protection)
     // =========================================================================
     // Stores normalized keys to prevent duplicate USNs, Emails, and Subject Codes.
-    // Read: Allowed for registration/login checks.
+    // Read: Authenticated users only; unauthenticated registration relies on
+    // server-side Auth/approval checks rather than exposing identifier indexes.
     // Write: strictly admin only.
     // =========================================================================
     match /uniqueUSNs/{usn} {
-      allow read: if true;
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
     match /uniqueEmails/{email} {
-      allow read: if true;
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
     match /uniqueSubjectCodes/{code} {
-      allow read: if true;
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
     match /uniqueOfferings/{offeringKey} {
-      allow read: if true;
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 

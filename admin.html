@@ -1695,7 +1695,11 @@
         if (action.confirmToken !== document.getElementById('adminDeleteConfirmInput').value) {
           throw new Error('Confirmation text does not match. Nothing was deleted.');
         }
-        const result = await functions.httpsCallable('deleteAdminEntity')({ type: action.type, id: action.id });
+        const result = await functions.httpsCallable('deleteAdminEntity')({
+          type: action.type,
+          id: action.id,
+          authUid: action.type === 'student' ? String(action.data?.uid || action.data?.authUid || action.id) : ''
+        });
         if (!result.data || result.data.deletedId !== action.id || (action.type === 'student' || action.type === 'faculty') && result.data.authDeleted !== true) {
           throw new Error('The server did not confirm complete permanent deletion.');
         }
