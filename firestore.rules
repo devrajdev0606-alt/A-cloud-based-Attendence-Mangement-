@@ -222,6 +222,8 @@ service cloud.firestore {
           && 'active' in request.resource.data
           && request.resource.data.active == true
           && exists(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId))
+          && 'studentIds' in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data
+          && get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds.size() > 0
           && (
             get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.facultyId == request.auth.uid ||
             ('facultyUid' in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data && get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.facultyUid == request.auth.uid) ||
@@ -268,43 +270,6 @@ service cloud.firestore {
     // Update / Delete: Strictly admin only.
     // =========================================================================
     match /attendance/{recordId} {
-      function isValidAttendanceSubmission() {
-        return isSignedIn()
-          && 'studentUid' in request.resource.data
-          && request.resource.data.studentUid == request.auth.uid
-          && 'sessionId' in request.resource.data
-          && request.resource.data.sessionId is string
-          && request.resource.data.sessionId != ''
-          && 'subjectId' in request.resource.data
-          && request.resource.data.subjectId is string
-          && request.resource.data.subjectId != ''
-          && 'date' in request.resource.data
-          && request.resource.data.date is string
-          && recordId == request.resource.data.sessionId + '_' + request.auth.uid
-          && exists(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId))
-          && exists(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId))
-          && get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.active == true
-          && get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.subjectId == request.resource.data.subjectId
-          && 'studentIds' in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data
-          && (
-            get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds.hasAny([request.auth.uid]) ||
-            (
-              'studentId' in request.resource.data &&
-              get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.studentIds.hasAny([request.resource.data.studentId]) &&
-              (
-                (
-                  request.resource.data.studentId is string &&
-                  request.resource.data.studentId != '' &&
-                  exists(/databases/$(database)/documents/students/$(request.resource.data.studentId)) &&
-                  'email' in get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data &&
-                  get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.email == request.auth.token.email
-                ) ||
-                request.resource.data.studentId == request.auth.uid
-              )
-            )
-          );
-      }
-
       function isValidFacultyCorrectionAttendance() {
         return isSignedIn()
           && 'sessionId' in request.resource.data
@@ -351,7 +316,10 @@ service cloud.firestore {
           );
       }
 
-      allow create: if isAdmin() || (isSignedIn() && (isValidAttendanceSubmission() || isValidFacultyCorrectionAttendance()));
+      // Student attendance is written by the trusted submitAttendance callable.
+      // Direct client writes are denied so client-controlled verification fields
+      // cannot bypass the callable's session and enrollment checks.
+      allow create: if isAdmin() || isValidFacultyCorrectionAttendance();
       allow read: if isAdmin() || (
         isSignedIn() && (
           recordId.matches('^.*_' + request.auth.uid + '$') ||

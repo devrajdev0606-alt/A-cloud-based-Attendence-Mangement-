@@ -529,11 +529,13 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js"></script>
   <script>
     const db = firebase.firestore();
     const auth = firebase.auth();
+    const functions = firebase.functions();
 
     let studentId = null;
     let studentUid = null;
@@ -4775,8 +4777,34 @@
           return;
         }
 
-        const getPosition = () => new Promise((resolvePos, rejectPos) => {
-          navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 });
+        const getBestPosition = () => new Promise((resolvePos, rejectPos) => {
+          let bestPosition = null;
+          let settled = false;
+          let watchId = null;
+          const finish = (callback, value) => {
+            if (settled) return;
+            settled = true;
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+            clearTimeout(timeoutId);
+            callback(value);
+          };
+          const timeoutId = setTimeout(() => {
+            if (bestPosition) finish(resolvePos, bestPosition);
+            else finish(rejectPos, { code: 3, message: 'Location acquisition timed out.' });
+          }, 30000);
+          watchId = navigator.geolocation.watchPosition(position => {
+            const accuracy = position.coords.accuracy;
+            if (!bestPosition || (Number.isFinite(accuracy) && accuracy < bestPosition.coords.accuracy)) {
+              bestPosition = position;
+            }
+            if (Number.isFinite(accuracy) && accuracy <= sessionAccuracyThreshold) {
+              finish(resolvePos, position);
+            }
+          }, error => finish(rejectPos, error), {
+            enableHighAccuracy: true,
+            timeout: 30000,
+            maximumAge: 0
+          });
         });
 
         (async () => {
@@ -4786,7 +4814,7 @@
             if (gpsText) gpsText.textContent = `GPS: Pinpointing (${attempt}/${maxAttempts})...`;
 
             try {
-              const pos = await getPosition();
+              const pos = await getBestPosition();
               if (attemptToken !== gpsAttemptToken) {
                 resolve();
                 return;
@@ -4995,8 +5023,7 @@
         attendanceDebug.ruleConditions.deterministicIdMatches = attendanceDocId === `${sessionId}_${auth.currentUser?.uid}`;
         attendanceDebug.ruleConditions.studentEnrolledInSubject = attendanceDebug.enrollment.studentIdsContainsStudentUid;
 
-        const attDocRef = db.collection('attendance').doc(attendanceDocId);
-        const existingDoc = await attDocRef.get();
+        const existingDoc = await db.collection('attendance').doc(attendanceDocId).get();
         attendanceDebug.existingAttendance.exists = existingDoc.exists;
         if (existingDoc.exists) {
           setAttendanceState(sessionId, 'ALREADY_MARKED');
@@ -5006,32 +5033,18 @@
         }
 
         const attendancePayload = {
-          studentId: currentAuthUid,
-          studentUid: currentAuthUid,
           studentName: studentName || 'Student',
           studentUsn: (studentUsn || '').toUpperCase(),
-          usn: (studentUsn || '').toUpperCase(),
           studentDept: studentDept || '',
           studentSemester: parseInt(studentSemester, 10) || 1,
           studentSection: studentSection || 'A',
           subjectId,
-          subjectName: subName,
-          subjectCode: subCode,
           sessionId,
-          classNumber: currentSession.classNumber || 1,
-          facultyId: currentSession.facultyId || '',
-          facultyUid: currentSession.facultyUid || '',
-          facultyName: currentSession.facultyName || subjectObj?.facultyName || 'Faculty',
-          date: dateStr,
-          time: timeStr,
           latitude: lat,
           longitude: lng,
-          distance: distance,
-          status: 'present',
-          attendanceMethod: 'biometric_gps',
-          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+          distance
         };
-        await attDocRef.set(attendancePayload);
+        await functions.httpsCallable('submitAttendance')(attendancePayload);
         setAttendanceState(sessionId, 'MARKED');
         lockAttendanceControls('MARKED', 'Attendance Marked. You have already marked attendance for this class.');
         showMsg('attMsg', 'success', '🎉 Attendance Marked Successfully! Verified with Face Biometrics, Active Liveness & GPS proximity.');

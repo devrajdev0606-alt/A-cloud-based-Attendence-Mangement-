@@ -604,6 +604,73 @@ exports.importStudents = onCall(async request => {
   };
 });
 
+exports.submitAttendance = onCall(async request => {
+  if (!request.auth?.uid) {
+    throw new HttpsError('unauthenticated', 'You must be signed in to mark attendance.');
+  }
+
+  const data = request.data || {};
+  const sessionId = asString(data.sessionId);
+  const subjectId = asString(data.subjectId);
+  if (!sessionId || !subjectId) {
+    throw new HttpsError('invalid-argument', 'sessionId and subjectId are required.');
+  }
+
+  const [sessionSnap, subjectSnap] = await Promise.all([
+    db.collection('attendanceSessions').doc(sessionId).get(),
+    db.collection('subjects').doc(subjectId).get()
+  ]);
+  if (!sessionSnap.exists || !subjectSnap.exists) {
+    throw new HttpsError('failed-precondition', 'The attendance session or subject no longer exists.');
+  }
+
+  const session = sessionSnap.data();
+  const subject = subjectSnap.data();
+  const studentUid = request.auth.uid;
+  const enrolled = Array.isArray(subject.studentIds) && subject.studentIds.includes(studentUid);
+  if (session.active !== true || session.subjectId !== subjectId || !enrolled) {
+    throw new HttpsError('permission-denied', 'You are not allowed to mark attendance for this session.');
+  }
+
+  if (session.expiresAt?.toDate && session.expiresAt.toDate() <= new Date()) {
+    throw new HttpsError('failed-precondition', 'This attendance session has expired.');
+  }
+
+  const attendanceRef = db.collection('attendance').doc(`${sessionId}_${studentUid}`);
+  if ((await attendanceRef.get()).exists) {
+    throw new HttpsError('already-exists', 'Attendance has already been marked for this session.');
+  }
+
+  await attendanceRef.create({
+    studentId: studentUid,
+    studentUid,
+    studentName: asString(data.studentName) || 'Student',
+    studentUsn: asString(data.studentUsn).toUpperCase(),
+    usn: asString(data.studentUsn).toUpperCase(),
+    studentDept: asString(data.studentDept),
+    studentSemester: Number.isInteger(data.studentSemester) ? data.studentSemester : 1,
+    studentSection: asString(data.studentSection) || 'A',
+    subjectId,
+    subjectName: asString(session.subjectName) || asString(subject.subjectName) || 'Subject',
+    subjectCode: asString(session.subjectCode) || asString(subject.subjectCode),
+    sessionId,
+    classNumber: session.classNumber || 1,
+    facultyId: asString(session.facultyId),
+    facultyUid: asString(session.facultyUid),
+    facultyName: asString(session.facultyName) || 'Faculty',
+    date: asString(session.date),
+    time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    latitude: typeof data.latitude === 'number' ? data.latitude : null,
+    longitude: typeof data.longitude === 'number' ? data.longitude : null,
+    distance: typeof data.distance === 'number' ? data.distance : null,
+    status: 'present',
+    attendanceMethod: 'biometric_gps',
+    timestamp: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  return { success: true, attendanceId: attendanceRef.id };
+});
+
 // =========================================================================
 // FACE RE-REGISTRATION REQUEST APPROVAL
 // =========================================================================

@@ -545,6 +545,7 @@
     let selectedFacultyDay = currentDayOfWeek === 'Sunday' ? 'Monday' : currentDayOfWeek;
     let allFacultyTimetable = [];
     let assignedSubjectDocs = [];
+    const expandedSubjectGroupKeys = new Set();
     let liveSessionsMap = {}; // subjectId -> sessionDoc
     let todayConductedSessions = [];
     let sessionAttendanceCounts = {}; // sessionId -> count of present students
@@ -847,11 +848,12 @@
         });
 
         assignedSubjectDocs = Array.from(assignmentMap.values());
+        const assignedSubjectGroups = getAssignedSubjectGroups();
 
         const countBadge = document.getElementById('assignedSubjectsCountBadge');
-        if (countBadge) countBadge.textContent = `${assignedSubjectDocs.length} Course${assignedSubjectDocs.length === 1 ? '' : 's'}`;
+        if (countBadge) countBadge.textContent = `${assignedSubjectGroups.length} Course${assignedSubjectGroups.length === 1 ? '' : 's'}`;
         const heroSubjCount = document.getElementById('facultySubjCountDisplay');
-        if (heroSubjCount) heroSubjCount.textContent = `${assignedSubjectDocs.length} Active Course${assignedSubjectDocs.length === 1 ? '' : 's'}`;
+        if (heroSubjCount) heroSubjCount.textContent = `${assignedSubjectGroups.length} Active Course${assignedSubjectGroups.length === 1 ? '' : 's'}`;
 
         // Populate Analytics Subject Dropdown
         const analyticsSelect = document.getElementById('analyticsSubject');
@@ -883,66 +885,148 @@
       }
     }
 
+    function getSubjectGroupKey(subject) {
+      const data = typeof subject.data === 'function' ? subject.data() : subject;
+      const department = String(data.departmentId || data.department || '').trim().toLowerCase();
+      const code = String(data.subjectCode || data.code || data.normalizedCode || data.subjectName || '').trim().toLowerCase();
+      const semester = String(data.semester ?? 'ALL').trim().toUpperCase();
+      return `${department}__${code}__SEM_${semester}`;
+    }
+
+    function getAssignedSubjectGroups() {
+      const groups = new Map();
+      (assignedSubjectDocs || []).forEach(doc => {
+        const data = doc.data();
+        const key = getSubjectGroupKey(doc);
+        if (!groups.has(key)) {
+          groups.set(key, {
+            key,
+            subjectName: data.subjectName || 'Subject',
+            subjectCode: data.subjectCode || '',
+            semester: data.semester,
+            documents: []
+          });
+        }
+        groups.get(key).documents.push(doc);
+      });
+
+      return Array.from(groups.values()).map(group => {
+        group.documents.sort((a, b) => {
+          const sectionA = String(a.data().section || 'A').toUpperCase();
+          const sectionB = String(b.data().section || 'A').toUpperCase();
+          return sectionA.localeCompare(sectionB);
+        });
+        return group;
+      });
+    }
+
+    function getEnrolledStudentCount(subjectData) {
+      if (Array.isArray(subjectData?.studentIds)) {
+        return subjectData.studentIds.length;
+      }
+      if (Array.isArray(subjectData?.enrolledRoster)) {
+        return subjectData.enrolledRoster.length;
+      }
+      return null;
+    }
+
+    function toggleSubjectGroup(button) {
+      const groupKey = button?.dataset?.groupKey;
+      if (!groupKey) return;
+
+      if (expandedSubjectGroupKeys.has(groupKey)) {
+        expandedSubjectGroupKeys.delete(groupKey);
+      } else {
+        expandedSubjectGroupKeys.add(groupKey);
+      }
+      renderSubjectsTable();
+    }
+
     function renderSubjectsTable() {
       const tbody = document.getElementById('subjectsTable');
       if (!tbody) return;
 
       const currentAuthUid = auth.currentUser ? auth.currentUser.uid : facultyUid;
+      const subjectGroups = getAssignedSubjectGroups();
 
-      if (assignedSubjectDocs.length === 0) {
+      if (subjectGroups.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="empty">No subjects assigned yet. Please contact admin.</td></tr>';
         return;
       }
 
-      tbody.innerHTML = assignedSubjectDocs.map(doc => {
-        const s = doc.data();
-        const activeSession = liveSessionsMap[doc.id] ||
-          (doc._aliasIds ? doc._aliasIds.map(id => liveSessionsMap[id]).find(Boolean) : null);
-        const hasActive = Boolean(activeSession);
-        const semSecBadge = s.semester ? `<span class="badge blue">Sem ${s.semester} • Sec ${s.section || 'A'}</span>` : '<span class="badge">-</span>';
-        const safeName = (s.subjectName || 'Subject').replace(/'/g, "\\'");
-        const isAssignedFaculty = (
-          s.facultyUid === currentAuthUid ||
-          s.facultyId === currentAuthUid ||
-          (allFacultyIds || []).includes(s.facultyId) ||
-          (allFacultyIds || []).includes(s.facultyUid)
-        );
+      tbody.innerHTML = subjectGroups.map(group => {
+        const groupExpanded = expandedSubjectGroupKeys.has(group.key);
+        const safeGroupKey = escapeHtml(group.key);
+        const sectionRows = group.documents.map(doc => {
+          const s = doc.data();
+          const activeSession = liveSessionsMap[doc.id] ||
+            (doc._aliasIds ? doc._aliasIds.map(id => liveSessionsMap[id]).find(Boolean) : null);
+          const hasActive = Boolean(activeSession);
+          const enrolledCount = getEnrolledStudentCount(s);
+          const enrolledCountDisplay = enrolledCount === null ? '—' : enrolledCount;
+          const semSecBadge = s.semester ? `<span class="badge blue">Sem ${escapeHtml(s.semester)} • Sec ${escapeHtml(s.section || 'A')}</span>` : '<span class="badge">-</span>';
+          const safeName = escapeHtml(s.subjectName || 'Subject').replace(/'/g, "\\'");
+          const isAssignedFaculty = (
+            s.facultyUid === currentAuthUid ||
+            s.facultyId === currentAuthUid ||
+            (allFacultyIds || []).includes(s.facultyId) ||
+            (allFacultyIds || []).includes(s.facultyUid)
+          );
 
-        let btn = '';
-        if (hasActive) {
-          btn = `<div style="display:inline-flex; align-items:center; gap:6px;">
-                   <button class="btn view-btn" style="padding:6px 10px; font-size:0.8rem;" onclick="openSessionAttendanceModal('${activeSession.id}', '${doc.id}')">👥 View</button>
-                   ${isAssignedFaculty ? `<button class="btn stop-btn" style="padding:6px 10px; font-size:0.8rem;" onclick="stopAttendance('${doc.id}', this)">⏹ Stop</button>` : ''}
-                 </div>`;
-        } else if (isAssignedFaculty) {
-          btn = `<div style="display:inline-flex; align-items:center; gap:8px;">
-                   <select class="duration-select" id="duration-${doc.id}" style="padding:4px 8px; font-size:0.8rem;">
-                     <option value="1">1 Min</option>
-                     <option value="5">5 Min</option>
-                     <option value="10" selected>10 Min</option>
-                     <option value="15">15 Min</option>
-                   </select>
-                   <button class="btn start-btn" style="padding:6px 12px; font-size:0.8rem;" onclick="startAttendance('${doc.id}', '${safeName}', this)">▶ Start Attendance</button>
-                 </div>`;
-        } else {
-          btn = `<span style="font-size:0.8rem; color:var(--text-muted);">Assigned: ${s.facultyName || 'Other Faculty'}</span>`;
-        }
+          let btn = '';
+          if (hasActive) {
+            btn = `<div style="display:inline-flex; align-items:center; gap:6px;">
+                     <button class="btn view-btn" style="padding:6px 10px; font-size:0.8rem;" onclick="openSessionAttendanceModal('${activeSession.id}', '${doc.id}')">👥 View</button>
+                     ${isAssignedFaculty ? `<button class="btn stop-btn" style="padding:6px 10px; font-size:0.8rem;" onclick="stopAttendance('${doc.id}', this)">⏹ Stop</button>` : ''}
+                   </div>`;
+          } else if (isAssignedFaculty && enrolledCount === 0) {
+            btn = '<button class="btn start-btn" type="button" disabled style="padding:6px 12px; font-size:0.8rem; opacity:0.65; cursor:not-allowed;">Cannot start attendance: No students enrolled.</button>';
+          } else if (isAssignedFaculty && enrolledCount === null) {
+            btn = '<button class="btn start-btn" type="button" disabled style="padding:6px 12px; font-size:0.8rem; opacity:0.65; cursor:not-allowed;">Checking enrolled students...</button>';
+          } else if (isAssignedFaculty) {
+            btn = `<div style="display:inline-flex; align-items:center; gap:8px;">
+                     <select class="duration-select" id="duration-${doc.id}" style="padding:4px 8px; font-size:0.8rem;">
+                       <option value="1">1 Min</option>
+                       <option value="5">5 Min</option>
+                       <option value="10" selected>10 Min</option>
+                       <option value="15">15 Min</option>
+                     </select>
+                     <button class="btn start-btn" style="padding:6px 12px; font-size:0.8rem;" onclick="startAttendance('${doc.id}', '${safeName}', this)">▶ Start Attendance</button>
+                   </div>`;
+          } else {
+            btn = `<span style="font-size:0.8rem; color:var(--text-muted);">Assigned: ${escapeHtml(s.facultyName || 'Other Faculty')}</span>`;
+          }
 
-        const plannedNum = s.plannedClasses || s.totalPlannedClasses || s.totalHours;
-        const minReq = s.minAttendancePercentage || s.attendanceRequiredPercentage || 75;
-        const hoursBadge = plannedNum
-          ? `<span class="badge" style="font-weight:600;">${plannedNum} classes <span style="font-size:10px; color:var(--emerald-dark);">(${minReq}% min)</span></span>`
-          : '<span class="badge" style="opacity:0.6;">Not configured</span>';
-        const enrolledCount = s.enrolledRoster?.length || s.studentIds?.length || 0;
+          const plannedNum = s.plannedClasses || s.totalPlannedClasses || s.totalHours;
+          const minReq = s.minAttendancePercentage || s.attendanceRequiredPercentage || 75;
+          const hoursBadge = plannedNum
+            ? `<span class="badge" style="font-weight:600;">${escapeHtml(plannedNum)} classes <span style="font-size:10px; color:var(--emerald-dark);">(${escapeHtml(minReq)}% min)</span></span>`
+            : '<span class="badge" style="opacity:0.6;">Not configured</span>';
+          return `<tr>
+            <td>
+              <button type="button" class="btn view-btn" style="padding:5px 9px; font-size:0.8rem;" onclick="viewAttendance('${doc.id}')" title="Open section dashboard">
+                Section ${escapeHtml(s.section || 'A')}
+              </button>
+            </td>
+            <td><span class="badge">${escapeHtml(s.subjectCode || '-')}</span></td>
+            <td>${semSecBadge}</td>
+            <td>${hoursBadge}</td>
+            <td><span class="badge green">👥 ${enrolledCountDisplay} students</span></td>
+            <td>${btn}</td>
+          </tr>`;
+        }).join('');
 
-        return `<tr>
-          <td><strong>${s.subjectName || 'Subject'}</strong></td>
-          <td><span class="badge">${s.subjectCode || '-'}</span></td>
-          <td>${semSecBadge}</td>
-          <td>${hoursBadge}</td>
-          <td><span class="badge green">👥 ${enrolledCount} students</span></td>
-          <td>${btn}</td>
-        </tr>`;
+        return `<tr class="subject-group-row">
+          <td colspan="6" style="padding:0;">
+            <button type="button" class="subject-group-toggle" data-group-key="${safeGroupKey}" aria-expanded="${groupExpanded}" onclick="toggleSubjectGroup(this)" style="display:flex; align-items:center; gap:10px; width:100%; padding:13px 14px; border:0; background:transparent; color:inherit; text-align:left; cursor:pointer;">
+              <span aria-hidden="true" style="font-size:1rem; width:16px;">${groupExpanded ? '▾' : '▸'}</span>
+              <strong>${escapeHtml(group.subjectName)}</strong>
+              <span class="badge">${escapeHtml(group.subjectCode || '-')}</span>
+              ${group.semester ? `<span class="badge blue">Sem ${escapeHtml(group.semester)}</span>` : ''}
+              <span class="badge" style="margin-left:auto;">${group.documents.length} section${group.documents.length === 1 ? '' : 's'}</span>
+            </button>
+          </td>
+        </tr>${groupExpanded ? sectionRows : ''}`;
       }).join('');
     }
 
@@ -1259,7 +1343,7 @@
 
         // Find enrolled count from matching subject doc
         const subjectDoc = findAssignedSubject(item.subjectId);
-        const enrolledCount = subjectDoc?.data()?.enrolledRoster?.length || subjectDoc?.data()?.studentIds?.length || 0;
+        const enrolledCount = getEnrolledStudentCount(subjectDoc?.data());
         const subjectAliases = subjectDoc?._aliasIds || [item.subjectId];
 
         // Check for active session right now (including aliases)
@@ -1274,7 +1358,11 @@
             <div style="margin-top:4px; font-size:0.84rem; font-weight:700; color:var(--emerald-dark);">
               👥 ${livePresent} / ${enrolledCount} Present (Live)
             </div>`;
-          if (isAssignedFaculty) {
+          if (isAssignedFaculty && enrolledCount === 0) {
+            actionHtml = '<button class="btn start-btn" type="button" disabled style="padding:6px 12px; font-size:0.8rem; opacity:0.65; cursor:not-allowed;">Cannot start attendance: No students enrolled.</button>';
+          } else if (isAssignedFaculty && enrolledCount === null) {
+            actionHtml = '<button class="btn start-btn" type="button" disabled style="padding:6px 12px; font-size:0.8rem; opacity:0.65; cursor:not-allowed;">Checking enrolled students...</button>';
+          } else if (isAssignedFaculty) {
             actionHtml = `
               <div style="display:inline-flex; align-items:center; gap:6px;">
                 <button class="btn view-btn" style="padding:6px 10px; font-size:0.8rem;" onclick="openSessionAttendanceModal('${activeSession.id}', '${item.subjectId}')">👥 View</button>
@@ -1516,14 +1604,25 @@
         // Pre-flight 2: Calculate class number concurrently
         const classNumPromise = getNextClassNumber(subjectId);
 
-        // Pre-flight 3: Subject metadata lookup concurrently
-        const cachedSub = assignedSubj;
-        const subjectPromise = cachedSub
-          ? Promise.resolve(cachedSub.data())
-          : db.collection('subjects').doc(subjectId).get().then(s => s.exists ? s.data() : null).catch(() => null);
+        // Pre-flight 3: Read the selected section directly from Firestore.
+        // The cached dashboard count is not authoritative for session creation.
+        const subjectPromise = db.collection('subjects').doc(subjectId).get().then(subjectDoc => {
+          if (!subjectDoc.exists) {
+            throw new Error('Cannot start attendance: Subject could not be verified.');
+          }
+          const subjectData = subjectDoc.data();
+          const enrolledCount = getEnrolledStudentCount(subjectData);
+          if (enrolledCount === null) {
+            throw new Error('Cannot start attendance: Enrolled students could not be verified.');
+          }
+          if (enrolledCount === 0) {
+            throw new Error('Cannot start attendance: No students enrolled.');
+          }
+          return subjectData;
+        });
 
         // Pre-flight 4: Geolocation acquisition concurrently
-        const locationPromise = (async () => {
+        const locationPromise = subjectPromise.then(async () => {
           if (hasInstitutionLocation) {
             return {
               selectedPos: { coords: { latitude: attendanceSettings.latitude, longitude: attendanceSettings.longitude, accuracy: null } },
@@ -1537,18 +1636,40 @@
 
           const maxAttempts = 3;
           const retryDelayMs = 1000;
-          const getPosition = () => new Promise((resolvePos, rejectPos) => {
+          const getBestPosition = () => new Promise((resolvePos, rejectPos) => {
             debug.gps.requested = true;
-            navigator.geolocation.getCurrentPosition(resolvePos, rejectPos, {
+            let bestPosition = null;
+            let settled = false;
+            let watchId = null;
+            const finish = (callback, value) => {
+              if (settled) return;
+              settled = true;
+              if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+              clearTimeout(timeoutId);
+              callback(value);
+            };
+            const timeoutId = setTimeout(() => {
+              if (bestPosition) finish(resolvePos, bestPosition);
+              else finish(rejectPos, { code: 3, message: 'Location acquisition timed out.' });
+            }, 20000);
+            watchId = navigator.geolocation.watchPosition(position => {
+              const accuracy = position.coords.accuracy;
+              if (!bestPosition || (Number.isFinite(accuracy) && accuracy < bestPosition.coords.accuracy)) {
+                bestPosition = position;
+              }
+              if (Number.isFinite(accuracy) && accuracy <= gpsAccuracyThreshold) {
+                finish(resolvePos, position);
+              }
+            }, error => finish(rejectPos, error), {
               enableHighAccuracy: true,
-              timeout: 15000,
-              maximumAge: 10000
+              timeout: 20000,
+              maximumAge: 0
             });
           });
 
           for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-              const pos = await getPosition();
+              const pos = await getBestPosition();
               const accuracyMeters = typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null;
               debug.gps.succeeded = true;
               debug.gps.latitude = pos.coords.latitude;
@@ -1580,7 +1701,7 @@
             }
           }
           throw new Error('Unable to capture GPS location.');
-        })();
+        });
 
         // Execute all independent checks concurrently
         const [hasActiveSession, classNumber, subjectData, locResult] = await Promise.all([
