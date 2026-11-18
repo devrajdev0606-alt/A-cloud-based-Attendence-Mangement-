@@ -1956,6 +1956,13 @@
 
     async function getLatestSession(subjectId) {
       try {
+        const liveSession = activeSessions[subjectId];
+        if (liveSession?.id && liveSession.active === true) {
+          if (!liveSession.expiresAt || !liveSession.expiresAt.toDate ||
+              liveSession.expiresAt.toDate() > new Date()) {
+            return liveSession;
+          }
+        }
         const snap = await db.collection('attendanceSessions')
           .where('subjectId', '==', subjectId)
           .where('active', '==', true)
@@ -5590,16 +5597,30 @@
         // 2. Check duplicate pending request in Firestore
         const reqDocId = `${selectedCorrectionSession.id}_${currentAuthUid}`;
         const reqDocRef = db.collection('attendanceCorrectionRequests').doc(reqDocId);
-        const existingReqDoc = await reqDocRef.get();
-        if (existingReqDoc.exists && existingReqDoc.data().status === 'pending') {
-          showCorrectionModalMsg('error', 'Correction request already submitted for this class.');
-          return;
+        let existingReqDoc = null;
+        try {
+          existingReqDoc = await reqDocRef.get();
+        } catch (readErr) {
+          console.warn('Could not check existing correction request:', readErr);
+        }
+        if (existingReqDoc && existingReqDoc.exists) {
+          const existingStatus = existingReqDoc.data()?.status;
+          if (existingStatus === 'pending') {
+            showCorrectionModalMsg('error', 'Correction request already submitted for this class.');
+            return;
+          }
+          if (existingStatus === 'approved') {
+            showCorrectionModalMsg('error', 'Attendance correction has already been approved for this class.');
+            return;
+          }
         }
 
         const subjectObj = studentSubjectDocs.find(s => s.id === selectedCorrectionSession.subjectId);
         const subjectName = subjectObj?.subjectName || selectedCorrectionSession.subjectName || studentSubjectsMap[selectedCorrectionSession.subjectId] || 'Course';
         const subjectCode = subjectObj?.subjectCode || selectedCorrectionSession.subjectCode || '';
         const facultyName = selectedCorrectionSession.facultyName || subjectObj?.facultyName || 'Faculty';
+        const facultyUid = selectedCorrectionSession.facultyUid || selectedCorrectionSession.facultyId || subjectObj?.facultyUid || subjectObj?.facultyId || '';
+        const facultyId = selectedCorrectionSession.facultyId || selectedCorrectionSession.facultyUid || subjectObj?.facultyId || subjectObj?.facultyUid || '';
 
         const newRequest = {
           studentId: currentAuthUid,
@@ -5617,8 +5638,8 @@
           sessionId: selectedCorrectionSession.id,
           classNumber: selectedCorrectionSession.classNumber || 1,
 
-          facultyId: selectedCorrectionSession.facultyId || selectedCorrectionSession.facultyUid || '',
-          facultyUid: selectedCorrectionSession.facultyUid || selectedCorrectionSession.facultyId || '',
+          facultyId,
+          facultyUid,
           facultyName: facultyName,
 
           date: selectedCorrectionSession.date || '',

@@ -45,40 +45,42 @@ const FIREBASE_CLI_CLIENT_ID = process.env.FIREBASE_CLI_CLIENT_ID || '';
 const FIREBASE_CLI_CLIENT_SECRET = process.env.FIREBASE_CLI_CLIENT_SECRET || '';
 
 try {
-  const credPath = path.join(os.homedir(), '.config', 'configstore', 'firebase-tools.json');
-  if (fs.existsSync(credPath)) {
-    const credData = JSON.parse(fs.readFileSync(credPath, 'utf8'));
-    const refreshToken = credData.tokens?.refresh_token;
-    const token = credData.tokens?.access_token;
+  if (!process.env.FIRESTORE_EMULATOR_HOST) {
+    const credPath = path.join(os.homedir(), '.config', 'configstore', 'firebase-tools.json');
+    if (fs.existsSync(credPath)) {
+      const credData = JSON.parse(fs.readFileSync(credPath, 'utf8'));
+      const refreshToken = credData.tokens?.refresh_token;
+      const token = credData.tokens?.access_token;
 
-    const canRefreshCliToken = Boolean(refreshToken && FIREBASE_CLI_CLIENT_ID && FIREBASE_CLI_CLIENT_SECRET);
-    if (token || canRefreshCliToken) {
-      const authClient = new OAuth2Client(FIREBASE_CLI_CLIENT_ID, FIREBASE_CLI_CLIENT_SECRET);
-      if (refreshToken) {
-        authClient.setCredentials({ refresh_token: refreshToken });
-      } else {
-        authClient.setCredentials({ access_token: token });
-      }
+      const canRefreshCliToken = Boolean(refreshToken && FIREBASE_CLI_CLIENT_ID && FIREBASE_CLI_CLIENT_SECRET);
+      if (token || canRefreshCliToken) {
+        const authClient = new OAuth2Client(FIREBASE_CLI_CLIENT_ID, FIREBASE_CLI_CLIENT_SECRET);
+        if (refreshToken) {
+          authClient.setCredentials({ refresh_token: refreshToken });
+        } else {
+          authClient.setCredentials({ access_token: token });
+        }
 
-      if (!getApps().length) {
-        firebaseApp = initializeApp({
-          projectId: PROJECT_ID,
-          credential: {
-            getAccessToken: async () => {
-              const tokenRes = await authClient.getAccessToken();
-              return { access_token: tokenRes.token || token, expires_in: 3600 };
+        if (!getApps().length) {
+          firebaseApp = initializeApp({
+            projectId: PROJECT_ID,
+            credential: {
+              getAccessToken: async () => {
+                const tokenRes = await authClient.getAccessToken();
+                return { access_token: tokenRes.token || token, expires_in: 3600 };
+              }
             }
-          }
+          });
+        } else {
+          firebaseApp = getApps()[0];
+        }
+        db = new Firestore({
+          projectId: PROJECT_ID,
+          authClient: authClient
         });
-      } else {
-        firebaseApp = getApps()[0];
+        FieldValue = db.constructor.FieldValue;
+        console.log('[Backend] Initialized Firebase Admin & Firestore via auto-refreshing CLI token');
       }
-      db = new Firestore({
-        projectId: PROJECT_ID,
-        authClient: authClient
-      });
-      FieldValue = db.constructor.FieldValue;
-      console.log('[Backend] Initialized Firebase Admin & Firestore via auto-refreshing CLI token');
     }
   }
 } catch (initErr) {

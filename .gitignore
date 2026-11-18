@@ -29,5 +29,9 @@ Thumbs.db
 dist/
 build/
 
+# Scanner & Python Cache
+.scannerwork/
+__pycache__/
+
 # Scratch & temporary test scripts
 scratch/

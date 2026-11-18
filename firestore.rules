@@ -350,8 +350,11 @@ service cloud.firestore {
     match /attendanceCorrectionRequests/{requestId} {
       function isValidCorrectionCreate() {
         return isSignedIn()
+          && requestId == request.resource.data.sessionId + '_' + request.auth.uid
           && 'studentUid' in request.resource.data
           && request.resource.data.studentUid == request.auth.uid
+          && 'studentId' in request.resource.data
+          && request.resource.data.studentId == request.auth.uid
           && 'status' in request.resource.data
           && request.resource.data.status == 'pending'
           && 'reason' in request.resource.data
@@ -370,11 +373,23 @@ service cloud.firestore {
           && exists(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId))
           && get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.subjectId == request.resource.data.subjectId
           && (
-            // Session faculty matches submitted faculty
-            ('facultyUid' in get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data && 'facultyUid' in request.resource.data && get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.facultyUid == request.resource.data.facultyUid) ||
-            ('facultyId' in get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data && 'facultyId' in request.resource.data && get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.facultyId == request.resource.data.facultyId) ||
-            ('facultyId' in get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data && 'facultyUid' in request.resource.data && get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.facultyId == request.resource.data.facultyUid) ||
-            ('facultyUid' in get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data && 'facultyId' in request.resource.data && get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.facultyUid == request.resource.data.facultyId)
+            // Accept the authenticated faculty identity from either session or subject
+            ('facultyUid' in get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data && (
+              get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.facultyUid == request.resource.data.facultyUid ||
+              get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.facultyUid == request.resource.data.facultyId
+            )) ||
+            ('facultyId' in get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data && (
+              get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.facultyId == request.resource.data.facultyUid ||
+              get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.facultyId == request.resource.data.facultyId
+            )) ||
+            ('facultyUid' in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data && (
+              get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.facultyUid == request.resource.data.facultyUid ||
+              get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.facultyUid == request.resource.data.facultyId
+            )) ||
+            ('facultyId' in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data && (
+              get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.facultyId == request.resource.data.facultyUid ||
+              get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.facultyId == request.resource.data.facultyId
+            ))
           )
           && 'studentIds' in get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data
           && (
@@ -401,7 +416,7 @@ service cloud.firestore {
       }
 
       function isAssignedFacultyForRequest() {
-        return (
+        return resource != null && (
           ('facultyUid' in resource.data && resource.data.facultyUid == request.auth.uid) ||
           ('facultyId' in resource.data && resource.data.facultyId == request.auth.uid) ||
           (
@@ -437,8 +452,17 @@ service cloud.firestore {
       function isValidStudentResubmission() {
         return isSignedIn()
           && resource.data.studentUid == request.auth.uid
+          && (!('studentId' in resource.data) || resource.data.studentId == request.auth.uid)
           && resource.data.status == 'rejected'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status',
+            'reason',
+            'reviewedAt',
+            'reviewedBy',
+            'reviewReason'
+          ])
           && request.resource.data.studentUid == request.auth.uid
+          && (!('studentId' in request.resource.data) || request.resource.data.studentId == request.auth.uid)
           && request.resource.data.status == 'pending'
           && request.resource.data.sessionId == resource.data.sessionId
           && request.resource.data.subjectId == resource.data.subjectId
@@ -453,9 +477,14 @@ service cloud.firestore {
 
       allow read: if isAdmin() || (
         isSignedIn() && (
-          ('studentUid' in resource.data && resource.data.studentUid == request.auth.uid) ||
-          ('studentId' in resource.data && resource.data.studentId == request.auth.uid) ||
-          isAssignedFacultyForRequest()
+          requestId.matches('^.*_' + request.auth.uid + '$') ||
+          (
+            resource != null && (
+              ('studentUid' in resource.data && resource.data.studentUid == request.auth.uid) ||
+              ('studentId' in resource.data && resource.data.studentId == request.auth.uid) ||
+              isAssignedFacultyForRequest()
+            )
+          )
         )
       );
       allow create: if isAdmin() || isValidCorrectionCreate();

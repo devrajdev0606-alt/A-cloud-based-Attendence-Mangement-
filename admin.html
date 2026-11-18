@@ -1159,21 +1159,17 @@
         });
 
         accordion.innerHTML = '';
-        if (deptSnap.empty) {
+        if (depts.length === 0) {
           accordion.innerHTML = '<p class="empty">No departments created yet.</p>';
         }
 
-        deptSnap.forEach(doc => {
-          const d = doc.data();
-          const deptId = doc.id;
+        depts.forEach(dept => {
+          const d = { name: dept.name, normalizedName: dept.normalizedName };
+          const deptId = dept.id;
           const students = deptDataCache.studentsByDept[deptId] || [];
           const faculty = deptDataCache.facultyByDept[deptId] || [];
           const subjects = deptDataCache.subjectsByDept[deptId] || [];
           const subCount = subjects.length;
-
-          studentDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
-          facultyDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
-          filterDept.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
 
           const escapedName = (d.name || '').replace(/'/g, "\\'");
           const item = document.createElement('div');
@@ -1191,10 +1187,10 @@
               </div>
             </div>
             <div class="dept-action-buttons">
-              <button type="button" class="btn-dept-action" onclick="openDeptDetail('${doc.id}', '${escapedName}', 'students')">👥 View Students</button>
-              <button type="button" class="btn-dept-action" onclick="openDeptDetail('${doc.id}', '${escapedName}', 'faculty')">👩‍🏫 View Faculty</button>
-              <button type="button" class="btn-dept-action" onclick="openDeptDetail('${doc.id}', '${escapedName}', 'subjects')">📚 View Subjects</button>
-              <button type="button" class="btn-dept-action" style="color:var(--crimson-dark);" onclick="promptAdminDelete('department', '${doc.id}', '${encodeURIComponent(JSON.stringify(d))}')">🗑️ Delete Department</button>
+              <button type="button" class="btn-dept-action" onclick="openDeptDetail('${deptId}', '${escapedName}', 'students')">👥 View Students</button>
+              <button type="button" class="btn-dept-action" onclick="openDeptDetail('${deptId}', '${escapedName}', 'faculty')">👩‍🏫 View Faculty</button>
+              <button type="button" class="btn-dept-action" onclick="openDeptDetail('${deptId}', '${escapedName}', 'subjects')">📚 View Subjects</button>
+              <button type="button" class="btn-dept-action" style="color:var(--crimson-dark);" onclick="promptAdminDelete('department', '${deptId}', '${encodeURIComponent(JSON.stringify(d))}')">🗑️ Delete Department</button>
             </div>
           `;
           accordion.appendChild(item);
@@ -1695,7 +1691,14 @@
         if (action.confirmToken !== document.getElementById('adminDeleteConfirmInput').value) {
           throw new Error('Confirmation text does not match. Nothing was deleted.');
         }
-        const result = await functions.httpsCallable('deleteAdminEntity')({
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          throw new Error('Your admin session expired. Sign in and try again.');
+        }
+        await currentUser.getIdToken(true);
+
+        const deleteAdminEntity = functions.httpsCallable('deleteAdminEntity');
+        const result = await deleteAdminEntity({
           type: action.type,
           id: action.id,
           authUid: action.type === 'student' ? String(action.data?.uid || action.data?.authUid || action.id) : ''

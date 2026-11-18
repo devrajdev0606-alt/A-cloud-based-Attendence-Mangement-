@@ -381,7 +381,7 @@ async function deleteEntity(type, id, authUid = '') {
   throw new HttpsError('invalid-argument', `Unsupported deletion type: ${type}`);
 }
 
-exports.deleteAdminEntity = onCall(async request => {
+exports.deleteAdminEntity = onCall({ region: 'us-central1' }, async request => {
   if (!request.auth || !(await isAdmin(request.auth))) {
     throw new HttpsError('permission-denied', 'Only an authenticated Admin may permanently delete records.');
   }
@@ -730,11 +730,24 @@ exports.submitAttendance = onCall(async request => {
   }
   const studentUid = request.auth.uid;
 
-  const [sessionSnap, subjectSnap, studentSnap] = await Promise.all([
-    db.collection('attendanceSessions').doc(sessionId).get(),
-    db.collection('subjects').doc(subjectId).get(),
-    db.collection('students').doc(studentUid).get()
-  ]);
+  let sessionSnap;
+  let subjectSnap;
+  let studentSnap;
+  try {
+    [sessionSnap, subjectSnap, studentSnap] = await Promise.all([
+      db.collection('attendanceSessions').doc(sessionId).get(),
+      db.collection('subjects').doc(subjectId).get(),
+      db.collection('students').doc(studentUid).get()
+    ]);
+  } catch (error) {
+    console.error('[submitAttendance] prerequisite-read failed', {
+      operation: 'read_attendance_prerequisites',
+      code: error?.code || error?.name || 'unknown',
+      sessionId,
+      subjectId
+    });
+    throw new HttpsError('unavailable', 'Unable to verify the attendance session. Please try again.');
+  }
   if (!sessionSnap.exists || !subjectSnap.exists || !studentSnap.exists) {
     throw new HttpsError('failed-precondition', 'The attendance session or subject no longer exists.');
   }
@@ -747,13 +760,35 @@ exports.submitAttendance = onCall(async request => {
     throw new HttpsError('permission-denied', 'You are not allowed to mark attendance for this session.');
   }
 
-  if (session.expiresAt?.toDate && session.expiresAt.toDate() <= new Date()) {
-    throw new HttpsError('failed-precondition', 'This attendance session has expired.');
+  try {
+    if (session.expiresAt?.toDate && session.expiresAt.toDate() <= new Date()) {
+      throw new HttpsError('failed-precondition', 'This attendance session has expired.');
+    }
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    console.error('[submitAttendance] expiration-check failed', {
+      operation: 'read_session_expiration',
+      code: error?.code || error?.name || 'unknown',
+      sessionId,
+      subjectId
+    });
+    throw new HttpsError('failed-precondition', 'Unable to verify the attendance session expiration.');
   }
 
   const attendanceRef = db.collection('attendance').doc(`${sessionId}_${studentUid}`);
-  if ((await attendanceRef.get()).exists) {
-    throw new HttpsError('already-exists', 'Attendance has already been marked for this session.');
+  try {
+    if ((await attendanceRef.get()).exists) {
+      throw new HttpsError('already-exists', 'Attendance has already been marked for this session.');
+    }
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    console.error('[submitAttendance] duplicate-check failed', {
+      operation: 'read_attendance_duplicate',
+      code: error?.code || error?.name || 'unknown',
+      sessionId,
+      subjectId
+    });
+    throw new HttpsError('unavailable', 'Unable to verify the attendance record. Please try again.');
   }
 
   const latitude = data.latitude;
@@ -773,7 +808,7 @@ exports.submitAttendance = onCall(async request => {
     throw new HttpsError('permission-denied', 'You are outside the attendance geofence.');
   }
 
-  await attendanceRef.create({
+  const attendanceData = {
     studentId: studentUid,
     studentUid,
     studentName: asString(student.name) || 'Student',
@@ -798,7 +833,32 @@ exports.submitAttendance = onCall(async request => {
     status: 'present',
     attendanceMethod: 'biometric_gps',
     timestamp: FieldValue.serverTimestamp()
-  });
+  };
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await attendanceRef.create(attendanceData);
+      break;
+    } catch (error) {
+      const code = error?.code || error?.details || '';
+      if (code === 6 || code === 'already-exists' || code === 'ALREADY_EXISTS') {
+        const existing = await attendanceRef.get();
+        if (existing.exists) break;
+      }
+      if (attempt === 1 && ['aborted', 'unavailable', 'deadline-exceeded'].includes(String(code).toLowerCase())) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        continue;
+      }
+      console.error('[submitAttendance] attendance-create failed', {
+        operation: 'create_attendance',
+        code: code || error?.name || 'unknown',
+        sessionId,
+        subjectId,
+        attempt
+      });
+      throw new HttpsError('internal', 'Unable to create the attendance record.');
+    }
+  }
 
   return { success: true, attendanceId: attendanceRef.id };
 });
